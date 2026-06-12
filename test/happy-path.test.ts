@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'vitest';
-import { createDID, updateDID } from '../src/method';
+import { createDID, updateDID } from '../src/method.js';
 import {
   asPublicVerificationMethods,
   createTestSigner,
   generateTestVerificationMethod,
   TestCryptoImplementation,
-} from './utils';
+} from './utils.js';
 
 describe('Happy Path Tests', () => {
   test('Create DID with single auth key', async () => {

@@ -1,20 +1,20 @@
 import { beforeAll, describe, expect, test } from 'vitest';
-import type { DataIntegrityProofTemplate, DIDLog, Signer, VerificationMethod } from '../src/interfaces';
-import { DidResolutionError } from '../src/interfaces';
-import { createDID, resolveDIDFromLog, updateDID } from '../src/method';
-import { deriveHash, parseDidKeyDid, parseDidKeyVerificationMethod } from '../src/utils';
+import type { DataIntegrityProofTemplate, DIDLog, Signer, VerificationMethod } from '../src/interfaces.js';
+import { DidResolutionError } from '../src/interfaces.js';
+import { createDID, resolveDIDFromLog, updateDID } from '../src/method.js';
+import { deriveHash, parseDidKeyDid, parseDidKeyVerificationMethod } from '../src/utils.js';
 import {
   countWitnessApprovals,
   createWitnessProof,
   signWitnessProofEntries,
   signWitnessProofEntry,
-} from '../src/witness';
+} from '../src/witness.js';
 import {
   asPublicVerificationMethods,
   createTestSigner,
   generateTestVerificationMethod,
   TestCryptoImplementation,
-} from './utils';
+} from './utils.js';
 
 describe('Witness Implementation Tests', async () => {
   let authKey: VerificationMethod;

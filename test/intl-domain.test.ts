@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { getBaseUrl, getFileUrl } from '../src/utils';
+import { getBaseUrl, getFileUrl } from '../src/utils.js';
 
 describe('Internationalized domain handling', () => {
   test('handles Unicode domain labels', () => {

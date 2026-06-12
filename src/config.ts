@@ -1,4 +1,4 @@
-import { bufferToString, createBuffer } from './utils/buffer';
+import { bufferToString, createBuffer } from './utils/buffer.js';
 
 // Helper to safely access environment variables
 const isBrowser = typeof window !== 'undefined';

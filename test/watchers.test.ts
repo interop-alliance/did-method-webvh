@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'vitest';
-import { createDID, resolveDIDFromLog, updateDID } from '../src/method';
+import { createDID, resolveDIDFromLog, updateDID } from '../src/method.js';
 import {
   asPublicVerificationMethods,
   createTestSigner,
   generateTestVerificationMethod,
   TestCryptoImplementation,
-} from './utils';
+} from './utils.js';
 
 describe('Watcher Handling', () => {
   test('Create DID with watchers', async () => {

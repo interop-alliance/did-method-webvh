@@ -1,4 +1,4 @@
-import { config } from '../config';
+import { config } from '../config.js';
 
 // Helper to convert bytes to hex string
 const bytesToHex = (bytes: Uint8Array): string => {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { deriveHash } from '../src/utils';
-import { canonicalizeStrict } from '../src/utils/canonicalize';
+import { canonicalizeStrict } from '../src/utils/canonicalize.js';
+import { deriveHash } from '../src/utils.js';
 
 describe('canonicalization parity semantics', () => {
   test('distinguishes absent and null fields deterministically', () => {

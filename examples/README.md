@@ -33,7 +33,7 @@ The Express resolver demonstrates a resolver with an HSM Ed25519 implementation:
 
 ```bash
 # From the repository root
-npm run example:resolver
+npm run dev
 
 # Or directly
 npx tsx examples/express-resolver.ts

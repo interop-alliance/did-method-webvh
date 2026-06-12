@@ -1,5 +1,5 @@
-import { documentStateIsValid, hashChainValid, newKeysAreInNextKeys, scidIsFromHash } from '../assertions';
-import { METHOD, PLACEHOLDER } from '../constants';
+import { documentStateIsValid, hashChainValid, newKeysAreInNextKeys, scidIsFromHash } from '../assertions.js';
+import { METHOD, PLACEHOLDER } from '../constants.js';
 import type {
   CreateDIDInterface,
   DataIntegrityProof,
@@ -10,7 +10,7 @@ import type {
   ResolutionOptions,
   UpdateDIDInterface,
   WitnessProofFileEntry,
-} from '../interfaces';
+} from '../interfaces.js';
 import {
   createDate,
   createDIDDoc,
@@ -21,8 +21,8 @@ import {
   getBaseUrl,
   parseCanonicalAddress,
   replaceValueInObject,
-} from '../utils';
-import { countVerifiedWitnessApprovals, fetchWitnessProofs, validateWitnessParameter } from '../witness';
+} from '../utils.js';
+import { countVerifiedWitnessApprovals, fetchWitnessProofs, validateWitnessParameter } from '../witness.js';
 
 const VERSION = '0.5';
 const PROTOCOL = `did:${METHOD}:${VERSION}`;

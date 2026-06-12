@@ -12,7 +12,7 @@ The `didwebvh-ts` implementation of the [`did:webvh`]('https://identity.foundati
 
 The `examples` directory contains sample code demonstrating how to use the library:
 
-- **Resolver Example**: `examples/express-resolver.ts` (`npm run example:resolver`) demonstrates how to implement a DID resolver with Express.js. See the [Examples README](./examples/README.md) for more information.
+- **Resolver Example**: `examples/express-resolver.ts` (`npm run dev`) demonstrates how to implement a DID resolver with Express.js. See the [Examples README](./examples/README.md) for more information.
 - **Signer Example**: The `examples/signer.ts` (`npm run example:signer`) file demonstrates how to implement a custom signer using `AbstractCrypto`.
 
 ## Prerequisites
@@ -39,7 +39,7 @@ cd ..
 After that, you can start the resolver example:
 
 ```bash
-npm run server
+npm run dev
 ```
 
 If you ever need to refresh the build (for example after local code changes), rerun `npm run build`.
@@ -48,18 +48,10 @@ If you ever need to refresh the build (for example after local code changes), re
 
 The following commands are defined in the `package.json` file:
 
-1. `dev`: Run the Express resolver example in development mode with debugging enabled.
+1. `dev`: Run the Express resolver example in watch mode for development.
 
    ```bash
    npm run dev
-   ```
-
-  This command runs: `tsx watch --inspect-wait examples/express-resolver.ts`
-
-1. `server`: Run the Express resolver example in watch mode for development.
-
-   ```bash
-   npm run server
    ```
 
   This command runs: `tsx watch examples/express-resolver.ts`

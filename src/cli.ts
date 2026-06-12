@@ -13,21 +13,21 @@ import type {
   SigningOutput,
   VerificationMethod,
   Verifier,
-} from './interfaces';
-import { createDID, deactivateDID, resolveDIDFromLog, updateDID } from './method';
+} from './interfaces.js';
+import { createDID, deactivateDID, resolveDIDFromLog, updateDID } from './method.js';
+import { bufferToString, concatBuffers, createBuffer } from './utils/buffer.js';
+import { canonicalizeStrict } from './utils/canonicalize.js';
+import { createHash } from './utils/crypto.js';
+import { MultibaseEncoding, multibaseDecode, multibaseEncode } from './utils/multiformats.js';
 import {
   fetchLogFromIdentifier,
   parseDidKeyDid,
   readLogFromDisk,
   writeLogToDisk,
   writeVerificationMethodToEnv,
-} from './utils';
-import { bufferToString, concatBuffers, createBuffer } from './utils/buffer';
-import { canonicalizeStrict } from './utils/canonicalize';
-import { createHash } from './utils/crypto';
-import { MultibaseEncoding, multibaseDecode, multibaseEncode } from './utils/multiformats';
+} from './utils.js';
 
-import { signWitnessProofEntries } from './witness';
+import { signWitnessProofEntries } from './witness.js';
 
 const usage = `
 Usage: npm run cli -- [command] [options]
