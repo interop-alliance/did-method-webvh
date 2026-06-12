@@ -21,6 +21,12 @@
 * the CLI now ships as `dist/cli.js` (was `dist/cli/didwebvh.js`); the `didwebvh` bin name is unchanged
 * upgrade `vitest` from v3 to v4 (no test or config changes required)
 
+### Tests
+
+* add test coverage measurement: `@vitest/coverage-v8` dev dependency and a `test:coverage` script (informational only, no thresholds; the CLI is exercised via subprocesses, which V8 coverage cannot see)
+* add tests for the HTTPS resolution path (`resolveDID`, `fetchLogFromIdentifier`, `fetchWitnessProofs`) using a stubbed global `fetch`, covering success, 404/notFound mapping, empty and invalid logs, SCID mismatch, and network failure
+* add unit tests for multibase/multihash decode error branches, the buffer utilities (both Node and browser paths), and the hash helpers
+
 ## [2.7.4](https://github.com/decentralized-identity/didwebvh-ts/compare/v2.7.3...v2.7.4) (2026-04-24)
 
 

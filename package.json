@@ -17,6 +17,7 @@
   "engines": {
     "node": ">=20.19"
   },
+  "packageManager": "pnpm@11.3.0",
   "scripts": {
     "dev": "tsx watch examples/express-resolver.ts",
     "lint": "biome check .",
@@ -26,6 +27,7 @@
     "test": "rm -rf ./test/logs && NODE_ENV=test vitest run",
     "test:watch": "rm -rf ./test/logs && NODE_ENV=test vitest",
     "test:bail": "rm -rf ./test/logs && NODE_ENV=test vitest --bail=1",
+    "test:coverage": "rm -rf ./test/logs && NODE_ENV=test vitest run --coverage",
     "test:log": "mkdir -p ./test/logs && rm -rf ./test/logs/* && LOG_RESOLVES=true NODE_ENV=test vitest run > ./test/logs/test-run.txt 2>&1",
     "cli": "tsx src/cli.ts",
     "build": "npm run build:clean && tsc",
@@ -37,6 +39,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.3.6",
     "@types/node": "^22.10.0",
+    "@vitest/coverage-v8": "^4.1.8",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^4.0.0"

@@ -1,5 +1,6 @@
 .env
 test/logs
+coverage
 .DS_Store
 .vscode
 node_modules
