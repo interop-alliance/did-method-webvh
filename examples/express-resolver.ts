@@ -1,8 +1,49 @@
 import { readFile } from 'node:fs/promises';
 import { verify } from '@stablelib/ed25519';
-import { resolveDID } from 'didwebvh-ts';
-import type { DIDDoc, SigningInput, SigningOutput, Verifier } from 'didwebvh-ts/types';
+import { resolveDID, resolveDIDFromLog } from 'didwebvh-ts';
+import type { DIDDoc, DIDLog, ResolutionOptions, SigningInput, SigningOutput, Verifier } from 'didwebvh-ts/types';
 import express from 'express';
+
+// Directory this resolver serves DID logs and attached resources from
+const ROUTES_DIR = new URL('routes/', import.meta.url);
+
+// DIDs controlled by this server, taken from the DID_VERIFICATION_METHODS
+// env var (base64-encoded JSON array of verification methods, as written
+// by the didwebvh CLI).
+const getActiveDIDs = (): string[] => {
+  const encoded = process.env.DID_VERIFICATION_METHODS;
+  if (!encoded) return [];
+  try {
+    const vms = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'));
+    return vms.map((vm: { id: string; controller?: string }) => vm.controller || vm.id.split('#')[0]);
+  } catch {
+    return [];
+  }
+};
+
+const readLocalDIDLog = async (did: string): Promise<DIDLog> => {
+  const didParts = did.split(':');
+  const fileIdentifier = didParts.slice(4).join(':');
+  const logUrl = new URL(`${fileIdentifier || '.well-known'}/did.jsonl`, ROUTES_DIR);
+  const text = (await readFile(logUrl, 'utf8')).trim();
+  if (!text) return [];
+  return text.split('\n').map((line) => JSON.parse(line));
+};
+
+// Resolve a DID, serving DIDs this server controls from the local routes
+// directory instead of fetching them over HTTPS.
+const resolveDIDLocalFirst = async (did: string, options: ResolutionOptions = {}) => {
+  const controlled = getActiveDIDs().includes(did);
+  if (!controlled) {
+    const result = await resolveDID(did, options);
+    return { ...result, controlled };
+  }
+  const log = await readLocalDIDLog(did);
+  const didParts = did.split(':');
+  const scid = didParts.length > 2 && didParts[0] === 'did' && didParts[1] === 'webvh' ? didParts[2] : undefined;
+  const result = await resolveDIDFromLog(log, { ...options, scid });
+  return { ...result, controlled };
+};
 
 class ExpressVerifier implements Verifier {
   private verificationMethodId: string;
@@ -95,10 +136,10 @@ const getFile = async ({
       file = 'whois.vp';
     }
     const filePath = WELL_KNOWN_ALLOW_LIST.some((f) => f === file)
-      ? `./src/routes/.well-known/${file}`
+      ? new URL(`.well-known/${file}`, ROUTES_DIR)
       : path
-        ? `./src/routes/${path}/${file}`
-        : `./src/routes/${file}`;
+        ? new URL(`${path}/${file}`, ROUTES_DIR)
+        : new URL(file, ROUTES_DIR);
     return await readFile(filePath, 'utf8');
   } catch (e: unknown) {
     console.error(e);
@@ -130,11 +171,11 @@ app.get('/resolve/:id', async (req, res) => {
       };
 
       console.log(`Resolving DID ${didPart} with HSM verifier`);
-      const result = await resolveDID(didPart, options);
+      const result = await resolveDIDLocalFirst(didPart, options);
       return res.json(result);
     }
 
-    const { did, doc, controlled } = await resolveDID(didPart, { verifier: expressVerifier });
+    const { did, doc, controlled } = await resolveDIDLocalFirst(didPart, { verifier: expressVerifier });
 
     const didParts = did.split(':');
     const domain = didParts[didParts.length - 1];

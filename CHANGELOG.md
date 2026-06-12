@@ -1,5 +1,15 @@
 ## Unreleased (TBD)
 
+### BREAKING CHANGES
+
+* remove "controlled-mode" local file resolution from the library; it now lives in `examples/express-resolver.ts`:
+  * `resolveDID` no longer consults the `DID_VERIFICATION_METHODS` env var or reads DID logs from the local `./src/routes/` directory; it always resolves over HTTPS
+  * `resolveDID` no longer returns a `controlled` field in its result (success or error)
+  * `fetchLogFromIdentifier` loses its second (`controlled`) parameter
+  * the internal `getActiveDIDs` helper is removed (it was not exported from the package entry point)
+  * the `src/routes/` fixture data moves to `examples/routes/`
+  * servers that control their own DID logs should read the log file themselves and call the existing `resolveDIDFromLog` export (see `resolveDIDLocalFirst` in `examples/express-resolver.ts` for a reference implementation)
+
 ### Build System
 
 * replace the esbuild multi-bundle build (ESM/CJS/browser/CLI) with a plain `tsc` build emitting a single ESM target plus declarations to `dist/`; the `require` entry point is dropped (Node >= 20.19 can `require()` ESM natively)

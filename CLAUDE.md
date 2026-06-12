@@ -78,4 +78,44 @@ The library builds with plain `tsc` to a single ESM target with TypeScript decla
 
 ### Examples
 
-**[examples/](examples/)** contains reference implementations: `express-resolver.ts` shows how to serve DID resolution over HTTP; `signer.ts` shows how to extend `AbstractCrypto`.
+**[examples/](examples/)** contains reference implementations: `express-resolver.ts` shows how to serve DID resolution over HTTP; `signer.ts` shows how to extend `AbstractCrypto`. The examples are their own private npm package consuming `didwebvh-ts` via a `file:..` dependency, so they import the **built** `dist/` output -- rebuild the library before exercising them.
+
+## Fork Maintenance: Porting Upstream PRs
+
+This repository is maintained as a fork of [decentralized-identity/didwebvh-ts](https://github.com/decentralized-identity/didwebvh-ts). When porting an upstream PR, translate it through the following deliberate divergences (newest first). Library behavior and public API are otherwise kept aligned with upstream.
+
+### Controlled-mode resolution was moved to examples
+
+Upstream's `resolveDID` consults the `DID_VERIFICATION_METHODS` env var (via `getActiveDIDs`) and, for "controlled" DIDs, reads the log from a local `./src/routes/` directory instead of fetching over HTTPS; it returns a `controlled` field in its result. This fork removed all of that from the library: `resolveDID` always resolves over HTTPS and returns no `controlled` field, `fetchLogFromIdentifier` has no `controlled` parameter, and `getActiveDIDs` does not exist. The equivalent logic lives in `resolveDIDLocalFirst` / `readLocalDIDLog` in [examples/express-resolver.ts](examples/express-resolver.ts), and the fixture data moved from `src/routes/` to `examples/routes/`.
+
+**When porting:** upstream changes to `getActiveDIDs`, the `controlled` branch of `fetchLogFromIdentifier`, the `controlled` result field, or `src/routes/` map to `examples/express-resolver.ts` (or are dropped if they only serve the in-library mechanism).
+
+### Build system is plain tsc, not esbuild
+
+Upstream builds with `scripts/build.ts` (esbuild) into four targets (`dist/esm`, `dist/cjs`, `dist/browser`, `dist/cli`) plus a generated `dist/package.json`. This fork deleted that script; `npm run build` is `tsc` emitting a single flat ESM target with declarations to `dist/`, and there is no CJS entry point (Node >= 20.19 can `require()` ESM). The CLI is `dist/cli.js` (upstream: `dist/cli/didwebvh.js`).
+
+**When porting:** upstream changes to `scripts/build.ts` usually have no fork equivalent; genuine build-config changes map to `tsconfig.json` (build) or `tsconfig.dev.json` (type-checking `test/`). Upstream changes to the `exports`/`main`/`browser` fields in `package.json` must be re-expressed against this fork's single-target map.
+
+### Relative imports require explicit .js extensions
+
+This fork compiles with `moduleResolution: nodenext`, so every relative import in `src/` and `test/` carries a `.js` extension (`from './utils.js'`). Upstream uses extensionless imports (`from './utils'`). **When porting:** add `.js` to relative import specifiers in any copied code, then run `npm run lint:fix` (Biome's import ordering can shift once extensions are added).
+
+### Dependency divergences
+
+- Removed unused runtime deps: `cookie`, `glob`, `js-yaml`; removed unused dev deps: `esbuild`, `@sinclair/typebox`, `@types/express`.
+- `@stablelib/ed25519` is a runtime dependency here (the unbundled CLI imports it); upstream lists it as a devDependency and relies on bundling.
+- Per-port rule of thumb: if an upstream PR adds a dependency, check whether it is actually imported by `src/` before accepting it.
+
+### Bun was removed
+
+Upstream historically used Bun for building/testing; this fork is npm + tsx + Vitest only. Port any `bun`/`bunx` invocations to their `npm`/`npx`/`tsx` equivalents. (Runtime Bun support is unaffected: `isNodeEnvironment` in `src/utils.ts` still treats Bun as Node-like for consumers who run on Bun.)
+
+### Misc deletions
+
+`src/global.d.ts` (unused module declarations) and the `getFS()` require/import-probing fallbacks in `src/utils.ts` were removed -- `getFS()` is now a plain guarded `import('node:fs')`. Upstream patches to those areas likely don't apply.
+
+### Porting checklist
+
+1. Apply the upstream diff, translating per the divergences above.
+2. `npm run lint:fix`, then `npm run check`, `npm run build`, `npm test`.
+3. Record the port in `CHANGELOG.md` (use `TBD` as the date for unreleased entries) with a reference to the upstream PR number.

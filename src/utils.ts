@@ -502,30 +502,8 @@ export const getFileUrl = (id: string) => {
   return `${baseUrl}/.well-known/did.jsonl`;
 };
 
-export async function fetchLogFromIdentifier(identifier: string, controlled: boolean = false): Promise<DIDLog> {
+export async function fetchLogFromIdentifier(identifier: string): Promise<DIDLog> {
   try {
-    if (controlled) {
-      const didParts = identifier.split(':');
-      const fileIdentifier = didParts.slice(4).join(':');
-      const logPath = `./src/routes/${fileIdentifier || '.well-known'}/did.jsonl`;
-
-      try {
-        let text: string;
-        if (isNodeEnvironment) {
-          const fs = await getFS();
-          text = fs.readFileSync(logPath, 'utf8').trim();
-        } else {
-          throw new Error('Local log retrieval not supported in this environment');
-        }
-        if (!text) {
-          return [];
-        }
-        return text.split('\n').map((line) => JSON.parse(line));
-      } catch (error) {
-        throw new Error(`Error reading local DID log: ${error}`);
-      }
-    }
-
     const url = getFileUrl(identifier);
     const response = await fetch(url);
     if (!response.ok) {
@@ -765,21 +743,6 @@ export const findVerificationMethod = (doc: any, vmId: string): VerificationMeth
 
   return null;
 };
-
-export async function getActiveDIDs(): Promise<string[]> {
-  const activeDIDs: string[] = [];
-
-  try {
-    for (const vm of config.getVerificationMethods()) {
-      const did = vm.controller || vm.id.split('#')[0];
-      activeDIDs.push(did);
-    }
-  } catch (error) {
-    console.error('Error processing verification methods:', error);
-  }
-
-  return activeDIDs;
-}
 
 export async function fetchWitnessProofs(did: string): Promise<WitnessProofFileEntry[]> {
   try {

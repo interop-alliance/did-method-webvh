@@ -92,6 +92,12 @@ The Express resolver uses an Ed25519 verifier class that:
 3. **File Handling**: Logic for retrieving resources associated with DIDs
 4. **Error Handling**: Proper error reporting for various scenarios
 
+### Controlled DIDs (local-first resolution)
+
+The resolver serves DID logs it controls directly from the [routes/](routes/) directory instead of fetching them over HTTPS. A DID counts as controlled when it appears in the `DID_VERIFICATION_METHODS` env var (a base64-encoded JSON array of verification methods, as written to `.env` by the `didwebvh` CLI).
+
+This is implemented by `resolveDIDLocalFirst` in [express-resolver.ts](express-resolver.ts): it reads `routes/<path>/did.jsonl` (or `routes/.well-known/did.jsonl` for path-less DIDs) and passes the parsed log to the library's `resolveDIDFromLog`. Uncontrolled DIDs go through the library's `resolveDID`, which always resolves over HTTPS.
+
 ## Security Considerations
 
 These examples demonstrate proper Ed25519 cryptographic verification but should be reviewed for your specific security requirements before use in production:
