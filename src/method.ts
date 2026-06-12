@@ -9,31 +9,10 @@ import type {
   WitnessProofFileEntry,
 } from './interfaces.js';
 import { DidResolutionError } from './interfaces.js';
-import * as v0_5 from './method_versions/method.v0.5.js';
 import * as v1 from './method_versions/method.v1.0.js';
 import { fetchLogFromIdentifier, maybeWriteTestLog } from './utils.js';
 
-const LATEST_VERSION = '1.0';
-
-function getWebvhVersionFromMethod(method?: string): string {
-  if (!method) return LATEST_VERSION;
-  const match = method.match(/^did:webvh:(\d+\.\d+)$/);
-  return match ? match[1] : LATEST_VERSION;
-}
-
-function getWebvhVersionFromLog(log: DIDLog): string {
-  if (log && log.length > 0 && log[0].parameters?.method) {
-    return getWebvhVersionFromMethod(log[0].parameters.method);
-  }
-  return LATEST_VERSION;
-}
-
-function getWebvhVersionFromOptions(options: any): string {
-  if (options?.method) {
-    return getWebvhVersionFromMethod(options.method);
-  }
-  return LATEST_VERSION;
-}
+const SUPPORTED_METHOD = 'did:webvh:1.0';
 
 /**
  * Creates a new did:webvh DID and initial DID log.
@@ -42,17 +21,17 @@ function getWebvhVersionFromOptions(options: any): string {
  * @returns The created DID, resolved document, and DID log.
  */
 export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDResult> => {
-  const version = getWebvhVersionFromOptions(options);
-  const result = version === '0.5' ? await v0_5.createDID(options) : await v1.createDID(options);
+  const method = (options as { method?: string }).method;
+  if (method && method !== SUPPORTED_METHOD) {
+    throw new Error(`'${method}' is not a supported method version.`);
+  }
+  const result = await v1.createDID(options);
   maybeWriteTestLog(result.did, result.log);
   return result;
 };
 
 /**
  * Resolves a DID by fetching and validating its DID log.
- *
- * For `did:webvh:1.0`, `fastResolve` is forwarded to the v1 resolver.
- * For `did:webvh:0.5`, `fastResolve` is ignored and not forwarded.
  *
  * @param did The DID to resolve.
  * @param options Optional resolver settings.
@@ -68,13 +47,7 @@ export const resolveDID = async (
   const scid = didParts.length > 2 && didParts[0] === 'did' && didParts[1] === 'webvh' ? didParts[2] : undefined;
   try {
     const log = await fetchLogFromIdentifier(did);
-    const version = getWebvhVersionFromLog(log);
-    const { fastResolve, ...baseOptions } = options;
-    const optsWithScid = { ...baseOptions, scid };
-    const result =
-      version === '0.5'
-        ? await v0_5.resolveDIDFromLog(log, optsWithScid)
-        : await v1.resolveDIDFromLog(log, { ...optsWithScid, fastResolve });
+    const result = await v1.resolveDIDFromLog(log, { ...options, scid });
     maybeWriteTestLog(result.did, log);
 
     return result;
@@ -108,9 +81,6 @@ export const resolveDID = async (
 /**
  * Resolves a DID from an in-memory DID log.
  *
- * For `did:webvh:1.0`, `fastResolve` is forwarded to the v1 resolver.
- * For `did:webvh:0.5`, `fastResolve` is ignored and not forwarded.
- *
  * @param log In-memory DID log entries.
  * @param options Optional resolver settings.
  * @returns The resolved DID result with resolution metadata.
@@ -119,14 +89,7 @@ export const resolveDIDFromLog = async (
   log: DIDLog,
   options: ResolutionOptions & { witnessProofs?: WitnessProofFileEntry[] } = {}
 ) => {
-  const version = getWebvhVersionFromLog(log);
-  const { fastResolve, ...baseOptions } = options;
-  if (version === '0.5') {
-    const result = await v0_5.resolveDIDFromLog(log, baseOptions);
-    maybeWriteTestLog(result.did, log);
-    return result;
-  }
-  const result = await v1.resolveDIDFromLog(log, { ...baseOptions, fastResolve });
+  const result = await v1.resolveDIDFromLog(log, options);
   maybeWriteTestLog(result.did, log);
   return result;
 };
@@ -140,8 +103,7 @@ export const resolveDIDFromLog = async (
 export const updateDID = async (
   options: UpdateDIDInterface & { services?: any[]; domain?: string; updated?: string }
 ): Promise<UpdateDIDResult> => {
-  const version = options.log ? getWebvhVersionFromLog(options.log) : getWebvhVersionFromOptions(options);
-  const result = version === '0.5' ? await v0_5.updateDID(options) : await v1.updateDID(options);
+  const result = await v1.updateDID(options);
   maybeWriteTestLog(result.did, result.log);
   return result;
 };
@@ -153,8 +115,7 @@ export const updateDID = async (
  * @returns The deactivated DID result and updated DID log.
  */
 export const deactivateDID = async (options: DeactivateDIDInterface & { updateKeys?: string[] }) => {
-  const version = options.log ? getWebvhVersionFromLog(options.log) : getWebvhVersionFromOptions(options);
-  const result = version === '0.5' ? await v0_5.deactivateDID(options) : await v1.deactivateDID(options);
+  const result = await v1.deactivateDID(options);
   maybeWriteTestLog(result.did, result.log);
   return result;
 };
