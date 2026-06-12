@@ -15,8 +15,9 @@
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "allowJs": true,
+    "resolveJsonModule": true,
     "types": [
-      "bun-types"
+      "node"
     ],
     "declaration": true,
     "declarationDir": "dist/types",

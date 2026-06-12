@@ -2,6 +2,8 @@
 
 import fs from 'node:fs';
 import { dirname } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { parseEnv } from 'node:util';
 import { sign as ed25519Sign, verify as ed25519Verify, generateKeyPair } from '@stablelib/ed25519';
 import type {
   DIDLog,
@@ -28,7 +30,7 @@ import { MultibaseEncoding, multibaseDecode, multibaseEncode } from './utils/mul
 import { signWitnessProofEntries } from './witness';
 
 const usage = `
-Usage: bun run cli [command] [options]
+Usage: npm run cli -- [command] [options]
 
 Commands:
   create     Create a new DID
@@ -59,18 +61,18 @@ Options:
   --witness-secret [secret] Witness secret key multibase (matches witness-did order)
 
 Examples:
-  bun run cli create --address example.com --portable --witness did:key:z6Mk... --witness did:key:z6Mk...
-  bun run cli create --address https://example.com --portable
-  bun run cli create --address "example.com:3000" --portable
-  bun run cli create --address "did:webvh:example.com:3000" --portable
-  bun run cli create --domain example.com --portable # DEPRECATED: use --address
-  bun run cli resolve --did did:webvh:123456:example.com
-  bun run cli resolve --log ./did.jsonl --witness-file ./did-witness.json
-  bun run cli update --log ./did.jsonl --output ./updated-did.jsonl --add-vm keyAgreement --service LinkedDomains,https://example.com
-  bun run cli deactivate --log ./did.jsonl --output ./deactivated-did.jsonl
-  bun run cli generate-witness-proof --version-id 1-abc123 --witness-did did:key:z6Mk... --witness-secret z1A... --output did-witness.json
-  bun run cli generate-witness-proof --version-id 1-abc123 --version-id 2-def456 --witness-did did:key:z6Mk... --witness-secret z1A... --output did-witness.json
-  bun run cli generate-vm
+  npm run cli -- create --address example.com --portable --witness did:key:z6Mk... --witness did:key:z6Mk...
+  npm run cli -- create --address https://example.com --portable
+  npm run cli -- create --address "example.com:3000" --portable
+  npm run cli -- create --address "did:webvh:example.com:3000" --portable
+  npm run cli -- create --domain example.com --portable # DEPRECATED: use --address
+  npm run cli -- resolve --did did:webvh:123456:example.com
+  npm run cli -- resolve --log ./did.jsonl --witness-file ./did-witness.json
+  npm run cli -- update --log ./did.jsonl --output ./updated-did.jsonl --add-vm keyAgreement --service LinkedDomains,https://example.com
+  npm run cli -- deactivate --log ./did.jsonl --output ./deactivated-did.jsonl
+  npm run cli -- generate-witness-proof --version-id 1-abc123 --witness-did did:key:z6Mk... --witness-secret z1A... --output did-witness.json
+  npm run cli -- generate-witness-proof --version-id 1-abc123 --version-id 2-def456 --witness-did did:key:z6Mk... --witness-secret z1A... --output did-witness.json
+  npm run cli -- generate-vm
 `;
 
 // Add this function at the top with the other constants
@@ -547,8 +549,24 @@ function parseServices(services: string[]): ServiceEndpoint[] {
   });
 }
 
+// Load .env from the working directory, matching Bun's behavior:
+// values already present in process.env take precedence over .env values.
+function loadEnvFile() {
+  try {
+    const parsed = parseEnv(fs.readFileSync('.env', 'utf8'));
+    for (const [key, value] of Object.entries(parsed)) {
+      if (!(key in process.env)) {
+        process.env[key] = value;
+      }
+    }
+  } catch {
+    // No .env file is fine
+  }
+}
+
 // Update the main function to be exported
 export async function main() {
+  loadEnvFile();
   const [command, ...args] = process.argv.slice(2);
   // console.log('Command:', command);
   // console.log('Args:', args);
@@ -603,7 +621,8 @@ export async function main() {
 }
 
 // Only run main if this file is being executed directly
-if (process.argv[1] === import.meta.path) {
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(process.argv[1])).href;
+if (isMain) {
   main().catch((error) => {
     console.error('Fatal error:', error);
     process.exit(1);

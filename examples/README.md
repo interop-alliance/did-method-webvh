@@ -1,50 +1,59 @@
 # DID Web VH Resolver Examples
 
-This directory contains example implementations of DID Web VH resolvers using different frameworks:
+This directory contains example implementations for the `didwebvh-ts` library:
 
-1. **Elysia Resolver** - A resolver built with the Elysia framework (Bun)
-2. **Express Resolver** - A resolver built with Express (Node.js)
+1. **Express Resolver** - A DID resolver built with Express (Node.js)
+2. **Signer** - A custom signer implementation extending `AbstractCrypto`
 
-Both examples demonstrate functioning DID resolution with proper Ed25519 cryptographic verification.
+The resolver example demonstrates functioning DID resolution with proper Ed25519 cryptographic verification.
 
 ## Prerequisites
 
-- [Bun](https://bun.sh/) - Fast JavaScript runtime and package manager
-- Node.js (for Express example)
+- Node.js >= 20.19
 
-## Running the Examples
+## Setup
 
-### Elysia Resolver
-
-The Elysia resolver demonstrates a resolver with a custom Ed25519 verifier that extends the `AbstractCrypto` class:
+The examples consume `didwebvh-ts` from the repository's build output (via the `file:..` dependency), so build the library first:
 
 ```bash
-bun examples/elysia-resolver.ts
+# From the repository root
+npm install
+npm run build
+
+# Then install the example dependencies
+cd examples
+npm install
 ```
 
-This will start the resolver on port 3010.
+## Running the Examples
 
 ### Express Resolver
 
 The Express resolver demonstrates a resolver with an HSM Ed25519 implementation:
 
 ```bash
-bun examples/express-resolver.ts
+# From the repository root
+npm run example:resolver
+
+# Or directly
+npx tsx examples/express-resolver.ts
 ```
 
 This will start the resolver on port 8000.
 
-## Testing the Resolvers
+### Signer
 
-You can test both resolvers by making HTTP requests to the resolution endpoints:
+```bash
+npm run example:signer
+```
+
+## Testing the Resolver
+
+You can test the resolver by making HTTP requests to the resolution endpoints (see also [resolve.http](resolve.http)):
 
 ### Resolving a DID
 
 ```bash
-# Elysia resolver
-curl "http://localhost:3010/resolve/did:web:example.com"
-
-# Express resolver
 curl "http://localhost:8000/resolve/did:web:example.com"
 ```
 
@@ -54,40 +63,29 @@ You can pass various query parameters for version control:
 
 ```bash
 # Version number
-curl "http://localhost:3010/resolve/did:web:example.com?versionNumber=1"
+curl "http://localhost:8000/resolve/did:web:example.com?versionNumber=1"
 
 # Version ID
-curl "http://localhost:3010/resolve/did:web:example.com?versionId=abc123"
+curl "http://localhost:8000/resolve/did:web:example.com?versionId=abc123"
 
 # Version time
-curl "http://localhost:3010/resolve/did:web:example.com?versionTime=2023-12-01T00:00:00Z"
+curl "http://localhost:8000/resolve/did:web:example.com?versionTime=2023-12-01T00:00:00Z"
 
 # Verification method
-curl "http://localhost:3010/resolve/did:web:example.com?verificationMethod=key-1"
+curl "http://localhost:8000/resolve/did:web:example.com?verificationMethod=key-1"
 ```
 
 ## Implementation Details
 
-### Elysia Resolver
-
-The Elysia resolver uses an `ElysiaVerifier` class that:
-
-1. Extends the `AbstractCrypto` class
-2. Implements the `Verifier` interface for verification
-3. Uses Ed25519 for cryptographic operations via `@stablelib/ed25519`
-4. Demonstrates proper verification of Ed25519 signatures
-
 ### Express Resolver
 
-The Express resolver uses an `HSMSigner` class that:
+The Express resolver uses an Ed25519 verifier class that:
 
-1. Implements both `Signer` and `Verifier` interfaces directly
+1. Implements the `Verifier` interface directly
 2. Simulates an HSM (Hardware Security Module) for secure Ed25519 key operations
-3. Provides a production-ready example of Ed25519 verification
+3. Uses Ed25519 for cryptographic operations via `@stablelib/ed25519`
 
-## Code Structure
-
-Both examples follow a similar structure:
+### Code Structure
 
 1. **Ed25519 Verifier Implementation**: Proper cryptographic verification using the Ed25519 algorithm
 2. **DID Resolution**: Endpoints for resolving DIDs using the `didwebvh-ts` library
@@ -105,4 +103,4 @@ These examples demonstrate proper Ed25519 cryptographic verification but should 
 
 ## License
 
-See the project's main license file for details. 
+See the project's main license file for details.

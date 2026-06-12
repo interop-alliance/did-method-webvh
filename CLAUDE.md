@@ -13,22 +13,26 @@ This is a TypeScript library implementing the `did:webvh` specification for Dece
 
 ```bash
 # Run all tests
-bun test
+npm test
 
 # Run a single test file
-bun test test/happy-path.test.ts
+npx vitest run test/happy-path.test.ts
 
-# Run tests with verbose output, stopping on first failure
-bun test --watch --bail --verbose
+# Run tests in watch mode, stopping on first failure
+npm run test:bail
 
 # Build distribution artifacts
-bun run build
+npm run build
 
-# Clean and rebuild
-bun run build:clean
+# Clean the build output
+npm run build:clean
+
+# Type check
+npm run check
+
+# Lint (Biome)
+npm run lint
 ```
-
-There is no separate lint command — TypeScript strict mode serves as the type-checking step.
 
 ## Architecture
 
@@ -70,8 +74,8 @@ The library builds to four targets: ESM (`dist/esm/`), CommonJS (`dist/cjs/`), b
 
 ### Test Utilities
 
-**[test/utils.ts](test/utils.ts)** provides `TestCryptoImplementation` (Ed25519 mock), `createTestSigner()`, `createTestVerifier()`, and `createMockDIDLog()` for use across all test files. Tests use Bun's native test runner — no Jest or Vitest.
+**[test/utils.ts](test/utils.ts)** provides `TestCryptoImplementation` (Ed25519 mock), `createTestSigner()`, `createTestVerifier()`, and `createMockDIDLog()` for use across all test files. Tests use Vitest.
 
 ### Examples
 
-**[examples/](examples/)** contains reference implementations: `elysia-resolver.ts` and `express-resolver.ts` show how to serve DID resolution over HTTP; `signer.ts` shows how to extend `AbstractCrypto`.
+**[examples/](examples/)** contains reference implementations: `express-resolver.ts` shows how to serve DID resolution over HTTP; `signer.ts` shows how to extend `AbstractCrypto`.

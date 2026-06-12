@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { createDID, resolveDIDFromLog, updateDID } from '../src/method';
 import {
   asPublicVerificationMethods,
@@ -76,6 +76,6 @@ describe('Watcher Handling', () => {
     });
 
     const resolved = await resolveDIDFromLog(updated.log, { verifier });
-    expect(resolved.meta.watchers).toBeEmpty();
+    expect(resolved.meta.watchers).toEqual([]);
   });
 });

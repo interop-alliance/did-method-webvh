@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'vitest';
 import { documentStateIsValid } from '../src/assertions';
 import { AbstractCrypto, createDocumentSigner } from '../src/cryptography';
 import type { SignerOptions, SigningInput, SigningOutput, Verifier } from '../src/interfaces';

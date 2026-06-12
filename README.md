@@ -12,92 +12,86 @@ The `didwebvh-ts` implementation of the [`did:webvh`]('https://identity.foundati
 
 The `examples` directory contains sample code demonstrating how to use the library:
 
-- **Resolver Examples**: The `examples` directory includes two resolver implementations:
-  - `elysia-resolver.ts`: (`bun run example:resolver`) A resolver built with the Elysia web framework
-  - `express-resolver.ts`: A resolver built with Express.js
-  Both examples demonstrate how to implement a DID resolver with different web frameworks. See the [Examples README](./examples/README.md) for more information.
-- **Signer Example**: The `examples/signer.ts` (`bun run example:signer`) file demonstrates how to implement a custom signer using `AbstractCrypto`.
+- **Resolver Example**: `examples/express-resolver.ts` (`npm run example:resolver`) demonstrates how to implement a DID resolver with Express.js. See the [Examples README](./examples/README.md) for more information.
+- **Signer Example**: The `examples/signer.ts` (`npm run example:signer`) file demonstrates how to implement a custom signer using `AbstractCrypto`.
 
 ## Prerequisites
 
-Install [bun.sh](https://bun.sh/)
-
-```bash
-curl -fsSL https://bun.sh/install | bash
-```
+Node.js >= 20.19
 
 ## Install dependencies
 
 ```bash
-bun install
+npm install
 ```
 
 ## Local development setup
 
-When running the examples from the source checkout, Bun needs to resolve the `didwebvh-ts` package name to your local code. Run the following once per clone:
+When running the examples from the source checkout, the `didwebvh-ts` package name resolves to your local build output via the `file:..` dependency in `examples/package.json`. Run the following once per clone:
 
 ```bash
-bun run build        # generate the dist/ artifacts
-bun link             # register the local package globally
-bun link didwebvh-ts # create a symlinked dependency in node_modules
+npm run build         # generate the dist/ artifacts
+cd examples
+npm install           # link the examples to the local build
+cd ..
 ```
 
-After linking, you can start the resolver example:
+After that, you can start the resolver example:
 
 ```bash
-bun run server
+npm run server
 ```
 
-If you ever need to refresh the build (for example after local code changes), rerun `bun run build`. The `bun link` commands only need to be repeated if you remove the symlink or clone the repo again.
+If you ever need to refresh the build (for example after local code changes), rerun `npm run build`.
 
 ## Available Commands
 
 The following commands are defined in the `package.json` file:
 
-1. `dev`: Run the Elysia resolver example in development mode with debugging enabled.
+1. `dev`: Run the Express resolver example in development mode with debugging enabled.
 
    ```bash
-   bun run dev
+   npm run dev
    ```
 
-  This command runs: `bun --watch --inspect-wait ./examples/elysia-resolver.ts`
+  This command runs: `tsx watch --inspect-wait examples/express-resolver.ts`
 
-1. `server`: Run the Elysia resolver example in watch mode for development.
+1. `server`: Run the Express resolver example in watch mode for development.
 
    ```bash
-   bun run server
+   npm run server
    ```
 
-  This command runs: `bun --watch ./examples/elysia-resolver.ts`
+  This command runs: `tsx watch examples/express-resolver.ts`
 
 1. `test`: Run all tests.
 
    ```bash
-   bun run test
+   npm test
    ```
 
 2. `test:watch`: Run tests in watch mode.
 
    ```bash
-   bun run test:watch
+   npm run test:watch
    ```
 
-3. `test:bail`: Run tests in watch mode with bail and verbose options.
+3. `test:bail`: Run tests, stopping on the first failure.
 
    ```bash
-   bun run test:bail
+   npm run test:bail
    ```
 
 4. `test:log`: Run tests and save logs to a file.
 
    ```bash
-   bun run test:log
+   npm run test:log
    ```
 
 5. `cli`: Run the CLI tool.
 
    ```bash
-   bun run cli
+   npm run cli
    ```
 
    The CLI accepts a `--watcher` option during create and update operations to specify one or more watcher URLs.
@@ -105,13 +99,13 @@ The following commands are defined in the `package.json` file:
 6. `build`: Build the package.
 
    ```bash
-   bun run build
+   npm run build
    ```
 
 7. `build:clean`: Clean the build directory.
 
    ```bash
-   bun run build:clean
+   npm run build:clean
    ```
 
 ## Releasing
@@ -133,7 +127,7 @@ That will trigger the publish workflow, which will:
 
 - validate the tag + your repo permission
 - set `package.json` version from the tag (without the leading `v`)
-- run `bun test` and `bun run build`
+- run `npm test` and `npm run build`
 - publish to npm
 
 ### npm authentication
