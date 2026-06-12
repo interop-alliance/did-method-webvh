@@ -2,18 +2,32 @@
 
 [![CI](https://github.com/decentralized-identity/didwebvh-ts/actions/workflows/ci.yml/badge.svg)](https://github.com/decentralized-identity/didwebvh-ts/actions/workflows/ci.yml)
 
-`didwebvh-ts` provides developers with a comprehensive library for working with Decentralized Identifiers (DIDs) following the `did:webvh` method specification. This Typescript-based toolkit is designed to facilitate the integration and management of DIDs within web applications, enabling secure identity verification and authentication processes. It includes functions for creating, resolving, updating and deactivating DIDs by managing DID documents. The package is built to ensure compatibility with the latest web development standards, offering a straightforward API that makes it easy to implement DID-based features in a variety of projects.
+`didwebvh-ts` provides developers with a comprehensive library for working with
+Decentralized Identifiers (DIDs) following the `did:webvh` method specification.
+This Typescript-based toolkit is designed to facilitate the integration and
+management of DIDs within web applications, enabling secure identity
+verification and authentication processes. It includes functions for creating,
+resolving, updating and deactivating DIDs by managing DID documents. The package
+is built to ensure compatibility with the latest web development standards,
+offering a straightforward API that makes it easy to implement DID-based
+features in a variety of projects.
 
 ## Summary
 
-The `didwebvh-ts` implementation of the [`did:webvh`]('https://identity.foundation/didwebvh/') specification aims to be compatible with the `did:webvh` v1.0 specification.
+The `didwebvh-ts` implementation of the [
+`did:webvh`]('https://identity.foundation/didwebvh/') specification aims to be
+compatible with the `did:webvh` v1.0 specification.
 
 ## Examples
 
-The `examples` directory contains sample code demonstrating how to use the library:
+The `examples` directory contains sample code demonstrating how to use the
+library:
 
-- **Resolver Example**: `examples/express-resolver.ts` (`npm run dev`) demonstrates how to implement a DID resolver with Express.js. See the [Examples README](./examples/README.md) for more information.
-- **Signer Example**: The `examples/signer.ts` (`npm run example:signer`) file demonstrates how to implement a custom signer using `AbstractCrypto`.
+- **Resolver Example**: `examples/express-resolver.ts` (`npm run dev`)
+  demonstrates how to implement a DID resolver with Express.js. See
+  the [Examples README](./examples/README.md) for more information.
+- **Signer Example**: The `examples/signer.ts` (`npm run example:signer`) file
+  demonstrates how to implement a custom signer using `AbstractCrypto`.
 
 ## Prerequisites
 
@@ -27,7 +41,9 @@ npm install
 
 ## Local development setup
 
-When running the examples from the source checkout, the `didwebvh-ts` package name resolves to your local build output via the `file:..` dependency in `examples/package.json`. Run the following once per clone:
+When running the examples from the source checkout, the `didwebvh-ts` package
+name resolves to your local build output via the `file:..` dependency in
+`examples/package.json`. Run the following once per clone:
 
 ```bash
 npm run build         # generate the dist/ artifacts
@@ -42,7 +58,8 @@ After that, you can start the resolver example:
 npm run dev
 ```
 
-If you ever need to refresh the build (for example after local code changes), rerun `npm run build`.
+If you ever need to refresh the build (for example after local code changes),
+rerun `npm run build`.
 
 ## Available Commands
 
@@ -54,7 +71,7 @@ The following commands are defined in the `package.json` file:
    npm run dev
    ```
 
-  This command runs: `tsx watch examples/express-resolver.ts`
+This command runs: `tsx watch examples/express-resolver.ts`
 
 1. `test`: Run all tests.
 
@@ -86,7 +103,8 @@ The following commands are defined in the `package.json` file:
    npm run cli
    ```
 
-   The CLI accepts a `--watcher` option during create and update operations to specify one or more watcher URLs.
+   The CLI accepts a `--watcher` option during create and update operations to
+   specify one or more watcher URLs.
 
 6. `build`: Build the package.
 
@@ -102,11 +120,14 @@ The following commands are defined in the `package.json` file:
 
 ## Releasing
 
-Publishing is **fully automated** and happens **only** when a maintainer publishes a GitHub Release.
+Publishing is **fully automated** and happens **only** when a maintainer
+publishes a GitHub Release.
 
-- **Who can publish**: GitHub users with **write**, **maintain**, or **admin** permission on this repo.
+- **Who can publish**: GitHub users with **write**, **maintain**, or **admin**
+  permission on this repo.
 - **Required tag format**: `vMAJOR.MINOR.PATCH` (for example `v2.7.5`).
-- **Required semver bump**: the tag must be a **single** major/minor/patch increment over the latest existing `v*` tag.
+- **Required semver bump**: the tag must be a **single** major/minor/patch
+  increment over the latest existing `v*` tag.
 
 ### How to cut a release
 
@@ -124,20 +145,33 @@ That will trigger the publish workflow, which will:
 
 ### npm authentication
 
-Publishing uses [npm OIDC trusted publishing](https://docs.npmjs.com/trusted-publishers) — the workflow exchanges its GitHub Actions OIDC token for a short-lived npm publish token at publish time. No static `NPM_TOKEN` is required.
+Publishing
+uses [npm OIDC trusted publishing](https://docs.npmjs.com/trusted-publishers) —
+the workflow exchanges its GitHub Actions OIDC token for a short-lived npm
+publish token at publish time. No static `NPM_TOKEN` is required.
 
-For this to work, the `didwebvh-ts` package on npmjs.com must have a Trusted Publisher configured pointing at this repository and the `.github/workflows/publish.yml` workflow.
+For this to work, the `didwebvh-ts` package on npmjs.com must have a Trusted
+Publisher configured pointing at this repository and the
+`.github/workflows/publish.yml` workflow.
 
 ### Troubleshooting
 
-- **Tag rejected**: make sure it matches `vX.Y.Z` and is exactly one major/minor/patch bump over the latest `v*` tag.
-- **Permission rejected**: ensure the releasing user has write/maintain/admin permission on the GitHub repo.
-- **`EOTP` / OTP required at publish**: the npm token path is being used instead of OIDC. Make sure no `NODE_AUTH_TOKEN` is set on the publish step and that the workflow has `id-token: write` permission.
-- **OIDC exchange failed**: confirm the Trusted Publisher config on npmjs.com matches this repo's owner, name, and workflow file path (`.github/workflows/publish.yml`).
+- **Tag rejected**: make sure it matches `vX.Y.Z` and is exactly one
+  major/minor/patch bump over the latest `v*` tag.
+- **Permission rejected**: ensure the releasing user has write/maintain/admin
+  permission on the GitHub repo.
+- **`EOTP` / OTP required at publish**: the npm token path is being used instead
+  of OIDC. Make sure no `NODE_AUTH_TOKEN` is set on the publish step and that
+  the workflow has `id-token: write` permission.
+- **OIDC exchange failed**: confirm the Trusted Publisher config on npmjs.com
+  matches this repo's owner, name, and workflow file path (
+  `.github/workflows/publish.yml`).
 
 ## Creating a DID Resolver
 
-The `didwebvh-ts` library provides the core functionality for resolving DIDs, but it does not include a built-in HTTP resolver. You can create your own resolver using your preferred web framework by following these steps:
+The `didwebvh-ts` library provides the core functionality for resolving DIDs,
+but it does not include a built-in HTTP resolver. You can create your own
+resolver using your preferred web framework by following these steps:
 
 1. Import the `resolveDID` function from the `didwebvh-ts` library:
 
@@ -168,55 +202,75 @@ For complete examples, see the [examples](./examples/) directory.
 
 ### Resolution metadata notes (v1.0)
 
-For `did:webvh:1.0` resolution flows, resolver failures that invalidate the DID are surfaced using:
+For `did:webvh:1.0` resolution flows, resolver failures that invalidate the DID
+are surfaced using:
 
 - `meta.error = "invalidDid"`
-- `meta.problemDetails` populated with RFC9457-style fields (`type`, `title`, `detail`)
+- `meta.problemDetails` populated with RFC9457-style fields (`type`, `title`,
+  `detail`)
 
 Absence cases (for example missing DID log or missing DID URL resource) use:
 
 - `meta.error = "notFound"`
 
-When resolving a requested earlier version (for example with `versionId`, `versionNumber`, or `versionTime`), the resolver may return a valid earlier document while still reporting `meta.error = "invalidDid"` if a later log entry fails verification.
+When resolving a requested earlier version (for example with `versionId`,
+`versionNumber`, or `versionTime`), the resolver may return a valid earlier
+document while still reporting `meta.error = "invalidDid"` if a later log entry
+fails verification.
 
 ## API Reference
 
 ### Core Functions
 
-- `resolveDID(did: string, options?: ResolutionOptions): Promise<{did: string, doc: any, meta: DIDResolutionMeta, controlled: boolean}>`
-  Resolves a DID to its DID document.
-  For `v1.0`, `options.fastResolve` is an opt-in mode defaulting to `false` for full log parsing.
+-
+`resolveDID(did: string, options?: ResolutionOptions): Promise<{did: string, doc: any, meta: DIDResolutionMeta, controlled: boolean}>`
+Resolves a DID to its DID document.
+For `v1.0`, `options.fastResolve` is an opt-in mode defaulting to `false` for
+full log parsing.
 
-- `resolveDIDFromLog(log: DIDLog, options?: ResolutionOptions & { witnessProofs?: WitnessProofFileEntry[] }): Promise<{did: string, doc: any, meta: DIDResolutionMeta}>`
-  Resolves directly from an in-memory DID log.
-  For `v1.0`, `options.fastResolve` is an opt-in mode defaulting to `false` for full log parsing.
+-
+`resolveDIDFromLog(log: DIDLog, options?: ResolutionOptions & { witnessProofs?: WitnessProofFileEntry[] }): Promise<{did: string, doc: any, meta: DIDResolutionMeta}>`
+Resolves directly from an in-memory DID log.
+For `v1.0`, `options.fastResolve` is an opt-in mode defaulting to `false` for
+full log parsing.
 
-- `createDID(options: CreateDIDInterface): Promise<{did: string, doc: any, meta: DIDResolutionMeta, log: DIDLog, webDoc?: DIDDoc}>`
-  Creates a new DID.
-  Accepts `address` (`host`, `host:port`, `https://...`, or `did:webvh:...`) or legacy `domain`.
-  Resolver URL mapping uses `http://localhost` for local testing and `https://` for non-local hosts.
-  If `alsoKnownAsWeb: true` is supplied, the result also includes `webDoc`, the parallel `did:web` DID document to publish as `did.json`.
+-
+`createDID(options: CreateDIDInterface): Promise<{did: string, doc: any, meta: DIDResolutionMeta, log: DIDLog, webDoc?: DIDDoc}>`
+Creates a new DID.
+Accepts `address` (`host`, `host:port`, `https://...`, or `did:webvh:...`) or
+legacy `domain`.
+Resolver URL mapping uses `http://localhost` for local testing and `https://`
+for non-local hosts.
+If `alsoKnownAsWeb: true` is supplied, the result also includes `webDoc`, the
+parallel `did:web` DID document to publish as `did.json`.
 
-- `updateDID(options: UpdateDIDInterface): Promise<{did: string, doc: any, meta: DIDResolutionMeta, log: DIDLog, webDoc?: DIDDoc}>`
-  Updates an existing DID.
-  Returns `webDoc` when the updated DID document carries a `did:web:` alias in `alsoKnownAs`.
+-
+`updateDID(options: UpdateDIDInterface): Promise<{did: string, doc: any, meta: DIDResolutionMeta, log: DIDLog, webDoc?: DIDDoc}>`
+Updates an existing DID.
+Returns `webDoc` when the updated DID document carries a `did:web:` alias in
+`alsoKnownAs`.
 
-- `deactivateDID(options: DeactivateDIDInterface): Promise<{did: string, doc: any, meta: DIDResolutionMeta, log: DIDLog}>`
-  Deactivates an existing DID.
+-
+`deactivateDID(options: DeactivateDIDInterface): Promise<{did: string, doc: any, meta: DIDResolutionMeta, log: DIDLog}>`
+Deactivates an existing DID.
 
 - `generateParallelDidWeb(didwebvhDid: string, didwebvhDoc: DIDDoc): DIDDoc`
   Generates the parallel `did:web` document defined by did:webvh v1.0 §3.7.10.
 
 ### Witness Functions
 
-- `createWitnessProof(signer, versionId, verificationMethod, created?): Promise<DataIntegrityProof>`
-  Creates and signs one witness proof for a specific `versionId`.
+-
+`createWitnessProof(signer, versionId, verificationMethod, created?): Promise<DataIntegrityProof>`
+Creates and signs one witness proof for a specific `versionId`.
 
-- `signWitnessProofEntry(options: WitnessSigningOptions): Promise<WitnessSigningResult>`
-  Signs one did-witness proof entry (`{ versionId, proof[] }`) for a single target version.
+-
+`signWitnessProofEntry(options: WitnessSigningOptions): Promise<WitnessSigningResult>`
+Signs one did-witness proof entry (`{ versionId, proof[] }`) for a single target
+version.
 
-- `signWitnessProofEntries(versionIds: string[], witnesses: WitnessEntry[], witnessSignersByDid: Record<string, WitnessSigner>, created?: string): Promise<WitnessSigningResult[]>`
-  Signs did-witness proof entries for multiple target versions.
+-
+`signWitnessProofEntries(versionIds: string[], witnesses: WitnessEntry[], witnessSignersByDid: Record<string, WitnessSigner>, created?: string): Promise<WitnessSigningResult[]>`
+Signs did-witness proof entries for multiple target versions.
 
 ### Cryptography Functions
 

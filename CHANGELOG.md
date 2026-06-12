@@ -2,6 +2,9 @@
 
 ### BREAKING CHANGES
 
+* remove the legacy `did:webvh:0.5` spec implementation (`src/method_versions/method.v0.5.ts`); the library now supports `did:webvh:1.0` only:
+  * resolving a DID log whose first entry declares `method: 'did:webvh:0.5'` (including via `updateDID`/`deactivateDID`, which resolve the log internally) throws `'did:webvh:0.5' is not a supported method version.`
+  * `createDID` throws the same error if passed an explicit non-1.0 `method` option (previously an untyped option that selected the v0.5 implementation)
 * remove "controlled-mode" local file resolution from the library; it now lives in `examples/express-resolver.ts`:
   * `resolveDID` no longer consults the `DID_VERIFICATION_METHODS` env var or reads DID logs from the local `./src/routes/` directory; it always resolves over HTTPS
   * `resolveDID` no longer returns a `controlled` field in its result (success or error)
