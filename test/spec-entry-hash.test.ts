@@ -1,13 +1,13 @@
 import { beforeAll, describe, expect, test } from 'vitest';
-import type { DIDLog, VerificationMethod } from '../src/interfaces';
-import { createDID, deactivateDID, resolveDIDFromLog, updateDID } from '../src/method';
-import { deriveHash } from '../src/utils';
+import type { DIDLog, VerificationMethod } from '../src/interfaces.js';
+import { createDID, deactivateDID, resolveDIDFromLog, updateDID } from '../src/method.js';
+import { deriveHash } from '../src/utils.js';
 import {
   asPublicVerificationMethods,
   createTestSigner,
   generateTestVerificationMethod,
   TestCryptoImplementation,
-} from './utils';
+} from './utils.js';
 
 // didwebvh v1.0 §"Entry Hash Generation and Verification":
 //   "The versionId used in the input to the hash is a predecessor value to the

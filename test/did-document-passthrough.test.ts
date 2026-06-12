@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'vitest';
-import { createDID, updateDID } from '../src/method';
-import { generateParallelDidWeb } from '../src/utils';
+import { createDID, updateDID } from '../src/method.js';
+import { generateParallelDidWeb } from '../src/utils.js';
 import {
   asPublicVerificationMethods,
   createTestSigner,
   createTestVerifier,
   generateTestVerificationMethod,
-} from './utils';
+} from './utils.js';
 
 describe('didDocument create pass-through', () => {
   test('warns and strips secretKeyMultibase when createDID receives secret-bearing verificationMethods', async () => {

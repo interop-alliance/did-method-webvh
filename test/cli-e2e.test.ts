@@ -2,10 +2,10 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
-import type { VerificationMethod } from '../src/interfaces';
-import { resolveDIDFromLog } from '../src/method';
-import { readLogFromDisk } from '../src/utils';
-import { generateTestVerificationMethod, TestCryptoImplementation } from './utils';
+import type { VerificationMethod } from '../src/interfaces.js';
+import { resolveDIDFromLog } from '../src/method.js';
+import { readLogFromDisk } from '../src/utils.js';
+import { generateTestVerificationMethod, TestCryptoImplementation } from './utils.js';
 
 const TEST_DIR = join(process.cwd(), 'test', 'temp-cli-e2e');
 const ENV_FILE = join(process.cwd(), '.env');

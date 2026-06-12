@@ -1,9 +1,9 @@
 import { beforeAll, describe, expect, test } from 'vitest';
-import { documentStateIsValid } from '../src/assertions';
-import { AbstractCrypto, createDocumentSigner } from '../src/cryptography';
-import type { SignerOptions, SigningInput, SigningOutput, Verifier } from '../src/interfaces';
-import { MultibaseEncoding, multibaseEncode } from '../src/utils/multiformats';
-import { countVerifiedWitnessApprovals } from '../src/witness';
+import { documentStateIsValid } from '../src/assertions.js';
+import { AbstractCrypto, createDocumentSigner } from '../src/cryptography.js';
+import type { SignerOptions, SigningInput, SigningOutput, Verifier } from '../src/interfaces.js';
+import { MultibaseEncoding, multibaseEncode } from '../src/utils/multiformats.js';
+import { countVerifiedWitnessApprovals } from '../src/witness.js';
 
 // Mock crypto implementation for testing
 class MockCryptoImplementation extends AbstractCrypto implements Verifier {

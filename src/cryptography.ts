@@ -6,11 +6,11 @@ import type {
   SigningOutput,
   VerificationMethod,
   Verifier,
-} from './interfaces';
-import { createDate } from './utils';
-import { concatBuffers } from './utils/buffer';
-import { canonicalizeStrict } from './utils/canonicalize';
-import { createHash } from './utils/crypto';
+} from './interfaces.js';
+import { concatBuffers } from './utils/buffer.js';
+import { canonicalizeStrict } from './utils/canonicalize.js';
+import { createHash } from './utils/crypto.js';
+import { createDate } from './utils.js';
 
 /**
  * Creates a proof object for a document

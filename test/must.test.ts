@@ -1,13 +1,13 @@
 import { beforeAll, describe, expect, test } from 'vitest';
-import type { DIDLog, VerificationMethod } from '../src/interfaces';
-import { createDID, deactivateDID, resolveDIDFromLog, updateDID } from '../src/method';
-import { createWitnessProof } from '../src/witness';
+import type { DIDLog, VerificationMethod } from '../src/interfaces.js';
+import { createDID, deactivateDID, resolveDIDFromLog, updateDID } from '../src/method.js';
+import { createWitnessProof } from '../src/witness.js';
 import {
   asPublicVerificationMethods,
   createTestSigner,
   generateTestVerificationMethod,
   TestCryptoImplementation,
-} from './utils';
+} from './utils.js';
 
 describe('did:webvh normative tests', async () => {
   let newDoc1: any;

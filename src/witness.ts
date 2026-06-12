@@ -10,12 +10,12 @@ import type {
   WitnessProofFileEntry,
   WitnessSigningOptions,
   WitnessSigningResult,
-} from './interfaces';
-import { fetchWitnessProofs, parseDidKeyDid, parseDidKeyVerificationMethod, resolveVM } from './utils';
-import { concatBuffers } from './utils/buffer';
-import { canonicalizeStrict } from './utils/canonicalize';
-import { createHash } from './utils/crypto';
-import { multibaseDecode } from './utils/multiformats';
+} from './interfaces.js';
+import { concatBuffers } from './utils/buffer.js';
+import { canonicalizeStrict } from './utils/canonicalize.js';
+import { createHash } from './utils/crypto.js';
+import { multibaseDecode } from './utils/multiformats.js';
+import { fetchWitnessProofs, parseDidKeyDid, parseDidKeyVerificationMethod, resolveVM } from './utils.js';
 
 function createWitnessProofSigner(signer: Signer) {
   return async (

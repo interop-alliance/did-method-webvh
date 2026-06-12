@@ -1,13 +1,13 @@
 import { beforeAll, describe, expect, test } from 'vitest';
-import { type DIDLog, DidResolutionError, type VerificationMethod } from '../src/interfaces';
-import { createDID, resolveDIDFromLog, updateDID } from '../src/method';
-import { resolveDIDFromLog as resolveDIDFromLogV1 } from '../src/method_versions/method.v1.0';
+import { type DIDLog, DidResolutionError, type VerificationMethod } from '../src/interfaces.js';
+import { createDID, resolveDIDFromLog, updateDID } from '../src/method.js';
+import { resolveDIDFromLog as resolveDIDFromLogV1 } from '../src/method_versions/method.v1.0.js';
 import {
   asPublicVerificationMethods,
   createTestSigner,
   generateTestVerificationMethod,
   TestCryptoImplementation,
-} from './utils';
+} from './utils.js';
 
 describe('Not So Happy Path Tests', () => {
   let authKey: VerificationMethod;

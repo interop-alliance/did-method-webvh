@@ -1,13 +1,13 @@
 import { beforeAll, expect, test } from 'vitest';
-import type { DIDLog, VerificationMethod } from '../src/interfaces';
-import { createDID, resolveDIDFromLog, updateDID } from '../src/method';
-import { createDate, deriveNextKeyHash } from '../src/utils';
+import type { DIDLog, VerificationMethod } from '../src/interfaces.js';
+import { createDID, resolveDIDFromLog, updateDID } from '../src/method.js';
+import { createDate, deriveNextKeyHash } from '../src/utils.js';
 import {
   asPublicVerificationMethods,
   createTestSigner,
   generateTestVerificationMethod,
   TestCryptoImplementation,
-} from './utils';
+} from './utils.js';
 
 let log: DIDLog;
 let authKey1: VerificationMethod,

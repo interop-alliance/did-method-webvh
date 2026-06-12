@@ -1,3 +1,12 @@
+## Unreleased (TBD)
+
+### Build System
+
+* replace the esbuild multi-bundle build (ESM/CJS/browser/CLI) with a plain `tsc` build emitting a single ESM target plus declarations to `dist/`; the `require` entry point is dropped (Node >= 20.19 can `require()` ESM natively)
+* remove unused dependencies (`cookie`, `glob`, `js-yaml`) and unused dev dependencies (`esbuild`, `@sinclair/typebox`, `@types/express`)
+* move `@stablelib/ed25519` to `dependencies` (the unbundled CLI imports it at runtime)
+* the CLI now ships as `dist/cli.js` (was `dist/cli/didwebvh.js`); the `didwebvh` bin name is unchanged
+
 ## [2.7.4](https://github.com/decentralized-identity/didwebvh-ts/compare/v2.7.3...v2.7.4) (2026-04-24)
 
 

@@ -1,5 +1,5 @@
-import { documentStateIsValid, hashChainValid, newKeysAreInNextKeys, scidIsFromHash } from '../assertions';
-import { METHOD, PLACEHOLDER } from '../constants';
+import { documentStateIsValid, hashChainValid, newKeysAreInNextKeys, scidIsFromHash } from '../assertions.js';
+import { METHOD, PLACEHOLDER } from '../constants.js';
 import type {
   CreateDIDInterface,
   CreateDIDResult,
@@ -13,8 +13,8 @@ import type {
   UpdateDIDResult,
   WitnessParameterResolution,
   WitnessProofFileEntry,
-} from '../interfaces';
-import { DidResolutionError } from '../interfaces';
+} from '../interfaces.js';
+import { DidResolutionError } from '../interfaces.js';
 import {
   createDate,
   createDIDDoc,
@@ -29,8 +29,8 @@ import {
   replaceCreateDidPlaceholders,
   replaceValueInObject,
   validateCreateDidDocument,
-} from '../utils';
-import { countVerifiedWitnessApprovals, fetchWitnessProofs, validateWitnessParameter } from '../witness';
+} from '../utils.js';
+import { countVerifiedWitnessApprovals, fetchWitnessProofs, validateWitnessParameter } from '../witness.js';
 
 const VERSION = '1.0';
 const PROTOCOL = `did:${METHOD}:${VERSION}`;

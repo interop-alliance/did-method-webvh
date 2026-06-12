@@ -7,11 +7,11 @@ import type {
   UpdateDIDInterface,
   UpdateDIDResult,
   WitnessProofFileEntry,
-} from './interfaces';
-import { DidResolutionError } from './interfaces';
-import * as v0_5 from './method_versions/method.v0.5';
-import * as v1 from './method_versions/method.v1.0';
-import { fetchLogFromIdentifier, getActiveDIDs, maybeWriteTestLog } from './utils';
+} from './interfaces.js';
+import { DidResolutionError } from './interfaces.js';
+import * as v0_5 from './method_versions/method.v0.5.js';
+import * as v1 from './method_versions/method.v1.0.js';
+import { fetchLogFromIdentifier, getActiveDIDs, maybeWriteTestLog } from './utils.js';
 
 const LATEST_VERSION = '1.0';
 

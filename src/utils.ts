@@ -1,5 +1,5 @@
-import { config } from './config';
-import { BASE_CONTEXT } from './constants';
+import { config } from './config.js';
+import { BASE_CONTEXT } from './constants.js';
 import type {
   CreateDIDInterface,
   DIDDoc,
@@ -8,12 +8,12 @@ import type {
   ServiceEndpoint,
   VerificationMethod,
   WitnessProofFileEntry,
-} from './interfaces';
-import { resolveDIDFromLog } from './method';
-import { bufferToString, createBuffer } from './utils/buffer';
-import { canonicalizeStrict } from './utils/canonicalize';
-import { createHash } from './utils/crypto';
-import { createMultihash, encodeBase58Btc, MultihashAlgorithm, multibaseDecode } from './utils/multiformats';
+} from './interfaces.js';
+import { resolveDIDFromLog } from './method.js';
+import { bufferToString, createBuffer } from './utils/buffer.js';
+import { canonicalizeStrict } from './utils/canonicalize.js';
+import { createHash } from './utils/crypto.js';
+import { createMultihash, encodeBase58Btc, MultihashAlgorithm, multibaseDecode } from './utils/multiformats.js';
 
 const DID_KEY_PREFIX = 'did:key:';
 
@@ -239,58 +239,12 @@ const isNodeEnvironment =
   typeof window === 'undefined' &&
   !!((process.versions && (process.versions as any).node) || (process.versions as any).bun);
 
-// Avoid bundlers including `fs`: hide the specifier from static analyzers
-const fsModuleSpecifier = ['node', 'fs'].join(':');
-// We'll resolve require dynamically only in Node runtimes; otherwise use dynamic import with a non-literal
-
-let fsModule: any | null = null;
-let fsImportPromise: Promise<any> | null = null;
-
-const getFS = async (): Promise<any> => {
+const getFS = async (): Promise<typeof import('node:fs')> => {
   if (!isNodeEnvironment) {
-    throw new Error(
-      'Filesystem access is not available in this environment (React Native, browser, or failed Node.js import)'
-    );
+    throw new Error('Filesystem access is not available in this environment (React Native or browser)');
   }
-
-  if (fsModule) {
-    return fsModule;
-  }
-
-  if (fsImportPromise) {
-    return fsImportPromise;
-  }
-
-  fsImportPromise = (async () => {
-    // Prefer require when present (Node)
-    const maybeRequire = (globalThis as any).require;
-    if (typeof maybeRequire === 'function') {
-      try {
-        const module = maybeRequire(fsModuleSpecifier);
-        fsModule = module;
-        return module;
-      } catch {}
-      try {
-        const module = maybeRequire('fs');
-        fsModule = module;
-        return module;
-      } catch {}
-    }
-    // Fallback to dynamic import (Bun/ESM)
-    try {
-      const module = await import(fsModuleSpecifier as any);
-      fsModule = module as any;
-      return module as any;
-    } catch {}
-    try {
-      const module = await import('fs' as any);
-      fsModule = module as any;
-      return module as any;
-    } catch {}
-    throw new Error('Filesystem access is not available in this environment (unable to load fs)');
-  })();
-
-  return fsImportPromise;
+  // The magic comments keep browser bundlers from trying to resolve fs
+  return import(/* @vite-ignore */ /* webpackIgnore: true */ 'node:fs');
 };
 
 const toASCII = (domain: string): string => {

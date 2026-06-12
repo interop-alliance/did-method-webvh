@@ -1,5 +1,5 @@
 import * as crypto from '@stablelib/ed25519';
-import { AbstractCrypto, prepareDataForSigning } from '../src/cryptography';
+import { AbstractCrypto, prepareDataForSigning } from '../src/cryptography.js';
 import type {
   DIDLog,
   DIDLogEntry,
@@ -9,9 +9,9 @@ import type {
   SigningOutput,
   VerificationMethod,
   Verifier,
-} from '../src/interfaces';
-import { deriveHash } from '../src/utils';
-import { MultibaseEncoding, multibaseDecode, multibaseEncode } from '../src/utils/multiformats';
+} from '../src/interfaces.js';
+import { MultibaseEncoding, multibaseDecode, multibaseEncode } from '../src/utils/multiformats.js';
+import { deriveHash } from '../src/utils.js';
 
 export function createMockDIDLog(entries: Partial<DIDLogEntry>[]): DIDLog {
   return entries.map((entry, index) => {

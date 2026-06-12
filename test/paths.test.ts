@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'vitest';
-import { createDID } from '../src/method';
+import { createDID } from '../src/method.js';
 import {
   asPublicVerificationMethods,
   createTestSigner,
   generateTestVerificationMethod,
   TestCryptoImplementation,
-} from './utils';
+} from './utils.js';
 
 describe('Paths feature', () => {
   test('creates DID without paths (default behavior)', async () => {

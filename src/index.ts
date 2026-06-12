@@ -1,10 +1,16 @@
-export { AbstractCrypto, createDocumentSigner, createProof, createSigner, prepareDataForSigning } from './cryptography';
-export * from './interfaces';
-export { createDID, deactivateDID, resolveDID, resolveDIDFromLog, updateDID } from './method';
-export { generateParallelDidWeb, parseDidKeyDid, parseDidKeyVerificationMethod } from './utils';
-export { MultibaseEncoding, multibaseDecode, multibaseEncode } from './utils/multiformats';
+export {
+  AbstractCrypto,
+  createDocumentSigner,
+  createProof,
+  createSigner,
+  prepareDataForSigning,
+} from './cryptography.js';
+export * from './interfaces.js';
+export { createDID, deactivateDID, resolveDID, resolveDIDFromLog, updateDID } from './method.js';
+export { MultibaseEncoding, multibaseDecode, multibaseEncode } from './utils/multiformats.js';
+export { generateParallelDidWeb, parseDidKeyDid, parseDidKeyVerificationMethod } from './utils.js';
 export {
   createWitnessProof,
   signWitnessProofEntries,
   signWitnessProofEntry,
-} from './witness';
+} from './witness.js';

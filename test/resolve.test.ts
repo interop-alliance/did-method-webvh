@@ -1,13 +1,13 @@
 import { beforeAll, describe, expect, test } from 'vitest';
-import type { DIDLog, VerificationMethod } from '../src/interfaces';
-import { createDID, resolveDIDFromLog, updateDID } from '../src/method';
-import { getBaseUrl, getFileUrl } from '../src/utils';
+import type { DIDLog, VerificationMethod } from '../src/interfaces.js';
+import { createDID, resolveDIDFromLog, updateDID } from '../src/method.js';
+import { getBaseUrl, getFileUrl } from '../src/utils.js';
 import {
   asPublicVerificationMethods,
   createTestSigner,
   generateTestVerificationMethod,
   TestCryptoImplementation,
-} from './utils';
+} from './utils.js';
 
 describe('resolveDIDFromLog with verificationMethod', () => {
   let initialDID: { did: string; doc: any; meta: any; log: DIDLog };

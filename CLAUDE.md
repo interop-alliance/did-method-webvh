@@ -70,7 +70,7 @@ createDID(options) [method.ts]
 
 ### Build Output
 
-The library builds to four targets: ESM (`dist/esm/`), CommonJS (`dist/cjs/`), browser (`dist/browser/`), and TypeScript declarations (`dist/types/`). The CLI ships as `dist/cli/didwebvh.js`.
+The library builds with plain `tsc` to a single ESM target with TypeScript declarations in `dist/`. The same files serve Node, browsers (via the consumer's bundler), and React Native. The CLI ships as `dist/cli.js`.
 
 ### Test Utilities
 
