@@ -11,7 +11,7 @@ import type {
 import { DidResolutionError } from './interfaces.js';
 import * as v0_5 from './method_versions/method.v0.5.js';
 import * as v1 from './method_versions/method.v1.0.js';
-import { fetchLogFromIdentifier, getActiveDIDs, maybeWriteTestLog } from './utils.js';
+import { fetchLogFromIdentifier, maybeWriteTestLog } from './utils.js';
 
 const LATEST_VERSION = '1.0';
 
@@ -56,20 +56,18 @@ export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDR
  *
  * @param did The DID to resolve.
  * @param options Optional resolver settings.
- * @returns The resolved DID result with resolution metadata and controlled status.
+ * @returns The resolved DID result with resolution metadata.
  */
 export const resolveDID = async (
   did: string,
   options: ResolutionOptions & { witnessProofs?: WitnessProofFileEntry[] } = {}
 ) => {
-  const activeDIDs = await getActiveDIDs();
-  const controlled = activeDIDs.includes(did);
   // Extract the expected SCID from the DID string so the resolver can
   // verify the log's SCID matches what the DID claims.
   const didParts = did.split(':');
   const scid = didParts.length > 2 && didParts[0] === 'did' && didParts[1] === 'webvh' ? didParts[2] : undefined;
   try {
-    const log = await fetchLogFromIdentifier(did, controlled);
+    const log = await fetchLogFromIdentifier(did);
     const version = getWebvhVersionFromLog(log);
     const { fastResolve, ...baseOptions } = options;
     const optsWithScid = { ...baseOptions, scid };
@@ -79,7 +77,7 @@ export const resolveDID = async (
         : await v1.resolveDIDFromLog(log, { ...optsWithScid, fastResolve });
     maybeWriteTestLog(result.did, log);
 
-    return { ...result, controlled };
+    return result;
   } catch (e: any) {
     let errorType: DidResolutionError = DidResolutionError.InvalidDid;
     const message = e instanceof Error ? e.message : String(e);
@@ -103,7 +101,6 @@ export const resolveDID = async (
           detail: message,
         },
       },
-      controlled,
     };
   }
 };
