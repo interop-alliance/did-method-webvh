@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { verify } from '@stablelib/ed25519';
 import { resolveDID } from 'didwebvh-ts';
 import type { DIDDoc, SigningInput, SigningOutput, Verifier } from 'didwebvh-ts/types';
@@ -98,7 +99,7 @@ const getFile = async ({
       : path
         ? `./src/routes/${path}/${file}`
         : `./src/routes/${file}`;
-    return await Bun.file(filePath).text();
+    return await readFile(filePath, 'utf8');
   } catch (e: unknown) {
     console.error(e);
     throw new Error(`Failed to resolve File: ${e instanceof Error ? e.message : String(e)}`);

@@ -1,14 +1,17 @@
-import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { chmodSync, existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import { BuildConfig } from 'bun';
+import type { BuildOptions, Plugin } from 'esbuild';
+import * as esbuild from 'esbuild';
 import pkg from '../package.json';
 
 // Library builds
-const browserConfig: BuildConfig = {
-  entrypoints: ['./src/index.ts'],
+const browserConfig: BuildOptions = {
+  entryPoints: ['./src/index.ts'],
+  bundle: true,
   minify: true,
   sourcemap: 'external',
-  target: 'browser',
+  platform: 'browser',
   format: 'esm',
   outdir: './dist/browser',
   define: {
@@ -17,50 +20,47 @@ const browserConfig: BuildConfig = {
   },
 };
 
-const esmConfig: BuildConfig = {
-  entrypoints: ['./src/index.ts'],
+const esmConfig: BuildOptions = {
+  entryPoints: ['./src/index.ts'],
+  bundle: true,
   minify: false,
   sourcemap: 'external',
-  target: 'node',
+  platform: 'node',
   format: 'esm',
   outdir: './dist/esm',
 };
 
-const dynamicImportToCjsPlugin = {
+const dynamicImportToCjsPlugin: Plugin = {
   name: 'dynamic-import-to-cjs',
-  setup(build: any) {
-    build.onLoad({ filter: /\.[jt]s$/ }, async (args: any) => {
-      const contents = await Bun.file(args.path).text();
+  setup(build) {
+    build.onLoad({ filter: /\.[jt]s$/ }, async (args) => {
+      const contents = readFileSync(args.path, 'utf8');
       // Replace dynamic imports with requires
       const transformed = contents.replace(/await\s+import\((.*?)\)/g, 'require($1)');
-      return { contents: transformed };
+      return { contents: transformed, loader: args.path.endsWith('.ts') ? 'ts' : 'js' };
     });
   },
 };
 
-const cjsConfig: BuildConfig = {
-  entrypoints: ['./src/index.ts'],
+const cjsConfig: BuildOptions = {
+  entryPoints: ['./src/index.ts'],
+  bundle: true,
   minify: false,
   sourcemap: 'external',
-  target: 'node',
+  platform: 'node',
   format: 'cjs',
   outdir: './dist/cjs',
-  loader: {
-    '.js': 'js',
-  },
   plugins: [dynamicImportToCjsPlugin],
 };
 
-const cliConfig: BuildConfig = {
-  entrypoints: ['./src/cli.ts'],
+const cliConfig: BuildOptions = {
+  entryPoints: ['./src/cli.ts'],
+  bundle: true,
   minify: false,
   sourcemap: 'external',
-  target: 'node',
+  platform: 'node',
   format: 'esm',
-  outdir: './dist/cli',
-  naming: {
-    entry: 'didwebvh.js',
-  },
+  outfile: './dist/cli/didwebvh.js',
 };
 
 async function ensureDir(dir: string) {
@@ -84,11 +84,11 @@ function createDistPackageJson() {
     files: ['cjs', 'esm', 'browser', 'cli', 'types'],
     exports: {
       '.': {
+        types: './types/index.d.ts',
         'react-native': './cjs/index.cjs',
         browser: './browser/index.js',
         import: './esm/index.js',
         require: './cjs/index.cjs',
-        types: './types/index.d.ts',
       },
       './types': {
         types: './types/types.d.ts',
@@ -140,12 +140,19 @@ async function renameCjsFiles() {
   );
 }
 
+async function runBuild(name: string, config: BuildOptions) {
+  console.log(`\nBuilding ${name} bundle...`);
+  try {
+    await esbuild.build(config);
+  } catch (error) {
+    console.error(`${name} build failed:`, error);
+    process.exit(1);
+  }
+}
+
 async function build() {
   // Clean dist directory first
-  await Bun.spawn(['rm', '-rf', 'dist'], {
-    stdout: 'inherit',
-    stderr: 'inherit',
-  }).exited;
+  rmSync('dist', { recursive: true, force: true });
 
   // Create output directories
   console.log('\nCreating output directories...');
@@ -157,41 +164,15 @@ async function build() {
     ensureDir('./dist/types'),
   ]);
 
-  // Build ESM for Node.js
-  console.log('\nBuilding ESM bundle...');
-  const esmResult = await Bun.build(esmConfig);
-  if (!esmResult.success) {
-    console.error('ESM build failed:', esmResult.logs);
-    process.exit(1);
-  }
-
-  // Build CJS for Node.js
-  console.log('\nBuilding CJS bundle...');
-  const cjsResult = await Bun.build(cjsConfig);
-  if (!cjsResult.success) {
-    console.error('CJS build failed:', cjsResult.logs);
-    process.exit(1);
-  }
+  await runBuild('ESM', esmConfig);
+  await runBuild('CJS', cjsConfig);
 
   // Rename CJS files to .cjs
   console.log('\nRenaming CJS files...');
   await renameCjsFiles();
 
-  // Build for Browser
-  console.log('\nBuilding Browser bundle...');
-  const browserResult = await Bun.build(browserConfig);
-  if (!browserResult.success) {
-    console.error('Browser build failed:', browserResult.logs);
-    process.exit(1);
-  }
-
-  // Build CLI
-  console.log('\nBuilding CLI...');
-  const cliResult = await Bun.build(cliConfig);
-  if (!cliResult.success) {
-    console.error('CLI build failed:', cliResult.logs);
-    process.exit(1);
-  }
+  await runBuild('Browser', browserConfig);
+  await runBuild('CLI', cliConfig);
 
   // Generate type declarations
   console.log('\nGenerating TypeScript declarations...');
@@ -216,25 +197,20 @@ async function build() {
 
   writeFileSync('tsconfig.declarations.json', JSON.stringify(declarationConfig, null, 2));
 
-  const tscResult = await Bun.spawn(['tsc', '--project', 'tsconfig.declarations.json'], {
-    stdout: 'inherit',
-    stderr: 'inherit',
-  }).exited;
+  const tscResult = spawnSync('npx', ['tsc', '--project', 'tsconfig.declarations.json'], {
+    stdio: 'inherit',
+  });
 
   // Clean up temporary config
-  await Bun.spawn(['rm', 'tsconfig.declarations.json']);
+  rmSync('tsconfig.declarations.json');
 
-  if (tscResult !== 0) {
+  if (tscResult.status !== 0) {
     console.error('TypeScript compilation failed');
     process.exit(1);
   }
 
   // Make CLI executable
-  const proc2 = Bun.spawn(['chmod', '+x', 'dist/cli/didwebvh.js'], {
-    stdout: 'inherit',
-    stderr: 'inherit',
-  });
-  await proc2.exited;
+  chmodSync('dist/cli/didwebvh.js', 0o755);
 
   // Create distribution package.json and README
   console.log('\nCreating distribution package files...');

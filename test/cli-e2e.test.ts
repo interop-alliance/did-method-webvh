@@ -1,7 +1,7 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import { join } from 'node:path';
-import { $ } from 'bun';
+import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import type { VerificationMethod } from '../src/interfaces';
 import { resolveDIDFromLog } from '../src/method';
 import { readLogFromDisk } from '../src/utils';
@@ -9,6 +9,23 @@ import { generateTestVerificationMethod, TestCryptoImplementation } from './util
 
 const TEST_DIR = join(process.cwd(), 'test', 'temp-cli-e2e');
 const ENV_FILE = join(process.cwd(), '.env');
+const CLI_FILE = join(process.cwd(), 'src', 'cli.ts');
+
+// Run the CLI in a subprocess, capturing exit code and output without
+// throwing on nonzero exit (mirrors bun's $`...`.quiet()).
+function runCli(args: string[]): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    execFile(
+      process.execPath,
+      ['--import', 'tsx', CLI_FILE, ...args],
+      { cwd: process.cwd(), env: process.env },
+      (error, stdout, stderr) => {
+        const exitCode = error ? (typeof error.code === 'number' ? error.code : 1) : 0;
+        resolve({ exitCode, stdout, stderr });
+      }
+    );
+  });
+}
 
 // Create a verifier for resolving CLI-created DIDs.
 // TestCryptoImplementation.verify() does generic ed25519 verification
@@ -19,7 +36,7 @@ let savedEnv: string | null = null;
 beforeAll(async () => {
   const dummyKey = await generateTestVerificationMethod();
   verifier = new TestCryptoImplementation({ verificationMethod: dummyKey });
-  await $`mkdir -p ${TEST_DIR}`.quiet();
+  fs.mkdirSync(TEST_DIR, { recursive: true });
   // Save existing .env content so we can restore it after tests
   try {
     savedEnv = fs.readFileSync(ENV_FILE, 'utf8');
@@ -27,7 +44,7 @@ beforeAll(async () => {
     savedEnv = null;
   }
   // Clear DID_VERIFICATION_METHODS from both the .env file and process.env.
-  // Subprocesses inherit process.env, and bun gives inherited env vars
+  // Subprocesses inherit process.env, and the CLI gives inherited env vars
   // precedence over .env file values, so both must be cleaned.
   try {
     const content = savedEnv || '';
@@ -41,7 +58,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await $`rm -rf ${TEST_DIR}`.quiet();
+  fs.rmSync(TEST_DIR, { recursive: true, force: true });
   // Restore original .env content
   if (savedEnv !== null) {
     fs.writeFileSync(ENV_FILE, savedEnv);
@@ -52,27 +69,33 @@ afterAll(async () => {
 async function createTempVerificationMethod(vm: VerificationMethod): Promise<string> {
   const tempFile = join(TEST_DIR, `vm-${Date.now()}.json`);
   const vmData = Buffer.from(JSON.stringify([vm])).toString('base64');
-  await Bun.write(tempFile, vmData);
+  fs.writeFileSync(tempFile, vmData);
   return tempFile;
 }
 
-describe('CLI End-to-End Tests', async () => {
+describe('CLI End-to-End Tests', () => {
   test('Create DID using CLI', async () => {
-    const proc =
-      await $`bun run cli create --domain example.com --output ${join(TEST_DIR, 'did.jsonl')} --portable`.quiet();
+    const proc = await runCli([
+      'create',
+      '--domain',
+      'example.com',
+      '--output',
+      join(TEST_DIR, 'did.jsonl'),
+      '--portable',
+    ]);
     expect(proc.exitCode).toBe(0);
-    expect(proc.stdout.toString()).toContain('Created DID');
+    expect(proc.stdout).toContain('Created DID');
   });
 
   test('Update DID using CLI', async () => {
     const logFile = join(TEST_DIR, 'did-update.jsonl');
 
     // Create a DID — the CLI generates its own authKey and writes it to .env
-    const createProc = await $`bun run cli create --domain example.com --output ${logFile} --portable`.quiet();
+    const createProc = await runCli(['create', '--domain', 'example.com', '--output', logFile, '--portable']);
     expect(createProc.exitCode).toBe(0);
 
     // Update the DID — reads authKey from .env so signer matches updateKeys
-    const updateProc = await $`bun run cli update --log ${logFile} --output ${logFile}`.quiet();
+    const updateProc = await runCli(['update', '--log', logFile, '--output', logFile]);
     expect(updateProc.exitCode).toBe(0);
 
     // Verify the update was successful
@@ -84,15 +107,15 @@ describe('CLI End-to-End Tests', async () => {
     const logFile = join(TEST_DIR, 'did-update2.jsonl');
 
     // Create a DID
-    const createProc = await $`bun run cli create --domain example.com --output ${logFile} --portable`.quiet();
+    const createProc = await runCli(['create', '--domain', 'example.com', '--output', logFile, '--portable']);
     expect(createProc.exitCode).toBe(0);
 
     // First update
-    const update1Proc = await $`bun run cli update --log ${logFile} --output ${logFile}`.quiet();
+    const update1Proc = await runCli(['update', '--log', logFile, '--output', logFile]);
     expect(update1Proc.exitCode).toBe(0);
 
     // Second update
-    const update2Proc = await $`bun run cli update --log ${logFile} --output ${logFile}`.quiet();
+    const update2Proc = await runCli(['update', '--log', logFile, '--output', logFile]);
     expect(update2Proc.exitCode).toBe(0);
 
     // Verify the updates were successful
@@ -104,11 +127,11 @@ describe('CLI End-to-End Tests', async () => {
     const logFile = join(TEST_DIR, 'did-deactivate.jsonl');
 
     // Create a DID
-    const createProc = await $`bun run cli create --domain example.com --output ${logFile} --portable`.quiet();
+    const createProc = await runCli(['create', '--domain', 'example.com', '--output', logFile, '--portable']);
     expect(createProc.exitCode).toBe(0);
 
     // Deactivate the DID — reads authKey from .env so signer matches updateKeys
-    const deactivateProc = await $`bun run cli deactivate --log ${logFile} --output ${logFile}`.quiet();
+    const deactivateProc = await runCli(['deactivate', '--log', logFile, '--output', logFile]);
     expect(deactivateProc.exitCode).toBe(0);
 
     // Verify deactivation
@@ -122,8 +145,18 @@ describe('CLI End-to-End Tests', async () => {
     const nextKeyHash1 = 'nextKey1Hash';
     const nextKeyHash2 = 'nextKey2Hash';
 
-    const proc =
-      await $`bun run cli create --domain example.com --output ${prerotationLogFile} --portable --next-key-hash ${nextKeyHash1} --next-key-hash ${nextKeyHash2}`.quiet();
+    const proc = await runCli([
+      'create',
+      '--domain',
+      'example.com',
+      '--output',
+      prerotationLogFile,
+      '--portable',
+      '--next-key-hash',
+      nextKeyHash1,
+      '--next-key-hash',
+      nextKeyHash2,
+    ]);
     expect(proc.exitCode).toBe(0);
 
     // Wait a moment for the file to be written
@@ -144,7 +177,7 @@ describe('CLI End-to-End Tests', async () => {
     const vmLogFile = join(TEST_DIR, 'did-vm.jsonl');
 
     // Create a DID
-    const createProc = await $`bun run cli create --domain example.com --output ${vmLogFile} --portable`.quiet();
+    const createProc = await runCli(['create', '--domain', 'example.com', '--output', vmLogFile, '--portable']);
     expect(createProc.exitCode).toBe(0);
 
     // Get the DID
@@ -152,8 +185,23 @@ describe('CLI End-to-End Tests', async () => {
     const { did } = await resolveDIDFromLog(initialLog, { verifier });
 
     // Add all VM types in a single update — reads authKey from .env
-    const proc =
-      await $`bun run cli update --log ${vmLogFile} --output ${vmLogFile} --add-vm authentication --add-vm assertionMethod --add-vm keyAgreement --add-vm capabilityInvocation --add-vm capabilityDelegation`.quiet();
+    const proc = await runCli([
+      'update',
+      '--log',
+      vmLogFile,
+      '--output',
+      vmLogFile,
+      '--add-vm',
+      'authentication',
+      '--add-vm',
+      'assertionMethod',
+      '--add-vm',
+      'keyAgreement',
+      '--add-vm',
+      'capabilityInvocation',
+      '--add-vm',
+      'capabilityDelegation',
+    ]);
     expect(proc.exitCode).toBe(0);
 
     // Verify all VM types were added
@@ -184,12 +232,12 @@ describe('CLI End-to-End Tests', async () => {
     const akLogFile = join(TEST_DIR, 'did-aka.jsonl');
 
     // Create a DID
-    const createProc = await $`bun run cli create --domain example.com --output ${akLogFile} --portable`.quiet();
+    const createProc = await runCli(['create', '--domain', 'example.com', '--output', akLogFile, '--portable']);
     expect(createProc.exitCode).toBe(0);
 
     // Update with alsoKnownAs — reads authKey from .env
     const alias = 'https://example.com/users/123';
-    const proc = await $`bun run cli update --log ${akLogFile} --output ${akLogFile} --also-known-as ${alias}`.quiet();
+    const proc = await runCli(['update', '--log', akLogFile, '--output', akLogFile, '--also-known-as', alias]);
     expect(proc.exitCode).toBe(0);
 
     // Verify alsoKnownAs was added
@@ -204,7 +252,7 @@ describe('CLI End-to-End Tests', async () => {
   test('Resolve DID command', async () => {
     // First create a DID
     const resolveLogFile = join(TEST_DIR, 'did-resolve.jsonl');
-    const createProc = await $`bun run cli create --domain example.com --output ${resolveLogFile} --portable`.quiet();
+    const createProc = await runCli(['create', '--domain', 'example.com', '--output', resolveLogFile, '--portable']);
     expect(createProc.exitCode).toBe(0);
 
     // Get the DID from the log
@@ -212,18 +260,18 @@ describe('CLI End-to-End Tests', async () => {
     const { did } = await resolveDIDFromLog(log, { verifier });
 
     // Test resolve command with log file instead of DID
-    const proc = await $`bun run cli resolve --log ${resolveLogFile}`.quiet();
+    const proc = await runCli(['resolve', '--log', resolveLogFile]);
     expect(proc.exitCode).toBe(0);
 
     // Verify resolve output contains expected fields
-    const output = proc.stdout.toString();
+    const output = proc.stdout;
     expect(output).toContain('Resolved DID');
     expect(output).toContain('DID Document');
     expect(output).toContain('Metadata');
   });
 });
 
-describe('Witness CLI End-to-End Tests', async () => {
+describe('Witness CLI End-to-End Tests', () => {
   test('Create DID with witnesses using CLI', async () => {
     const logFile = join(TEST_DIR, 'did.jsonl');
 
@@ -234,8 +282,17 @@ describe('Witness CLI End-to-End Tests', async () => {
       const witnessDid = `did:key:${witness.publicKeyMultibase}`;
 
       // Run the CLI create command with witness
-      const proc =
-        await $`bun run cli create --domain localhost:8000 --output ${logFile} --witness ${witnessDid} --witness-threshold 1`.quiet();
+      const proc = await runCli([
+        'create',
+        '--domain',
+        'localhost:8000',
+        '--output',
+        logFile,
+        '--witness',
+        witnessDid,
+        '--witness-threshold',
+        '1',
+      ]);
 
       expect(proc.exitCode).toBe(0);
 
@@ -261,8 +318,19 @@ describe('Witness CLI End-to-End Tests', async () => {
     const witnessDid = `did:key:${witness.publicKeyMultibase}`;
     const outputFile = join(TEST_DIR, 'did-witness-multi.json');
 
-    const proc =
-      await $`bun run cli generate-witness-proof --version-id 1-abc123 --version-id 2-def456 --witness-did ${witnessDid} --witness-secret ${witness.secretKeyMultibase!} --output ${outputFile}`.quiet();
+    const proc = await runCli([
+      'generate-witness-proof',
+      '--version-id',
+      '1-abc123',
+      '--version-id',
+      '2-def456',
+      '--witness-did',
+      witnessDid,
+      '--witness-secret',
+      witness.secretKeyMultibase!,
+      '--output',
+      outputFile,
+    ]);
     expect(proc.exitCode).toBe(0);
 
     const content = JSON.parse(fs.readFileSync(outputFile, 'utf8'));

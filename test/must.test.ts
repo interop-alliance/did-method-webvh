@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'vitest';
 import type { DIDLog, VerificationMethod } from '../src/interfaces';
 import { createDID, deactivateDID, resolveDIDFromLog, updateDID } from '../src/method';
 import { createWitnessProof } from '../src/witness';
@@ -78,7 +78,7 @@ describe('did:webvh normative tests', async () => {
 
   test("Resolver encountering 'deactivated': false MUST return deactivated in metadata (negative)", async () => {
     const resolved = await resolveDIDFromLog(newLog1, { verifier: testImplementation });
-    expect(resolved.meta.deactivated).toBeFalse();
+    expect(resolved.meta.deactivated).toBe(false);
   });
 });
 

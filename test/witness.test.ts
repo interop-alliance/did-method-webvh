@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'vitest';
 import type { DataIntegrityProofTemplate, DIDLog, Signer, VerificationMethod } from '../src/interfaces';
 import { DidResolutionError } from '../src/interfaces';
 import { createDID, resolveDIDFromLog, updateDID } from '../src/method';
@@ -409,7 +409,7 @@ describe('Witness Implementation Tests', async () => {
       verifier: testImplementation,
       witnessProofs: [...witnessProofs, { versionId: newVersionId, proof: deactivationProofs }],
     });
-    expect(resolved.meta.witness).toBeEmpty();
+    expect(resolved.meta.witness).toEqual({});
   });
 
   test('Verify witness proofs from did-witness.json', async () => {
