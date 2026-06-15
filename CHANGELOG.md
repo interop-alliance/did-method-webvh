@@ -1,5 +1,11 @@
 ## Unreleased (TBD)
 
+### Package
+
+* rename the package from `didwebvh-ts` to `@interop/did-method-webvh` and move
+  the repository to `interop-alliance/did-method-webvh`; update import specifiers
+  and docs accordingly (the `didwebvh` CLI bin name is unchanged)
+
 ### BREAKING CHANGES
 
 * remove the legacy `did:webvh:0.5` spec implementation (`src/method_versions/method.v0.5.ts`); the library now supports `did:webvh:1.0` only:
@@ -319,7 +325,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * add npm release ([8903f8d](https://github.com/decentralized-identity/didwebvh-ts/commit/8903f8d4edebc1cc7fe9c04e4c2b8d9ade12c1a3))
 * minor version bump ([0751250](https://github.com/decentralized-identity/didwebvh-ts/commit/0751250d006cc9c085d78ba66091f05d576f02f8))
 
-# didwebvh-ts Changelog
+# @interop/did-method-webvh Changelog
 
 ## 0.1.0 - 2025-01-10
 

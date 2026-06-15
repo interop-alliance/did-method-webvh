@@ -1,8 +1,8 @@
-# `didwebvh-ts`
+# `@interop/did-method-webvh`
 
-[![CI](https://github.com/decentralized-identity/didwebvh-ts/actions/workflows/ci.yml/badge.svg)](https://github.com/decentralized-identity/didwebvh-ts/actions/workflows/ci.yml)
+[![CI](https://github.com/interop-alliance/did-method-webvh/actions/workflows/ci.yml/badge.svg)](https://github.com/interop-alliance/did-method-webvh/actions/workflows/ci.yml)
 
-`didwebvh-ts` provides developers with a comprehensive library for working with
+`@interop/did-method-webvh` provides developers with a comprehensive library for working with
 Decentralized Identifiers (DIDs) following the `did:webvh` method specification.
 This Typescript-based toolkit is designed to facilitate the integration and
 management of DIDs within web applications, enabling secure identity
@@ -14,7 +14,7 @@ features in a variety of projects.
 
 ## Summary
 
-The `didwebvh-ts` implementation of the [
+The `@interop/did-method-webvh` implementation of the [
 `did:webvh`]('https://identity.foundation/didwebvh/') specification aims to be
 compatible with the `did:webvh` v1.0 specification.
 
@@ -41,7 +41,7 @@ npm install
 
 ## Local development setup
 
-When running the examples from the source checkout, the `didwebvh-ts` package
+When running the examples from the source checkout, the `@interop/did-method-webvh` package
 name resolves to your local build output via the `file:..` dependency in
 `examples/package.json`. Run the following once per clone:
 
@@ -150,7 +150,7 @@ uses [npm OIDC trusted publishing](https://docs.npmjs.com/trusted-publishers) â€
 the workflow exchanges its GitHub Actions OIDC token for a short-lived npm
 publish token at publish time. No static `NPM_TOKEN` is required.
 
-For this to work, the `didwebvh-ts` package on npmjs.com must have a Trusted
+For this to work, the `@interop/did-method-webvh` package on npmjs.com must have a Trusted
 Publisher configured pointing at this repository and the
 `.github/workflows/publish.yml` workflow.
 
@@ -169,14 +169,14 @@ Publisher configured pointing at this repository and the
 
 ## Creating a DID Resolver
 
-The `didwebvh-ts` library provides the core functionality for resolving DIDs,
+The `@interop/did-method-webvh` library provides the core functionality for resolving DIDs,
 but it does not include a built-in HTTP resolver. You can create your own
 resolver using your preferred web framework by following these steps:
 
-1. Import the `resolveDID` function from the `didwebvh-ts` library:
+1. Import the `resolveDID` function from the `@interop/did-method-webvh` library:
 
    ```typescript
-   import { resolveDID } from 'didwebvh-ts';
+   import { resolveDID } from '@interop/did-method-webvh';
    ```
 
 2. Create endpoints for resolving DIDs:

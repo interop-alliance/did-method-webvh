@@ -1,7 +1,14 @@
 import { readFile } from 'node:fs/promises';
+import { resolveDID, resolveDIDFromLog } from '@interop/did-method-webvh';
+import type {
+  DIDDoc,
+  DIDLog,
+  ResolutionOptions,
+  SigningInput,
+  SigningOutput,
+  Verifier,
+} from '@interop/did-method-webvh/types';
 import { verify } from '@stablelib/ed25519';
-import { resolveDID, resolveDIDFromLog } from 'didwebvh-ts';
-import type { DIDDoc, DIDLog, ResolutionOptions, SigningInput, SigningOutput, Verifier } from 'didwebvh-ts/types';
 import express from 'express';
 
 // Directory this resolver serves DID logs and attached resources from

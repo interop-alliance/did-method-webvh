@@ -100,7 +100,7 @@ for use across all test files. Tests use Vitest.
 **[examples/](examples/)** contains reference implementations:
 `express-resolver.ts` shows how to serve DID resolution over HTTP; `signer.ts`
 shows how to extend `AbstractCrypto`. The examples are their own private npm
-package consuming `didwebvh-ts` via a `file:..` dependency, so they import the *
+package consuming `@interop/did-method-webvh` via a `file:..` dependency, so they import the *
 *built** `dist/` output -- rebuild the library before exercising them.
 
 ## Fork Maintenance: Porting Upstream PRs

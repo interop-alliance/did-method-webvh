@@ -1,11 +1,11 @@
 {
-  "name": "didwebvh-ts",
+  "name": "@interop/did-method-webvh",
   "type": "module",
   "version": "2.7.4",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/decentralized-identity/didwebvh-ts.git"
+    "url": "https://github.com/interop-alliance/did-method-webvh.git"
   },
   "module": "dist/index.js",
   "browser": "dist/index.js",

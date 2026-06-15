@@ -1,6 +1,6 @@
 # DID Web VH Resolver Examples
 
-This directory contains example implementations for the `didwebvh-ts` library:
+This directory contains example implementations for the `@interop/did-method-webvh` library:
 
 1. **Express Resolver** - A DID resolver built with Express (Node.js)
 2. **Signer** - A custom signer implementation extending `AbstractCrypto`
@@ -13,7 +13,7 @@ The resolver example demonstrates functioning DID resolution with proper Ed25519
 
 ## Setup
 
-The examples consume `didwebvh-ts` from the repository's build output (via the `file:..` dependency), so build the library first:
+The examples consume `@interop/did-method-webvh` from the repository's build output (via the `file:..` dependency), so build the library first:
 
 ```bash
 # From the repository root
@@ -88,7 +88,7 @@ The Express resolver uses an Ed25519 verifier class that:
 ### Code Structure
 
 1. **Ed25519 Verifier Implementation**: Proper cryptographic verification using the Ed25519 algorithm
-2. **DID Resolution**: Endpoints for resolving DIDs using the `didwebvh-ts` library
+2. **DID Resolution**: Endpoints for resolving DIDs using the `@interop/did-method-webvh` library
 3. **File Handling**: Logic for retrieving resources associated with DIDs
 4. **Error Handling**: Proper error reporting for various scenarios
 

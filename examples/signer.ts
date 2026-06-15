@@ -1,4 +1,3 @@
-import { generateKeyPair, sign, verify } from '@stablelib/ed25519';
 import {
   AbstractCrypto,
   createDID,
@@ -6,8 +5,15 @@ import {
   multibaseDecode,
   multibaseEncode,
   prepareDataForSigning,
-} from 'didwebvh-ts';
-import type { Signer, SigningInput, SigningOutput, VerificationMethod, Verifier } from 'didwebvh-ts/types';
+} from '@interop/did-method-webvh';
+import type {
+  Signer,
+  SigningInput,
+  SigningOutput,
+  VerificationMethod,
+  Verifier,
+} from '@interop/did-method-webvh/types';
+import { generateKeyPair, sign, verify } from '@stablelib/ed25519';
 import { base58btc } from 'multiformats/bases/base58';
 
 class ExampleCrypto extends AbstractCrypto implements Verifier, Signer {

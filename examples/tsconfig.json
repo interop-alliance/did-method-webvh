@@ -5,8 +5,8 @@
     "strictPropertyInitialization": false,
     "skipLibCheck": true,
     "paths": {
-      "didwebvh-ts": ["../src"],
-      "didwebvh-ts/types": ["../src/types"]
+      "@interop/did-method-webvh": ["../src"],
+      "@interop/did-method-webvh/types": ["../src/types"]
     },
     "rootDir": "../"
   },
