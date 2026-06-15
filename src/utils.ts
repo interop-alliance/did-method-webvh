@@ -625,6 +625,14 @@ export const createDIDDoc = async (options: CreateDIDInterface): Promise<{ doc: 
     doc.keyAgreement = options.keyAgreement;
   }
 
+  if (options.capabilityDelegation) {
+    doc.capabilityDelegation = options.capabilityDelegation;
+  }
+
+  if (options.capabilityInvocation) {
+    doc.capabilityInvocation = options.capabilityInvocation;
+  }
+
   if (options.alsoKnownAs) {
     doc.alsoKnownAs = options.alsoKnownAs;
   }
@@ -665,8 +673,10 @@ export const normalizeVMs = (verificationMethod: VerificationMethod[] | undefine
     return all;
   }
 
-  // First collect all VMs
-  const vms = verificationMethod.map((vm) => ({
+  // First collect all VMs. `purpose` is a creation-time directive for the
+  // relationship wiring below, not a DID Core verification-method property, so
+  // it is dropped from the emitted entries.
+  const vms = verificationMethod.map(({ purpose, ...vm }) => ({
     ...vm,
     id: vm.id ?? createVMID(vm, did),
     // Default controller to the DID — required by W3C DID Core §5.2
@@ -674,26 +684,31 @@ export const normalizeVMs = (verificationMethod: VerificationMethod[] | undefine
   }));
   all.verificationMethod = vms;
 
+  // A VM's `purpose` may name a single relationship or several; an absent (or
+  // empty) purpose defaults the key into authentication.
+  const purposesOf = (vm: VerificationMethod): string[] =>
+    vm.purpose == null ? [] : Array.isArray(vm.purpose) ? vm.purpose : [vm.purpose];
+  const idOf = (vm: VerificationMethod) => vm.id ?? createVMID(vm, did);
+
   // Then handle relationships - default to authentication if no purpose is specified
   all.authentication = verificationMethod
-    .filter((vm) => !vm.purpose || vm.purpose === 'authentication')
-    .map((vm) => vm.id ?? createVMID(vm, did));
+    .filter((vm) => {
+      const purposes = purposesOf(vm);
+      return purposes.length === 0 || purposes.includes('authentication');
+    })
+    .map(idOf);
 
-  all.assertionMethod = verificationMethod
-    .filter((vm) => vm.purpose === 'assertionMethod')
-    .map((vm) => vm.id ?? createVMID(vm, did));
+  all.assertionMethod = verificationMethod.filter((vm) => purposesOf(vm).includes('assertionMethod')).map(idOf);
 
-  all.keyAgreement = verificationMethod
-    .filter((vm) => vm.purpose === 'keyAgreement')
-    .map((vm) => vm.id ?? createVMID(vm, did));
+  all.keyAgreement = verificationMethod.filter((vm) => purposesOf(vm).includes('keyAgreement')).map(idOf);
 
   all.capabilityDelegation = verificationMethod
-    .filter((vm) => vm.purpose === 'capabilityDelegation')
-    .map((vm) => vm.id ?? createVMID(vm, did));
+    .filter((vm) => purposesOf(vm).includes('capabilityDelegation'))
+    .map(idOf);
 
   all.capabilityInvocation = verificationMethod
-    .filter((vm) => vm.purpose === 'capabilityInvocation')
-    .map((vm) => vm.id ?? createVMID(vm, did));
+    .filter((vm) => purposesOf(vm).includes('capabilityInvocation'))
+    .map(idOf);
 
   return all;
 };

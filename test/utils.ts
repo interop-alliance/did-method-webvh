@@ -68,13 +68,15 @@ export class MockFailingImplementation extends TestCryptoImplementation {
 }
 
 // Helper to generate verification method for tests
+type TestPurpose =
+  | 'authentication'
+  | 'assertionMethod'
+  | 'keyAgreement'
+  | 'capabilityInvocation'
+  | 'capabilityDelegation';
+
 export async function generateTestVerificationMethod(
-  purpose:
-    | 'authentication'
-    | 'assertionMethod'
-    | 'keyAgreement'
-    | 'capabilityInvocation'
-    | 'capabilityDelegation' = 'authentication',
+  purpose: TestPurpose | TestPurpose[] = 'authentication',
   id?: string
 ): Promise<VerificationMethod> {
   const keyPair = crypto.generateKeyPair();
