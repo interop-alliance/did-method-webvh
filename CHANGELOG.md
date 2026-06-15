@@ -1,3 +1,32 @@
+## Unreleased - TBD
+
+### Added
+
+* support `capabilityDelegation` and `capabilityInvocation` as verification
+  relationship options on `createDID` / `updateDID` (alongside the existing
+  `authentication`, `assertionMethod`, and `keyAgreement` passthroughs), so a
+  single verification method can be referenced by id across all five
+  relationships -- matching the `did:web` shape -- instead of being limited to
+  the one relationship implied by its `purpose`.
+* a verification method's `purpose` may now be an **array** of relationships
+  (`DataIntegrityProofPurpose[]`), not just a single value. A key declared with
+  `purpose: ['authentication', 'assertionMethod', 'capabilityDelegation',
+  'capabilityInvocation']` is added once to `verificationMethod` and referenced
+  by id from each listed relationship -- the ergonomic way to produce the
+  `did:web` shape without building relationship-id strings by hand. A single
+  string still works; absent (or empty) still defaults to `authentication`.
+* export `DID_PLACEHOLDER` (the `{DID}` substitution token) and `createVMID`
+  from the package entry, so callers can construct verification-method id
+  references (e.g. `` `${DID_PLACEHOLDER}#${publicKeyMultibase.slice(-8)}` ``)
+  without depending on internal magic strings.
+
+### Changed
+
+* `normalizeVMs` no longer copies the creation-time `purpose` directive onto the
+  emitted `verificationMethod` entries; `purpose` is not a DID Core
+  verification-method property and previously leaked into the published DID
+  document. The relationship arrays (`authentication`, etc.) are unaffected.
+
 ## 3.0.0-3.0.2 - 2026-06-14
 
 ### Package

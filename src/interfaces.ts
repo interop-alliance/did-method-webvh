@@ -105,7 +105,10 @@ export interface VerificationMethod {
   controller?: string;
   publicKeyMultibase?: string;
   secretKeyMultibase?: string;
-  purpose?: DataIntegrityProofPurpose;
+  // A single verification relationship, or several -- the key is referenced by
+  // id from each listed relationship. Absent (or empty) defaults to
+  // authentication.
+  purpose?: DataIntegrityProofPurpose | DataIntegrityProofPurpose[];
   publicKeyJwk?: any;
   use?: string;
 }
@@ -216,6 +219,8 @@ export interface CreateDIDInterface {
   authentication?: string[];
   assertionMethod?: string[];
   keyAgreement?: string[];
+  capabilityDelegation?: string[];
+  capabilityInvocation?: string[];
 }
 
 export interface SignDIDDocInterface {
@@ -240,6 +245,8 @@ export interface UpdateDIDInterface {
   authentication?: string[];
   assertionMethod?: string[];
   keyAgreement?: string[];
+  capabilityDelegation?: string[];
+  capabilityInvocation?: string[];
   witnessProofs?: WitnessProofFileEntry[];
 }
 
