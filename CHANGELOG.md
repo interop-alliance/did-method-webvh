@@ -1,4 +1,4 @@
-## Unreleased (TBD)
+## 3.0.0 - 2026-06-14
 
 ### Package
 
