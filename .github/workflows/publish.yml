@@ -42,7 +42,7 @@ jobs:
           set -euo pipefail
           VERSION="${TAG_NAME#v}"
           echo "Publishing version ${VERSION}"
-          npm version --no-git-tag-version "${VERSION}"
+          npm version --no-git-tag-version --allow-same-version "${VERSION}"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

@@ -1,6 +1,7 @@
 # `@interop/did-method-webvh`
 
 [![CI](https://github.com/interop-alliance/did-method-webvh/actions/workflows/ci.yml/badge.svg)](https://github.com/interop-alliance/did-method-webvh/actions/workflows/ci.yml)
+[![NPM Version](https://img.shields.io/npm/v/@interop/did-method-webvh.svg)](https://npm.im/@interop/did-method-webvh)
 
 `@interop/did-method-webvh` provides developers with a comprehensive library for working with
 Decentralized Identifiers (DIDs) following the `did:webvh` method specification.
