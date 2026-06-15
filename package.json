@@ -1,7 +1,7 @@
 {
   "name": "@interop/did-method-webvh",
   "type": "module",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -15,7 +15,7 @@
     "CHANGELOG.md"
   ],
   "engines": {
-    "node": ">=20.19"
+    "node": ">=22"
   },
   "packageManager": "pnpm@11.3.0",
   "scripts": {
@@ -51,6 +51,10 @@
   },
   "bin": {
     "didwebvh": "./dist/cli.js"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "exports": {
     ".": {
