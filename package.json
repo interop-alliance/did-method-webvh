@@ -24,7 +24,7 @@
     "lint:fix": "biome check --write .",
     "format": "biome format .",
     "format:fix": "biome format --write .",
-    "test": "rm -rf ./test/logs && NODE_ENV=test vitest run",
+    "test": "npm run lint:fix && rm -rf ./test/logs && NODE_ENV=test vitest run",
     "test:watch": "rm -rf ./test/logs && NODE_ENV=test vitest",
     "test:bail": "rm -rf ./test/logs && NODE_ENV=test vitest --bail=1",
     "test:coverage": "rm -rf ./test/logs && NODE_ENV=test vitest run --coverage",

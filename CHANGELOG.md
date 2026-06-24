@@ -1,3 +1,12 @@
+## 3.2.0 - TBD
+
+### Added
+
+* export `deriveNextKeyHash` from the package entry, so callers implementing
+  key pre-rotation can compute the committed `nextKeyHashes` value
+  (`base58btc(multihash_sha2_256(sha256(utf8Bytes(publicKeyMultibase))))`)
+  without reaching into internal module paths.
+
 ## 3.1.0 - 2026-06-15
 
 ### Added
