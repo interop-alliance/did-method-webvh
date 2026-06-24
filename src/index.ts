@@ -11,6 +11,7 @@ export { MultibaseEncoding, multibaseDecode, multibaseEncode } from './utils/mul
 export {
   createVMID,
   DID_PLACEHOLDER,
+  deriveNextKeyHash,
   generateParallelDidWeb,
   parseDidKeyDid,
   parseDidKeyVerificationMethod,
