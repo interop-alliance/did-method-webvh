@@ -18,19 +18,6 @@ export const METHOD_PARAMETER_KEYS = {
   ttl: 'ttl',
 } as const;
 
-// Service fragments for implicit services
-export enum ServiceFragment {
-  Files = 'files',
-  Whois = 'whois',
-}
-
-// Service type constants
-export const SERVICE_TYPE_RELATIVE_REF = 'relativeRef';
-export const SERVICE_TYPE_LINKED_VP = 'LinkedVerifiablePresentation';
-
-// Context URLs
-export const CONTEXT_LINKED_VP = 'https://identity.foundation/linked-vp/contexts/v1';
-
 // Error type URLs
 export const ERROR_TYPE_INVALID_DID = 'https://w3id.org/security#INVALID_CONTROLLED_IDENTIFIER_DOCUMENT_ID';
 export const ERROR_TYPE_NOT_FOUND = 'https://w3id.org/security#NOT_FOUND';
