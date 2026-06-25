@@ -7,7 +7,7 @@ code in this repository.
 
 This is a TypeScript library implementing the `did:webvh` specification ([v1.0])
 for Decentralized Identifiers (DIDs). It provides create, resolve, update, and
-deactivate operations, plus a CLI tool and example resolver servers.
+deactivate operations, plus example resolver servers.
 
 [v1.0]: https://identity.foundation/didwebvh/v1.0/
 
@@ -56,8 +56,6 @@ npm run lint
   the spec implementation and adds log fetching, error metadata, and test-log
   capture.
 - **[src/index.ts](src/index.ts)** — Barrel re-export of `method.ts`.
-- **[src/cli.ts](src/cli.ts)** — CLI tool wrapping the same operations with file
-  I/O.
 
 ### Spec Implementation
 
@@ -98,7 +96,7 @@ createDID(options) [method.ts]
 
 The library builds with plain `tsc` to a single ESM target with TypeScript
 declarations in `dist/`. The same files serve Node, browsers (via the consumer's
-bundler), and React Native. The CLI ships as `dist/cli.js`.
+bundler), and React Native.
 
 ### Test Utilities
 
@@ -121,6 +119,21 @@ of [decentralized-identity/didwebvh-ts](https://github.com/decentralized-identit
 When porting an upstream PR, translate it through the following deliberate
 divergences (newest first). Library behavior and public API are otherwise kept
 aligned with upstream.
+
+### The standalone CLI was removed
+
+Upstream ships a CLI (`src/cli.ts`, published as the `didwebvh` bin) wrapping the
+library operations with file/env I/O. This fork deleted it: there is no
+`src/cli.ts`, no `cli` npm script, no `bin` entry, and no `test/cli-e2e.test.ts`.
+CLI workflows live in the separate `did-cli-typescript` project, which consumes
+this library's public API (`resolveDID`, `deriveNextKeyHash`, `Signer`/`Verifier`,
+etc.) from npm. Removing the CLI also dropped `@stablelib/ed25519` from runtime
+`dependencies` (it was only imported by the unbundled CLI) to `devDependencies`.
+
+**When porting:** upstream changes to `src/cli.ts`, the `bin`/`cli` entries, or
+CLI tests are **N/A** -- dropped. Upstream changes that touch both the CLI and
+the library API (e.g. a new option threaded through `createDID`/`updateDID`) keep
+only the library-side change.
 
 ### The legacy v0.5 spec implementation was removed
 
@@ -158,8 +171,7 @@ Upstream builds with `scripts/build.ts` (esbuild) into four targets (`dist/esm`,
 `dist/cjs`, `dist/browser`, `dist/cli`) plus a generated `dist/package.json`.
 This fork deleted that script; `npm run build` is `tsc` emitting a single flat
 ESM target with declarations to `dist/`, and there is no CJS entry point (
-Node >= 20.19 can `require()` ESM). The CLI is `dist/cli.js` (upstream:
-`dist/cli/didwebvh.js`).
+Node >= 20.19 can `require()` ESM).
 
 **When porting:** upstream changes to `scripts/build.ts` usually have no fork
 equivalent; genuine build-config changes map to `tsconfig.json` (build) or
@@ -179,8 +191,10 @@ Biome's import ordering can shift once extensions are added).
 
 - Removed unused runtime deps: `cookie`, `glob`, `js-yaml`; removed unused dev
   deps: `esbuild`, `@sinclair/typebox`, `@types/express`.
-- `@stablelib/ed25519` is a runtime dependency here (the unbundled CLI imports
-  it); upstream lists it as a devDependency and relies on bundling.
+- `@stablelib/ed25519` is a **devDependency** here (used only by tests and the
+  `examples/`); upstream also lists it as a devDependency. (It was briefly a
+  runtime dep while the standalone CLI existed -- see "The standalone CLI was
+  removed" below.)
 - Per-port rule of thumb: if an upstream PR adds a dependency, check whether it
   is actually imported by `src/` before accepting it.
 
