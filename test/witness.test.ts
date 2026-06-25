@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, test } from 'vitest';
 import type { DataIntegrityProofTemplate, DIDLog, Signer, VerificationMethod } from '../src/interfaces.js';
 import { DidResolutionError } from '../src/interfaces.js';
 import { createDID, resolveDIDFromLog, updateDID } from '../src/method.js';
+import { MultibaseEncoding, multibaseEncode } from '../src/utils/multiformats.js';
 import { deriveHash, parseDidKeyDid, parseDidKeyVerificationMethod } from '../src/utils.js';
 import {
   countWitnessApprovals,
@@ -181,6 +182,29 @@ describe('Witness Implementation Tests', async () => {
         verifier: testImplementation,
       })
     ).rejects.toThrow(`Duplicate witness id: ${duplicateWitnessId}`);
+  });
+
+  test('rejects witness did:key with incompatible key type at parameter validation', async () => {
+    // Build a non-Ed25519 multikey payload (header != 0xed01), but still valid multibase.
+    const nonEd25519Multikey = multibaseEncode(
+      new Uint8Array([0xe7, 0x01, ...new Uint8Array(32).fill(7)]),
+      MultibaseEncoding.BASE58_BTC
+    );
+    const invalidWitnessDid = `did:key:${nonEd25519Multikey}`;
+
+    await expect(
+      createDID({
+        domain: 'example.com',
+        signer: createTestSigner(authKey),
+        updateKeys: [authKey.publicKeyMultibase!],
+        verificationMethods: asPublicVerificationMethods(authKey),
+        witness: {
+          threshold: 1,
+          witnesses: [{ id: invalidWitnessDid }],
+        },
+        verifier: testImplementation,
+      })
+    ).rejects.toThrow(/Witness DID key type must be Ed25519/);
   });
 
   test('API e2e: create, update, witness, and resolve with raw multibase updateKeys', async () => {
@@ -889,6 +913,58 @@ describe('Witness Implementation Tests', async () => {
     );
 
     expect(proof.proofValue).toBe('zInvalidButPresent');
+  });
+
+  test('Resolves DID with legacy witnesses/witnessThreshold format in incremental entry', async () => {
+    const witnessKey = await generateTestVerificationMethod();
+    const witnessId = `did:key:${witnessKey.publicKeyMultibase}`;
+    const witnessVmId = `${witnessId}#${witnessKey.publicKeyMultibase}`;
+
+    const noWitnessDID = await createDID({
+      domain: 'example.com',
+      signer: createTestSigner(authKey),
+      updateKeys: [authKey.publicKeyMultibase!],
+      verificationMethods: asPublicVerificationMethods(authKey),
+      verifier: testImplementation,
+      created: '2021-01-01T00:00:00Z',
+    });
+
+    const versionTime = '2021-01-02T00:00:00Z';
+    const baseEntry = {
+      versionId: noWitnessDID.log[0].versionId,
+      versionTime,
+      parameters: {
+        updateKeys: [authKey.publicKeyMultibase!],
+        witnesses: [{ id: witnessId }],
+        witnessThreshold: 1,
+      },
+      state: noWitnessDID.log[0].state,
+    };
+    const logEntryHash = await deriveHash(baseEntry);
+    const versionId = `2-${logEntryHash}`;
+    const signer = createTestSigner(authKey);
+    const proofTemplate: DataIntegrityProofTemplate = {
+      type: 'DataIntegrityProof',
+      cryptosuite: 'eddsa-jcs-2022',
+      verificationMethod: signer.getVerificationMethodId(),
+      created: versionTime,
+      proofPurpose: 'assertionMethod',
+    };
+    const signedProof = await signer.sign({ document: { ...baseEntry, versionId }, proof: proofTemplate });
+    const v2Entry = { ...baseEntry, versionId, proof: [{ ...proofTemplate, proofValue: signedProof.proofValue }] };
+
+    const legacyLog = [noWitnessDID.log[0], v2Entry] as DIDLog;
+    const witnessSignerFn = createWitnessSigner(witnessKey);
+    const witnessProof = await createWitnessProof(witnessSignerFn, versionId, witnessVmId);
+
+    const resolved = await resolveDIDFromLog(legacyLog, {
+      verifier: testImplementation,
+      witnessProofs: [{ versionId, proof: [witnessProof] }],
+    });
+
+    expect(resolved.meta.witness?.witnesses).toHaveLength(1);
+    expect(resolved.meta.witness?.witnesses?.[0].id).toBe(witnessId);
+    expect(resolved.meta.witness?.threshold).toBe(1);
   });
 
   const createWitnessSigner = (verificationMethod: VerificationMethod) => {

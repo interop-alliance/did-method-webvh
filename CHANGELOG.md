@@ -75,6 +75,9 @@
 * `did:key` verification-method parsing now rejects a fragment that does not
   equal the key multibase. Ported from upstream PR
   [#121](https://github.com/decentralized-identity/didwebvh-ts/pull/121).
+* witness-parameter validation now rejects any witness `did:key` whose multikey
+  is not Ed25519 (multicodec `0xed01`), per did:webvh v1.0. Ported from upstream
+  PR [#120](https://github.com/decentralized-identity/didwebvh-ts/pull/120).
 
 * resolution now enforces `versionTime` on every log entry: it is **required**
   (a log entry missing `versionTime` is rejected), must be **strictly
@@ -107,6 +110,21 @@
   mandates full verification of every log entry, so resolution always verifies
   every entry's proof; there is no opt-in fast path. Ported from upstream PR
   [#120](https://github.com/decentralized-identity/didwebvh-ts/pull/120).
+
+### Tests
+
+* Backfilled `method.v1.0` coverage: `updateDID` with explicit
+  `assertionMethod`/`keyAgreement` options (`happy-path`), resolution of a log
+  using the legacy `witnesses`/`witnessThreshold` parameter format
+  (`witness`), and error-case coverage in `not-so-happy-path` (missing
+  `updateKeys`, missing `address`/`domain`, missing `verificationMethods`,
+  out-of-order version number, missing/non-monotonic `versionTime`, mismatched
+  `scid` option, matching `requestedDid`, and update/deactivate of an
+  already-deactivated DID). `resolve` now asserts a non-existent
+  `verificationMethod` resolves to `doc: null` with a `NotFound` error, and
+  `watchers` asserts the cleared-watchers (`[]`) shape. Ported from upstream PRs
+  [#129](https://github.com/decentralized-identity/didwebvh-ts/pull/129) and
+  [#131](https://github.com/decentralized-identity/didwebvh-ts/pull/131).
 
 ## 3.2.0 - 2026-06-24
 
