@@ -1,4 +1,4 @@
-## Unreleased - TBD
+## 3.4.0 - 2026-06-25
 
 ### Removed
 
