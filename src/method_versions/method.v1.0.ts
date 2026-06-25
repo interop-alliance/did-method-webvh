@@ -1,10 +1,22 @@
 import { documentStateIsValid, hashChainValid, newKeysAreInNextKeys, scidIsFromHash } from '../assertions.js';
-import { METHOD, PLACEHOLDER } from '../constants.js';
+import {
+  CONTEXT_LINKED_VP,
+  ERROR_TYPE_INVALID_DID,
+  ERROR_TYPE_NOT_FOUND,
+  METHOD,
+  METHOD_PARAMETER_KEYS,
+  METHOD_PROTOCOL_V1_0,
+  PLACEHOLDER,
+  SERVICE_TYPE_LINKED_VP,
+  SERVICE_TYPE_RELATIVE_REF,
+  ServiceFragment,
+} from '../constants.js';
 import type {
   CreateDIDInterface,
   CreateDIDResult,
   DataIntegrityProof,
   DeactivateDIDInterface,
+  DIDDoc,
   DIDLog,
   DIDLogEntry,
   DIDResolutionMeta,
@@ -31,15 +43,17 @@ import {
   generateParallelDidWeb,
   getBaseUrl,
   parseCanonicalAddress,
+  parseDidWebvhIdentifier,
   replaceCreateDidPlaceholders,
   replaceValueInObject,
+  serviceFragmentExists,
   validateCreateDidDocument,
   validateMethodSpecificPathSegments,
 } from '../utils.js';
 import { countVerifiedWitnessApprovals, fetchWitnessProofs, validateWitnessParameter } from '../witness.js';
 
-const VERSION = '1.0';
-const PROTOCOL = `did:${METHOD}:${VERSION}`;
+const hasOwn = (obj: object, key: PropertyKey): boolean => Object.hasOwn(obj, key);
+
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
 
 const requireDidId = (id: string | undefined): string => {
@@ -47,6 +61,33 @@ const requireDidId = (id: string | undefined): string => {
     throw new Error('DID document id is missing');
   }
   return id;
+};
+
+const parseAndValidateVersionId = (versionId: string, expectedVersionNumber: number) => {
+  const firstDashIndex = versionId.indexOf('-');
+  const lastDashIndex = versionId.lastIndexOf('-');
+
+  if (firstDashIndex === -1 || firstDashIndex !== lastDashIndex) {
+    throw new Error(`versionId '${versionId}' must contain exactly one '-' separator`);
+  }
+
+  const version = versionId.slice(0, firstDashIndex);
+  const entryHash = versionId.slice(firstDashIndex + 1);
+
+  if (!/^\d+$/.test(version)) {
+    throw new Error(`versionId '${versionId}' must have a numeric version prefix`);
+  }
+
+  if (entryHash.length === 0) {
+    throw new Error(`versionId '${versionId}' must have a non-empty hash component`);
+  }
+
+  const versionNumber = Number(version);
+  if (versionNumber !== expectedVersionNumber) {
+    throw new Error(`version '${version}' in log doesn't match expected '${expectedVersionNumber}'.`);
+  }
+
+  return { version, versionNumber, entryHash };
 };
 
 export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDResult> => {
@@ -87,7 +128,7 @@ export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDR
     return vm;
   });
 
-  let doc: any;
+  let doc: DIDDoc;
   if (options.didDocument) {
     validateCreateDidDocument(options.didDocument);
     doc = deepClone(options.didDocument);
@@ -122,7 +163,7 @@ export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDR
     versionId: PLACEHOLDER,
     versionTime: createdDate,
     parameters: {
-      method: PROTOCOL,
+      method: METHOD_PROTOCOL_V1_0,
       ...params,
     },
     state: doc,
@@ -160,6 +201,9 @@ export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDR
   }
 
   const didId = requireDidId(prelimEntry.state.id);
+  if (didId !== didWithScid) {
+    throw new Error(`Created DID document id must match expected DID '${didWithScid}', got '${didId}'`);
+  }
   const webDoc = options.alsoKnownAsWeb ? generateParallelDidWeb(didId, prelimEntry.state) : undefined;
 
   return {
@@ -179,20 +223,25 @@ export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDR
 
 export const resolveDIDFromLog = async (
   log: DIDLog,
-  options: ResolutionOptions & { witnessProofs?: WitnessProofFileEntry[]; fastResolve?: boolean } = {}
-): Promise<{ did: string; doc: any; meta: DIDResolutionMeta }> => {
+  options: ResolutionOptions & { witnessProofs?: WitnessProofFileEntry[] } = {}
+): Promise<{ did: string; doc: DIDDoc | null; meta: DIDResolutionMeta }> => {
   if (options.verificationMethod && (options.versionNumber || options.versionId)) {
     throw new Error('Cannot specify both verificationMethod and version number/id');
   }
   const resolutionLog = log.map((l) => deepClone(l));
+  if (resolutionLog.length === 0) {
+    throw new Error(`Log identity binding check failed: no entries to process`);
+  }
   const protocol = resolutionLog[0]?.parameters?.method;
-  if (protocol !== PROTOCOL) {
+  if (protocol !== METHOD_PROTOCOL_V1_0) {
     throw new Error(`'${protocol}' is not a supported method version.`);
   }
   let did = '';
-  let doc: any = null;
-  let resolvedDoc: any = null;
-  let lastValidDoc: any = null;
+  let doc: DIDDoc | null = null;
+  let resolvedDoc: DIDDoc | null = null;
+  let resolvedDid: string | null = null;
+  let lastValidDoc: DIDDoc | null = null;
+  let lastValidDid: string | null = null;
   const meta: DIDResolutionMeta = {
     versionId: '',
     created: '',
@@ -209,28 +258,28 @@ export const resolveDIDFromLog = async (
   let resolvedMeta: DIDResolutionMeta | null = null;
   let lastValidMeta: DIDResolutionMeta | null = null;
   let i = 0;
+  const hasExplicitHistoricalSelector =
+    options.versionNumber !== undefined ||
+    options.versionId !== undefined ||
+    options.versionTime !== undefined ||
+    options.verificationMethod !== undefined;
+  let didIdMatchCount = 0;
   let host = '';
   let previousVersionTime: Date | undefined;
+  const activeMethod = METHOD_PROTOCOL_V1_0; // Track method value across entries
   const requiredWitnessChecks: RequiredWitnessCheck[] = [];
-
-  // Fast resolution is opt-in; full verification is the default conformant path.
-  const fastResolve = options.fastResolve ?? false;
-  const isFirstEntry = (idx: number) => idx === 0;
-  const isLastFewEntries = (idx: number) => idx >= resolutionLog.length - 10; // Verify last 10 entries
-  const shouldVerifyEntry = (idx: number) => !fastResolve || isFirstEntry(idx) || isLastFewEntries(idx);
+  let witnessThresholdFailure = false;
 
   try {
     while (i < resolutionLog.length) {
       const { versionId, versionTime, parameters, state, proof } = resolutionLog[i];
-      const [version, entryHash] = versionId.split('-');
+      const { version, versionNumber, entryHash } = parseAndValidateVersionId(versionId, i + 1);
       const previousWitness = meta.witness ? deepClone(meta.witness) : undefined;
-      if (parseInt(version, 10) !== i + 1) {
-        throw new Error(`version '${version}' in log doesn't match expected '${i + 1}'.`);
-      }
       meta.versionId = versionId;
       if (!versionTime) {
         throw new Error(`version '${version}' is missing versionTime`);
       }
+
       const currentVersionTime = parseUtcIso8601VersionTime(versionTime, `version '${version}' versionTime`);
       if (previousVersionTime && currentVersionTime.getTime() <= previousVersionTime.getTime()) {
         throw new Error(`versionTime for version '${version}' must be greater than previous entry time`);
@@ -243,106 +292,143 @@ export const resolveDIDFromLog = async (
       previousVersionTime = currentVersionTime;
       meta.updated = versionTime;
       let newDoc = state;
+      const parsedStateDid = parseDidWebvhIdentifier(requireDidId(newDoc.id), `version '${version}' state.id`);
 
       if (version === '1') {
         meta.created = versionTime;
         newDoc = state;
-        host = newDoc.id.split(':').at(-1);
-        meta.scid = parameters.scid;
+        host = parsedStateDid.locationKey;
+        meta.scid = parameters.scid as string;
         if (options.scid && options.scid !== meta.scid) {
           throw new Error(`SCID in DID '${options.scid}' does not match SCID in log '${meta.scid}'`);
         }
         meta.portable = parameters.portable ?? meta.portable;
-        meta.updateKeys = parameters.updateKeys;
+        meta.updateKeys = parameters.updateKeys as string[];
         meta.nextKeyHashes = parameters.nextKeyHashes || [];
         meta.prerotation = meta.nextKeyHashes.length > 0;
         meta.witness = parameters.witness || meta.witness;
         meta.watchers = parameters.watchers ?? null;
 
-        if (shouldVerifyEntry(i)) {
-          // Optimized: Use efficient object manipulation instead of JSON stringify/parse
-          const logEntry = {
-            versionId: PLACEHOLDER,
-            versionTime: meta.created,
-            parameters: replaceValueInObject(parameters, meta.scid, PLACEHOLDER),
-            state: replaceValueInObject(newDoc, meta.scid, PLACEHOLDER),
-          };
+        // Optimized: Use efficient object manipulation instead of JSON stringify/parse
+        const logEntry = {
+          versionId: PLACEHOLDER,
+          versionTime: meta.created,
+          parameters: replaceValueInObject(parameters, meta.scid, PLACEHOLDER),
+          state: replaceValueInObject(newDoc, meta.scid, PLACEHOLDER),
+        };
 
-          const logEntryHash = await deriveHash(logEntry);
-          meta.previousLogEntryHash = logEntryHash;
-          if (!(await scidIsFromHash(meta.scid, logEntryHash))) {
-            throw new Error(`SCID '${meta.scid}' not derived from logEntryHash '${logEntryHash}'`);
-          }
+        const logEntryHash = await deriveHash(logEntry);
+        meta.previousLogEntryHash = logEntryHash;
+        if (!(await scidIsFromHash(meta.scid, logEntryHash))) {
+          throw new Error(`SCID '${meta.scid}' not derived from logEntryHash '${logEntryHash}'`);
+        }
 
-          // Optimized: Direct object manipulation instead of JSON stringify/parse
-          const prelimEntry = replaceValueInObject(logEntry, PLACEHOLDER, meta.scid);
+        if (parsedStateDid.scid !== meta.scid) {
+          throw new Error(`SCID in state.id '${parsedStateDid.scid}' does not match SCID in log '${meta.scid}'`);
+        }
 
-          const logEntryHash2 = await deriveHash(prelimEntry);
-          const verified = await documentStateIsValid(
-            { ...prelimEntry, versionId: `1-${logEntryHash2}`, proof },
-            meta.updateKeys,
-            meta.witness,
-            false,
-            options.verifier
-          );
-          if (!verified) {
-            throw new Error(`version ${meta.versionId} failed verification of the proof.`);
-          }
+        // Optimized: Direct object manipulation instead of JSON stringify/parse
+        const prelimEntry = replaceValueInObject(logEntry, PLACEHOLDER, meta.scid);
+
+        const logEntryHash2 = await deriveHash(prelimEntry);
+        const verified = await documentStateIsValid(
+          { ...prelimEntry, versionId: `1-${logEntryHash2}`, proof },
+          meta.updateKeys,
+          meta.witness,
+          false,
+          options.verifier
+        );
+        if (!verified) {
+          throw new Error(`version ${meta.versionId} failed verification of the proof.`);
         }
       } else {
         // version number > 1
-        const newHost = newDoc.id.split(':').at(-1);
-        if (!meta.portable && newHost !== host) {
-          throw new Error('Cannot move DID: portability is disabled');
-        } else if (newHost !== host) {
-          host = newHost;
+
+        // Validate method parameter: must not be present or must equal active method
+        if (hasOwn(parameters, METHOD_PARAMETER_KEYS.method)) {
+          const entryMethod = parameters.method as string;
+          if (entryMethod !== activeMethod) {
+            throw new Error(
+              `version '${version}' has unsupported or downgraded method '${entryMethod}'; ` +
+                `expected '${activeMethod}'`
+            );
+          }
         }
 
-        // Hash chain — ALWAYS runs (cheap), even in fast-resolve
+        // scid MUST NOT appear in later entries
+        if (hasOwn(parameters, METHOD_PARAMETER_KEYS.scid)) {
+          throw new Error(`version '${version}' must not contain SCID parameter`);
+        }
+
+        // portable: true cannot be introduced after the first entry — it can only remain
+        // true if it was already enabled in the first entry
+        if (parameters.portable === true && !meta.portable) {
+          throw new Error(
+            `version '${version}' cannot set portable: true; portability can only be enabled in the first entry`
+          );
+        }
+
+        // Setting portable: false in a later entry permanently locks portability off
+        if (hasOwn(parameters, METHOD_PARAMETER_KEYS.portable) && parameters.portable === false) {
+          meta.portable = false;
+        }
+
+        if (parsedStateDid.scid !== meta.scid) {
+          throw new Error(`SCID in state.id '${parsedStateDid.scid}' does not match SCID in log '${meta.scid}'`);
+        }
+
+        const newLocation = parsedStateDid.locationKey;
+        if (!meta.portable && newLocation !== host) {
+          throw new Error('Cannot move DID: portability is disabled');
+        } else if (newLocation !== host) {
+          host = newLocation;
+        }
+
+        // Hash chain
         const { proof: _proof, ...entryWithoutProof } = resolutionLog[i];
         const recomputedHash = await deriveHash({ ...entryWithoutProof, versionId: resolutionLog[i - 1].versionId });
         if (!hashChainValid(recomputedHash, entryHash)) {
           throw new Error(`Hash chain broken at '${meta.versionId}'`);
         }
 
-        if (shouldVerifyEntry(i)) {
-          // Signature verification — expensive, skipped for middle entries in fast-resolve
-          const keys = meta.prerotation ? parameters.updateKeys : meta.updateKeys;
-          const verified = await documentStateIsValid(resolutionLog[i], keys, meta.witness, false, options.verifier);
-          if (!verified) {
-            throw new Error(`version ${meta.versionId} failed verification of the proof.`);
-          }
-
-          if (meta.prerotation) {
-            await newKeysAreInNextKeys(parameters.updateKeys ?? [], meta.nextKeyHashes ?? []);
-          }
+        // Signature verification
+        const keys = meta.prerotation ? (parameters.updateKeys as string[]) : meta.updateKeys;
+        const verified = await documentStateIsValid(resolutionLog[i], keys, meta.witness, false, options.verifier);
+        if (!verified) {
+          throw new Error(`version ${meta.versionId} failed verification of the proof.`);
         }
 
-        if (parameters.updateKeys) {
-          meta.updateKeys = parameters.updateKeys;
+        if (meta.prerotation) {
+          await newKeysAreInNextKeys(parameters.updateKeys ?? [], meta.nextKeyHashes ?? []);
+        }
+
+        if (hasOwn(parameters, METHOD_PARAMETER_KEYS.updateKeys)) {
+          meta.updateKeys = parameters.updateKeys ?? [];
         }
         if (parameters.deactivated === true) {
           meta.deactivated = true;
         }
-        if (parameters.nextKeyHashes && parameters.nextKeyHashes.length > 0) {
-          meta.nextKeyHashes = parameters.nextKeyHashes;
-          meta.prerotation = true;
-        } else {
-          meta.nextKeyHashes = [];
-          meta.prerotation = false;
+        if (hasOwn(parameters, METHOD_PARAMETER_KEYS.nextKeyHashes)) {
+          meta.nextKeyHashes = parameters.nextKeyHashes ?? [];
+          meta.prerotation = meta.nextKeyHashes.length > 0;
         }
-        if ('witness' in parameters) {
+        const legacyParameters = parameters as typeof parameters & {
+          witnesses?: { id: string }[];
+          witnessThreshold?: string | number;
+        };
+
+        if (hasOwn(parameters, METHOD_PARAMETER_KEYS.witness)) {
           meta.witness = parameters.witness;
-        } else if (parameters.witnesses) {
+        } else if (legacyParameters.witnesses) {
           meta.witness = {
-            witnesses: parameters.witnesses,
-            threshold: parameters.witnessThreshold || parameters.witnesses.length,
+            witnesses: legacyParameters.witnesses,
+            threshold: legacyParameters.witnessThreshold || legacyParameters.witnesses.length,
           };
         }
         if (meta.witness?.witnesses?.length) {
           validateWitnessParameter(meta.witness);
         }
-        if ('watchers' in parameters) {
+        if (hasOwn(parameters, METHOD_PARAMETER_KEYS.watchers)) {
           meta.watchers = parameters.watchers ?? null;
         }
       }
@@ -351,49 +437,52 @@ export const resolveDIDFromLog = async (
       if (requiredWitness) {
         requiredWitnessChecks.push({
           targetVersionId: meta.versionId,
-          targetVersionNumber: parseInt(version, 10),
+          targetVersionNumber: versionNumber,
           witness: requiredWitness,
         });
       }
 
       // Optimized: Use efficient cloning instead of clone() function
-      doc = deepClone(newDoc);
-      did = doc.id;
+      doc = deepClone(newDoc) as DIDDoc;
+      did = requireDidId(doc.id);
 
-      // Only add default services for entries we need to process
-      if (shouldVerifyEntry(i) || i === resolutionLog.length - 1) {
-        // Add default services if they don't exist
-        doc.service = Array.isArray(doc.service) ? doc.service : [];
-        const baseUrl = getBaseUrl(did);
+      if (options.requestedDid && did === options.requestedDid) {
+        didIdMatchCount++;
+      }
 
-        if (!doc.service.some((s: any) => s.id === '#files')) {
-          doc.service.push({
-            id: '#files',
-            type: 'relativeRef',
-            serviceEndpoint: baseUrl,
-          });
-        }
+      // Add default services if they don't exist
+      doc.service = Array.isArray(doc.service) ? doc.service : [];
+      const baseUrl = getBaseUrl(did);
 
-        if (!doc.service.some((s: any) => s.id === '#whois')) {
-          doc.service.push({
-            '@context': 'https://identity.foundation/linked-vp/contexts/v1',
-            id: '#whois',
-            type: 'LinkedVerifiablePresentation',
-            serviceEndpoint: `${baseUrl}/whois.vp`,
-          });
-        }
+      if (!serviceFragmentExists(doc.service, ServiceFragment.Files, did)) {
+        doc.service.push({
+          id: '#files',
+          type: SERVICE_TYPE_RELATIVE_REF,
+          serviceEndpoint: baseUrl,
+        });
+      }
+
+      if (!serviceFragmentExists(doc.service, ServiceFragment.Whois, did)) {
+        doc.service.push({
+          '@context': CONTEXT_LINKED_VP,
+          id: '#whois',
+          type: SERVICE_TYPE_LINKED_VP,
+          serviceEndpoint: `${baseUrl}/whois.vp`,
+        });
       }
 
       if (options.verificationMethod && findVerificationMethod(doc, options.verificationMethod)) {
         if (!resolvedDoc) {
           resolvedDoc = deepClone(doc);
+          resolvedDid = did;
           resolvedMeta = { ...meta };
         }
       }
 
-      if (options.versionNumber === parseInt(version, 10) || options.versionId === meta.versionId) {
+      if (options.versionNumber === versionNumber || options.versionId === meta.versionId) {
         if (!resolvedDoc) {
           resolvedDoc = deepClone(doc);
+          resolvedDid = did;
           resolvedMeta = { ...meta };
         }
       }
@@ -401,22 +490,28 @@ export const resolveDIDFromLog = async (
         if (resolutionLog[i + 1] && options.versionTime < new Date(resolutionLog[i + 1].versionTime)) {
           if (!resolvedDoc) {
             resolvedDoc = deepClone(doc);
+            resolvedDid = did;
             resolvedMeta = { ...meta };
           }
         } else if (!resolutionLog[i + 1]) {
           if (!resolvedDoc) {
             resolvedDoc = deepClone(doc);
+            resolvedDid = did;
             resolvedMeta = { ...meta };
           }
         }
       }
 
       lastValidDoc = deepClone(doc);
+      lastValidDid = did;
       lastValidMeta = { ...meta };
 
       i++;
     }
 
+    if (options.requestedDid && didIdMatchCount === 0) {
+      throw new Error(`Requested DID '${options.requestedDid}' does not match state.id in any valid log version`);
+    }
     if (requiredWitnessChecks.length > 0) {
       if (!options.witnessProofs) {
         options.witnessProofs = await fetchWitnessProofs(did);
@@ -439,6 +534,7 @@ export const resolveDIDFromLog = async (
         const threshold = parseInt((check.witness.threshold ?? 0).toString(), 10);
 
         if (approvals < threshold) {
+          witnessThresholdFailure = true;
           throw new Error(
             `Witness threshold not met for version ${check.targetVersionId}: got ${approvals}, need ${check.witness.threshold}`
           );
@@ -449,11 +545,11 @@ export const resolveDIDFromLog = async (
     if (!resolvedDoc) {
       throw e;
     }
-    if (resolvedMeta) {
+    if (resolvedMeta && (!hasExplicitHistoricalSelector || witnessThresholdFailure)) {
       const message = e instanceof Error ? e.message : String(e);
       resolvedMeta.error = DidResolutionError.InvalidDid;
       resolvedMeta.problemDetails = {
-        type: 'https://w3id.org/security#INVALID_CONTROLLED_IDENTIFIER_DOCUMENT_ID',
+        type: ERROR_TYPE_INVALID_DID,
         title: 'The resolved DID is invalid.',
         detail: message,
       };
@@ -461,26 +557,73 @@ export const resolveDIDFromLog = async (
   }
 
   if (!resolvedDoc) {
-    resolvedDoc = lastValidDoc;
+    if (hasExplicitHistoricalSelector) {
+      if (!lastValidMeta || !lastValidDid) {
+        throw new Error('DID resolution failed: No valid result available for explicit selector');
+      }
+
+      return {
+        did: lastValidDid,
+        doc: null,
+        meta: {
+          ...lastValidMeta,
+          error: DidResolutionError.NotFound,
+          problemDetails: {
+            type: ERROR_TYPE_NOT_FOUND,
+            title: 'The requested DID version was not found.',
+            detail: 'The supplied explicit version selector did not match any entry in the DID log.',
+          },
+        },
+      };
+    }
+
     resolvedMeta = lastValidMeta;
+    resolvedDid = lastValidDid;
+    if (resolvedMeta && !(resolvedMeta.deactivated && !hasExplicitHistoricalSelector)) {
+      resolvedDoc = lastValidDoc;
+    }
   }
 
   if (!resolvedMeta) {
     throw new Error('DID resolution failed: No valid metadata found');
   }
 
+  if (!resolvedDid) {
+    throw new Error('DID resolution failed: No valid identifier found');
+  }
+
+  if (resolvedMeta.deactivated && !hasExplicitHistoricalSelector) {
+    return {
+      did: resolvedDid,
+      doc: null,
+      meta: resolvedMeta,
+    };
+  }
+
+  if (!resolvedDoc) {
+    throw new Error('DID resolution failed: No valid document found');
+  }
+
   return {
-    did,
+    did: resolvedDid,
     doc: resolvedDoc,
     meta: resolvedMeta,
   };
 };
 
 export const updateDID = async (
-  options: UpdateDIDInterface & { services?: any[]; domain?: string; updated?: string }
+  options: UpdateDIDInterface & {
+    services?: any[];
+    domain?: string;
+    address?: string;
+    paths?: string[];
+    updated?: string;
+  }
 ): Promise<UpdateDIDResult> => {
   const log = options.log;
   const lastEntry = log[log.length - 1];
+  const lastEntryDid = requireDidId(lastEntry.state.id);
+  const parsedLastEntryDid = parseDidWebvhIdentifier(lastEntryDid, 'last entry state.id');
   const lastMeta = (await resolveDIDFromLog(log, { verifier: options.verifier, witnessProofs: options.witnessProofs }))
     .meta;
   if (lastMeta.deactivated) {
@@ -500,9 +643,15 @@ export const updateDID = async (
         threshold: witnessInput.threshold ?? 0,
       }
     : {};
+  if (options.portable === true) {
+    throw new Error(
+      'portable: true cannot be set in an update entry; portability can only be enabled in the first entry'
+    );
+  }
   const params = {
     updateKeys: options.updateKeys ?? [],
     nextKeyHashes: options.nextKeyHashes ?? [],
+    ...(options.portable === false ? { portable: false } : {}),
     witness,
     watchers: watchersValue ?? [],
   };
@@ -523,11 +672,45 @@ export const updateDID = async (
     return vm;
   });
 
+  // Determine the controller (the DID id) for this update. When a new location
+  // (address/domain) is supplied, rebuild the controller from that location while
+  // preserving the SCID, so a portable DID can actually move. The SCID is the
+  // stable part of the identifier; only the location component changes.
+  const requestedAddress = options.address || options.domain;
+  let controller: string;
+  let controllerPaths = parsedLastEntryDid.paths;
+  if (options.controller) {
+    controller = options.controller;
+  } else if (requestedAddress) {
+    const parsedNewAddress = parseCanonicalAddress(requestedAddress);
+    // Paths: explicit options.paths (combined with any address-embedded paths) take
+    // precedence; otherwise use address-embedded paths; otherwise inherit the prior
+    // paths so re-passing a bare domain on a pathed DID doesn't silently drop them.
+    const addressPaths = parsedNewAddress.paths || [];
+    const newLocationPaths =
+      options.paths !== undefined
+        ? [...addressPaths, ...options.paths]
+        : addressPaths.length
+          ? addressPaths
+          : (parsedLastEntryDid.paths ?? []);
+    const newLocationKey = newLocationPaths.length
+      ? `${parsedNewAddress.didDomainComponent}:${newLocationPaths.join(':')}`
+      : parsedNewAddress.didDomainComponent;
+    controller = `did:${METHOD}:${parsedLastEntryDid.scid}:${newLocationKey}`;
+    controllerPaths = newLocationPaths.length ? newLocationPaths : undefined;
+    if (controller !== lastEntryDid && !lastMeta.portable) {
+      throw new Error('Cannot move DID: portability is disabled');
+    }
+  } else {
+    controller = lastEntryDid;
+  }
+
   const { doc } = await createDIDDoc({
     ...options,
-    controller: options.controller || lastEntry.state.id || '',
+    controller,
     context: options.context || lastEntry.state['@context'],
-    domain: options.domain ?? lastEntry.state.id?.split(':').at(-1) ?? '',
+    domain: requestedAddress ?? parsedLastEntryDid.didDomainComponent,
+    paths: controllerPaths,
     updateKeys: options.updateKeys ?? [],
     verificationMethods: safeVerificationMethods ?? [],
   });

@@ -65,6 +65,14 @@ export function parseDidKeyVerificationMethod(input: string): ParsedDidKeyVerifi
   const parsedDid = parseDidKeyDid(`${DID_KEY_PREFIX}${match[1]}`);
   const fragment = match[2];
 
+  // If fragment is present, it MUST equal the body multibase exactly
+  if (fragment && fragment !== parsedDid.keyMultibase) {
+    throw new Error(
+      `did:key verificationMethod fragment must equal body multibase. ` +
+        `Expected fragment '${parsedDid.keyMultibase}' but got '${fragment}'`
+    );
+  }
+
   return {
     did: parsedDid.did,
     fragment,
@@ -391,6 +399,20 @@ export function enrichAlsoKnownAs(doc: DIDDoc, did: string, opts: { alsoKnownAsW
     ...doc,
     alsoKnownAs: aliases,
   };
+}
+
+/**
+ * Check if a service with the given fragment exists in the service array.
+ * Matches both fragment form (e.g., '#files') and absolute form (e.g., 'did:webvh:...#files').
+ */
+export function serviceFragmentExists(services: ServiceEndpoint[], fragment: string, did: string): boolean {
+  const fragmentForm = `#${fragment}`;
+  const absoluteForm = `${did}#${fragment}`;
+
+  return services.some((s: ServiceEndpoint) => {
+    const serviceId = s.id || '';
+    return serviceId === fragmentForm || serviceId === absoluteForm;
+  });
 }
 
 export function generateParallelDidWeb(didwebvhDid: string, didwebvhDoc: DIDDoc): DIDDoc {

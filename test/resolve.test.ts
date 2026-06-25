@@ -74,8 +74,8 @@ describe('resolveDIDFromLog with verificationMethod', () => {
     const vmId = `${initialDID.did}#${authKey1.publicKeyMultibase!.slice(-8)}`;
     const { doc, meta } = await resolveDIDFromLog(fullLog, { verificationMethod: vmId, verifier: testImplementation });
 
-    expect(doc.verificationMethod).toHaveLength(1);
-    expect(doc.verificationMethod[0].publicKeyMultibase).toBe(authKey1.publicKeyMultibase);
+    expect(doc!.verificationMethod!).toHaveLength(1);
+    expect(doc!.verificationMethod![0].publicKeyMultibase).toBe(authKey1.publicKeyMultibase);
     expect(meta.versionId.split('-')[0]).toBe('1');
   });
 
@@ -83,8 +83,8 @@ describe('resolveDIDFromLog with verificationMethod', () => {
     const vmId = `${initialDID.did}#${authKey2.publicKeyMultibase!.slice(-8)}`;
     const { doc, meta } = await resolveDIDFromLog(fullLog, { verificationMethod: vmId, verifier: testImplementation });
 
-    expect(doc.verificationMethod).toHaveLength(2);
-    expect(doc.verificationMethod[1].publicKeyMultibase).toBe(authKey2.publicKeyMultibase);
+    expect(doc!.verificationMethod!).toHaveLength(2);
+    expect(doc!.verificationMethod![1].publicKeyMultibase).toBe(authKey2.publicKeyMultibase);
     expect(meta.versionId.split('-')[0]).toBe('2');
   });
 
@@ -92,18 +92,18 @@ describe('resolveDIDFromLog with verificationMethod', () => {
     const vmId = `${initialDID.did}#${keyAgreementKey.publicKeyMultibase!.slice(-8)}`;
     const { doc, meta } = await resolveDIDFromLog(fullLog, { verificationMethod: vmId, verifier: testImplementation });
 
-    expect(doc.verificationMethod).toHaveLength(3);
-    expect(doc.verificationMethod[2].publicKeyMultibase).toBe(keyAgreementKey.publicKeyMultibase);
+    expect(doc!.verificationMethod!).toHaveLength(3);
+    expect(doc!.verificationMethod![2].publicKeyMultibase).toBe(keyAgreementKey.publicKeyMultibase);
     expect(meta.versionId.split('-')[0]).toBe('3');
   });
 
   test('Resolve DID with assertion authentication key (externally defined id)', async () => {
-    const vmId = `${initialDID.did}#${assertionKey.publicKeyMultibase!.slice(-8)}`;
+    const vmId = assertionKey.id!;
     const { doc, meta } = await resolveDIDFromLog(fullLog, { verificationMethod: vmId, verifier: testImplementation });
 
-    expect(doc.verificationMethod).toHaveLength(4);
-    expect(doc.verificationMethod[3].publicKeyMultibase).toBe(assertionKey.publicKeyMultibase);
-    expect(doc.verificationMethod[3].id.endsWith('externallyDefinedId')).toBe(true);
+    expect(doc!.verificationMethod!).toHaveLength(4);
+    expect(doc!.verificationMethod![3].publicKeyMultibase).toBe(assertionKey.publicKeyMultibase);
+    expect(doc!.verificationMethod![3].id!.endsWith('externallyDefinedId')).toBe(true);
     expect(meta.versionId.split('-')[0]).toBe('4');
   });
 
@@ -125,8 +125,8 @@ describe('resolveDIDFromLog with verificationMethod', () => {
       verifier: testImplementation,
     });
 
-    expect(doc.verificationMethod).toHaveLength(2);
-    expect(doc.verificationMethod[1].publicKeyMultibase).toBe(authKey2.publicKeyMultibase);
+    expect(doc!.verificationMethod!).toHaveLength(2);
+    expect(doc!.verificationMethod![1].publicKeyMultibase).toBe(authKey2.publicKeyMultibase);
     expect(meta.versionId.split('-')[0]).toBe('2');
   });
 

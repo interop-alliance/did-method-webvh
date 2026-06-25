@@ -60,7 +60,7 @@ describe('resolveDID over HTTPS', () => {
     expect(fetchMock).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl');
     expect(result.did).toBe(did);
     expect(result.doc).toBeTruthy();
-    expect(result.doc.id).toBe(did);
+    expect(result.doc!.id).toBe(did);
     expect(result.meta.error).toBeUndefined();
   });
 

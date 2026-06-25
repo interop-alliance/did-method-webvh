@@ -263,7 +263,7 @@ export interface ResolutionOptions {
   verificationMethod?: string;
   verifier?: Verifier;
   scid?: string;
-  fastResolve?: boolean;
+  requestedDid?: string;
 }
 
 export interface WitnessProofFileEntry {
