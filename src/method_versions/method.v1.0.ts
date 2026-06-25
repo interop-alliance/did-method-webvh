@@ -34,6 +34,7 @@ import {
   replaceCreateDidPlaceholders,
   replaceValueInObject,
   validateCreateDidDocument,
+  validateMethodSpecificPathSegments,
 } from '../utils.js';
 import { countVerifiedWitnessApprovals, fetchWitnessProofs, validateWitnessParameter } from '../witness.js';
 
@@ -66,6 +67,7 @@ export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDR
   const parsed = parseCanonicalAddress(addressInput);
   const didDomainComponent = parsed.didDomainComponent;
   const allPaths = [...(parsed.paths || []), ...(options.paths || [])];
+  validateMethodSpecificPathSegments(allPaths, 'createDID path segments');
   const path = allPaths.length > 0 ? allPaths.join(':') : undefined;
   const controller = `did:${METHOD}:${PLACEHOLDER}:${didDomainComponent}${path ? `:${path}` : ''}`;
   if (options.created) {
