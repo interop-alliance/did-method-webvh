@@ -9,6 +9,10 @@
   per-month day ranges). Ported from upstream PRs
   [#120](https://github.com/decentralized-identity/didwebvh-ts/pull/120) and
   [#121](https://github.com/decentralized-identity/didwebvh-ts/pull/121).
+* `validateMethodSpecificPathSegments` and `parseDidWebvhIdentifier` (the latter
+  returning a structured `{ scid, didDomainComponent, paths, locationKey }`) in
+  `src/utils.ts`. Ported from upstream PR
+  [#120](https://github.com/decentralized-identity/didwebvh-ts/pull/120).
 
 ### Changed
 
@@ -16,6 +20,14 @@
   (a log entry missing `versionTime` is rejected), must be **strictly
   increasing** across entries (reordering defense), and must not be more than 5
   minutes in the future (clock-skew tolerance).
+* address / host / path-segment parsing is hardened against path-traversal and
+  injection: `parseCanonicalAddress` (and therefore `createDID` path handling)
+  now rejects `.`/`..` dot-segments, decoded `/`/`\`/NUL within a single path
+  segment, leading/trailing whitespace, malformed percent-encoding, and `?`/`#`
+  query/fragment components in address, DID-domain, and path contexts. Pre-encoded
+  `%3a` port separators are accepted case-insensitively. The fork's
+  `http://localhost` affordance for local testing is preserved (upstream enforces
+  HTTPS-only).
 * `createDID` / `updateDID` validate any caller-supplied `created` / `updated`
   timestamp is not in the future, and `updateDID` / `deactivateDID` now derive a
   strictly monotonic `versionTime` via `createNextVersionTime`.
