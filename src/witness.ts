@@ -14,7 +14,7 @@ import type {
 import { concatBuffers } from './utils/buffer.js';
 import { canonicalizeStrict } from './utils/canonicalize.js';
 import { createHash } from './utils/crypto.js';
-import { multibaseDecode } from './utils/multiformats.js';
+import { isEd25519Multikey, multibaseDecode } from './utils/multiformats.js';
 import { fetchWitnessProofs, parseDidKeyDid, parseDidKeyVerificationMethod, resolveVM } from './utils.js';
 
 function createWitnessProofSigner(signer: Signer) {
@@ -196,7 +196,7 @@ export function validateWitnessParameter(witness: WitnessParameterResolution): v
 
     // did:webvh v1.0 requires witness keys to be Ed25519 multikeys.
     const keyBytes = multibaseDecode(parsedDid.keyMultibase).bytes;
-    if (keyBytes.length < 2 || keyBytes[0] !== 0xed || keyBytes[1] !== 0x01) {
+    if (!isEd25519Multikey(keyBytes)) {
       throw new Error(`Witness DID key type must be Ed25519 (multicodec 0xed01): ${w.id}`);
     }
 

@@ -1,3 +1,4 @@
+import { METHOD_PROTOCOL_V1_0 } from './constants.js';
 import type {
   CreateDIDInterface,
   CreateDIDResult,
@@ -13,8 +14,6 @@ import { DidResolutionError } from './interfaces.js';
 import * as v1 from './method_versions/method.v1.0.js';
 import { fetchLogFromIdentifier, maybeWriteTestLog } from './utils.js';
 
-const SUPPORTED_METHOD = 'did:webvh:1.0';
-
 /**
  * Creates a new did:webvh DID and initial DID log.
  *
@@ -23,7 +22,7 @@ const SUPPORTED_METHOD = 'did:webvh:1.0';
  */
 export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDResult> => {
   const method = (options as { method?: string }).method;
-  if (method && method !== SUPPORTED_METHOD) {
+  if (method && method !== METHOD_PROTOCOL_V1_0) {
     throw new Error(`'${method}' is not a supported method version.`);
   }
   const result = await v1.createDID(options);
