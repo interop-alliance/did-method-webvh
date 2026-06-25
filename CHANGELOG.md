@@ -1,4 +1,4 @@
-## Unreleased - TBD
+## 3.3.0 - 2026-06-24
 
 ### Added
 
