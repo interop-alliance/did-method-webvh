@@ -1,3 +1,16 @@
+## Unreleased - TBD
+
+### Removed
+
+* Implicit `#files` / `#whois` service injection. `resolveDIDFromLog` no longer
+  appends default `#files`/`#whois` services to resolved DID documents, and
+  `generateParallelDidWeb` no longer injects them into the parallel `did:web`
+  document -- both now pass the DID document's `service` array through
+  unmodified. Dropped the now-unused `serviceFragmentExists` helper from
+  `src/utils.ts` and the `ServiceFragment` enum plus
+  `SERVICE_TYPE_RELATIVE_REF`, `SERVICE_TYPE_LINKED_VP`, and `CONTEXT_LINKED_VP`
+  constants from `src/constants.ts`.
+
 ## 3.3.0 - 2026-06-24
 
 ### Added

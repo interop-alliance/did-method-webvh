@@ -165,6 +165,24 @@ of `fetchLogFromIdentifier`, the `controlled` result field, or `src/routes/` map
 to `examples/express-resolver.ts` (or are dropped if they only serve the
 in-library mechanism).
 
+### Implicit `#files` / `#whois` services are not injected
+
+Upstream appends default `#files` and `#whois` services to resolved DID
+documents: `resolveDIDFromLog` pushes them onto `doc.service` for every log
+entry (guarded by a `serviceFragmentExists` check), and `generateParallelDidWeb`
+injects the HTTPS-endpoint variants into the parallel `did:web` document. This
+fork removed all of it: both functions now pass the DID document's `service`
+array through unmodified. The `serviceFragmentExists` helper (`src/utils.ts`),
+the `ServiceFragment` enum, and the `SERVICE_TYPE_RELATIVE_REF`,
+`SERVICE_TYPE_LINKED_VP`, and `CONTEXT_LINKED_VP` constants (`src/constants.ts`)
+were deleted along with it.
+
+**When porting:** upstream changes to implicit-service injection in
+`resolveDIDFromLog` or `generateParallelDidWeb` -- or to `serviceFragmentExists`
+or the dropped service-type/context constants -- are **N/A**. Upstream changes
+that genuinely alter `service` passthrough (validation, ordering) still apply,
+minus the injection step.
+
 ### `http://localhost` is allowed for local testing
 
 Upstream (PR that landed `8ebada3`, "remove special-casing for localhost,

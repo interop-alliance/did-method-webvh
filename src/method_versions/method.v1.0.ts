@@ -1,15 +1,11 @@
 import { documentStateIsValid, hashChainValid, newKeysAreInNextKeys, scidIsFromHash } from '../assertions.js';
 import {
-  CONTEXT_LINKED_VP,
   ERROR_TYPE_INVALID_DID,
   ERROR_TYPE_NOT_FOUND,
   METHOD,
   METHOD_PARAMETER_KEYS,
   METHOD_PROTOCOL_V1_0,
   PLACEHOLDER,
-  SERVICE_TYPE_LINKED_VP,
-  SERVICE_TYPE_RELATIVE_REF,
-  ServiceFragment,
 } from '../constants.js';
 import type {
   CreateDIDInterface,
@@ -42,12 +38,10 @@ import {
   enrichAlsoKnownAs,
   findVerificationMethod,
   generateParallelDidWeb,
-  getBaseUrl,
   parseCanonicalAddress,
   parseDidWebvhIdentifier,
   replaceCreateDidPlaceholders,
   replaceValueInObject,
-  serviceFragmentExists,
   validateCreateDidDocument,
   validateMethodSpecificPathSegments,
 } from '../utils.js';
@@ -446,27 +440,6 @@ export const resolveDIDFromLog = async (
 
       if (options.requestedDid && did === options.requestedDid) {
         didIdMatchCount++;
-      }
-
-      // Add default services if they don't exist
-      doc.service = Array.isArray(doc.service) ? doc.service : [];
-      const baseUrl = getBaseUrl(did);
-
-      if (!serviceFragmentExists(doc.service, ServiceFragment.Files, did)) {
-        doc.service.push({
-          id: '#files',
-          type: SERVICE_TYPE_RELATIVE_REF,
-          serviceEndpoint: baseUrl,
-        });
-      }
-
-      if (!serviceFragmentExists(doc.service, ServiceFragment.Whois, did)) {
-        doc.service.push({
-          '@context': CONTEXT_LINKED_VP,
-          id: '#whois',
-          type: SERVICE_TYPE_LINKED_VP,
-          serviceEndpoint: `${baseUrl}/whois.vp`,
-        });
       }
 
       // Latch the first entry matching the requested selector as the resolved result.

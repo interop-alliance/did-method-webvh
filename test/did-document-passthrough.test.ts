@@ -223,7 +223,7 @@ describe('generateParallelDidWeb', () => {
     expect(result.webDoc).toBeUndefined();
   });
 
-  test('adds implicit #files and #whois services with correct HTTPS endpoints', async () => {
+  test('does not add implicit #files or #whois services', async () => {
     const authKey = await generateTestVerificationMethod();
     const { did, doc } = await createDID({
       domain: 'example.com',
@@ -235,14 +235,9 @@ describe('generateParallelDidWeb', () => {
 
     const webDoc = generateParallelDidWeb(did, doc);
     const services = webDoc.service ?? [];
-    const filesService = services.find((service) => service.id?.endsWith('#files'));
-    const whoisService = services.find((service) => service.id?.endsWith('#whois'));
 
-    expect(filesService).toBeDefined();
-    expect(filesService?.serviceEndpoint).toBe('https://example.com/');
-    expect(whoisService).toBeDefined();
-    expect(whoisService?.serviceEndpoint).toBe('https://example.com/whois.vp');
-    expect(whoisService?.['@context']).toBe('https://identity.foundation/linked-vp/contexts/v1');
+    expect(services.some((service) => service.id?.endsWith('#files'))).toBe(false);
+    expect(services.some((service) => service.id?.endsWith('#whois'))).toBe(false);
   });
 
   test('translates verification method ids and controllers to did:web', async () => {
@@ -263,7 +258,7 @@ describe('generateParallelDidWeb', () => {
     }
   });
 
-  test('preserves path segments in generated did:web document and implicit service endpoints', async () => {
+  test('preserves path segments in generated did:web document', async () => {
     const authKey = await generateTestVerificationMethod();
     const { did, doc } = await createDID({
       domain: 'example.com',
@@ -275,15 +270,11 @@ describe('generateParallelDidWeb', () => {
     });
 
     const webDoc = generateParallelDidWeb(did, doc);
-    const filesService = (webDoc.service ?? []).find((service) => service.id?.endsWith('#files'));
-    const whoisService = (webDoc.service ?? []).find((service) => service.id?.endsWith('#whois'));
 
     expect(webDoc.id).toBe('did:web:example.com:path:sub');
-    expect(filesService?.serviceEndpoint).toBe('https://example.com/path/sub/');
-    expect(whoisService?.serviceEndpoint).toBe('https://example.com/path/sub/whois.vp');
   });
 
-  test('preserves encoded port in generated did:web document and decodes it for implicit service endpoints', async () => {
+  test('preserves encoded port in generated did:web document', async () => {
     const authKey = await generateTestVerificationMethod();
     const { did, doc } = await createDID({
       address: 'https://example.com:8443/',
@@ -294,12 +285,8 @@ describe('generateParallelDidWeb', () => {
     });
 
     const webDoc = generateParallelDidWeb(did, doc);
-    const filesService = (webDoc.service ?? []).find((service) => service.id?.endsWith('#files'));
-    const whoisService = (webDoc.service ?? []).find((service) => service.id?.endsWith('#whois'));
 
     expect(webDoc.id).toBe('did:web:example.com%3A8443');
-    expect(filesService?.serviceEndpoint).toBe('https://example.com:8443/');
-    expect(whoisService?.serviceEndpoint).toBe('https://example.com:8443/whois.vp');
   });
 
   test('does not include did:web self-reference in alsoKnownAs of did:web doc', async () => {

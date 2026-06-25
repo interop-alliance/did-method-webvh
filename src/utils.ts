@@ -1,17 +1,10 @@
 import { config } from './config.js';
-import {
-  BASE_CONTEXT,
-  CONTEXT_LINKED_VP,
-  METHOD,
-  SERVICE_TYPE_LINKED_VP,
-  SERVICE_TYPE_RELATIVE_REF,
-} from './constants.js';
+import { BASE_CONTEXT, METHOD } from './constants.js';
 import type {
   CreateDIDInterface,
   DIDDoc,
   DIDLog,
   ParsedDidKeyVerificationMethod,
-  ServiceEndpoint,
   VerificationMethod,
   WitnessProofFileEntry,
 } from './interfaces.js';
@@ -408,49 +401,8 @@ export function enrichAlsoKnownAs(doc: DIDDoc, did: string, opts: { alsoKnownAsW
   };
 }
 
-/**
- * Check if a service with the given fragment exists in the service array.
- * Matches both fragment form (e.g., '#files') and absolute form (e.g., 'did:webvh:...#files').
- */
-export function serviceFragmentExists(services: ServiceEndpoint[], fragment: string, did: string): boolean {
-  const fragmentForm = `#${fragment}`;
-  const absoluteForm = `${did}#${fragment}`;
-
-  return services.some((s: ServiceEndpoint) => {
-    const serviceId = s.id || '';
-    return serviceId === fragmentForm || serviceId === absoluteForm;
-  });
-}
-
 export function generateParallelDidWeb(didwebvhDid: string, didwebvhDoc: DIDDoc): DIDDoc {
   let webDoc = deepClone(didwebvhDoc);
-
-  const domainPath = didwebvhDid.replace(/^did:webvh:[^:]+:/, '');
-  const httpsBase = `https://${decodeURIComponent(domainPath.replace(/:/g, '/'))}/`;
-
-  const existingServiceIds = (webDoc.service ?? []).map((service: ServiceEndpoint) => service.id ?? '');
-  const implicitServices: ServiceEndpoint[] = [];
-
-  if (!existingServiceIds.some((id: string) => id.endsWith('#files'))) {
-    implicitServices.push({
-      id: '#files',
-      type: SERVICE_TYPE_RELATIVE_REF,
-      serviceEndpoint: httpsBase,
-    });
-  }
-
-  if (!existingServiceIds.some((id: string) => id.endsWith('#whois'))) {
-    implicitServices.push({
-      '@context': CONTEXT_LINKED_VP,
-      id: '#whois',
-      type: SERVICE_TYPE_LINKED_VP,
-      serviceEndpoint: `${httpsBase}whois.vp`,
-    });
-  }
-
-  if (implicitServices.length > 0) {
-    webDoc = { ...webDoc, service: [...(webDoc.service ?? []), ...implicitServices] };
-  }
 
   const scidPrefix = didwebvhDid.replace(/^did:webvh:([^:]+):.*$/, 'did:webvh:$1:');
   webDoc = replaceValueInObject(webDoc, scidPrefix, 'did:web:');

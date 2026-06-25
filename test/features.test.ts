@@ -368,15 +368,15 @@ test('Explicit empty nextKeyHashes disables pre-rotation', async () => {
   expect(resolved.meta.nextKeyHashes).toEqual([]);
 });
 
-test('Absolute service IDs prevent implicit service duplication', async () => {
-  // Create a DID with a custom service using absolute ID form
+test('Resolution does not inject implicit #files / #whois services', async () => {
+  // Create a DID with a single custom service
   const customDidDocument = {
     '@context': ['https://www.w3.org/ns/did/v1'],
     id: 'did:webvh:{SCID}:example.com',
     controller: ['did:webvh:{SCID}:example.com'],
     service: [
       {
-        id: 'did:webvh:{SCID}:example.com#files', // Absolute form with placeholder
+        id: 'did:webvh:{SCID}:example.com#files',
         type: 'relativeRef',
         serviceEndpoint: 'https://custom.example.com',
       },
@@ -396,22 +396,13 @@ test('Absolute service IDs prevent implicit service duplication', async () => {
   const result = await resolveDIDFromLog(createdLog, { verifier: testImplementation });
   const resolvedDid = result.did;
 
-  // Verify that the implicit #files service was NOT added (only custom service exists)
-  const filesServices = (result.doc?.service || []).filter((s: ServiceEndpoint) => {
-    const id = s.id || '';
-    return id.endsWith('#files');
-  });
+  // Only the custom service is present -- nothing is injected during resolution.
+  const services = result.doc?.service || [];
+  expect(services.length).toBe(1);
+  expect(services[0].id).toBe(`${resolvedDid}#files`);
+  expect(services[0].serviceEndpoint).toBe('https://custom.example.com');
 
-  expect(filesServices.length).toBe(1);
-  expect(filesServices[0].id).toBe(`${resolvedDid}#files`);
-  expect(filesServices[0].serviceEndpoint).toBe('https://custom.example.com');
-
-  // Verify #whois was still added as implicit service
-  const whoisServices = (result.doc?.service || []).filter((s: ServiceEndpoint) => {
-    const id = s.id || '';
-    return id.endsWith('#whois');
-  });
-
-  expect(whoisServices.length).toBe(1);
-  expect(whoisServices[0].id).toBe('#whois');
+  // No implicit #whois service was added.
+  const whoisServices = services.filter((s: ServiceEndpoint) => (s.id || '').endsWith('#whois'));
+  expect(whoisServices.length).toBe(0);
 });
