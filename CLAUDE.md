@@ -11,6 +11,17 @@ deactivate operations, plus a CLI tool and example resolver servers.
 
 [v1.0]: https://identity.foundation/didwebvh/v1.0/
 
+## Provenance
+
+Originally forked from
+[decentralized-identity/didwebvh-ts](https://github.com/decentralized-identity/didwebvh-ts).
+
+- **Upstream remote:** `up` ->
+  `git@github.com:decentralized-identity/didwebvh-ts.git`. Run `git fetch up`
+  first; the comparison ref below is `up/main`. (`origin` is the fork,
+  `interop-alliance/did-method-webvh`.)
+- **Fork point:** `371891f` (upstream PR #115, "fix/linting").
+
 ## Commands
 
 ```bash
