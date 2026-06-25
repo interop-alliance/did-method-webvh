@@ -21,8 +21,10 @@ export interface DataIntegrityProofTemplate {
   proofPurpose: DataIntegrityProofPurpose;
 }
 
-export interface SigningInput {
-  document: unknown;
+export type SignableDocument = DIDLogEntry | DIDDoc | Pick<DIDLogEntry, 'versionId'>;
+
+export interface SigningInput<TDocument = SignableDocument> {
+  document: TDocument;
   proof: DataIntegrityProofTemplate;
 }
 
@@ -30,8 +32,8 @@ export interface SigningOutput {
   proofValue: string;
 }
 
-export interface Signer {
-  sign(input: SigningInput): Promise<SigningOutput>;
+export interface Signer<TDocument = SignableDocument> {
+  sign(input: SigningInput<TDocument>): Promise<SigningOutput>;
   getVerificationMethodId(): string;
 }
 
@@ -109,7 +111,7 @@ export interface VerificationMethod {
   // id from each listed relationship. Absent (or empty) defaults to
   // authentication.
   purpose?: DataIntegrityProofPurpose | DataIntegrityProofPurpose[];
-  publicKeyJwk?: any;
+  publicKeyJwk?: JsonObject;
   use?: string;
 }
 
@@ -177,7 +179,7 @@ export type DIDLog = DIDLogEntry[];
 export interface ServiceEndpoint {
   id?: string;
   type: string | string[];
-  serviceEndpoint?: string | string[] | any;
+  serviceEndpoint?: string | string[] | JsonValue;
   [key: string]: unknown;
 }
 

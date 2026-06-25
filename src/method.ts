@@ -4,6 +4,7 @@ import type {
   DeactivateDIDInterface,
   DIDLog,
   ResolutionOptions,
+  ServiceEndpoint,
   UpdateDIDInterface,
   UpdateDIDResult,
   WitnessProofFileEntry,
@@ -51,7 +52,7 @@ export const resolveDID = async (
     maybeWriteTestLog(result.did, log);
 
     return result;
-  } catch (e: any) {
+  } catch (e) {
     let errorType: DidResolutionError = DidResolutionError.InvalidDid;
     const message = e instanceof Error ? e.message : String(e);
     if (/not found/i.test(message) || /404/.test(message)) {
@@ -102,7 +103,7 @@ export const resolveDIDFromLog = async (
  */
 export const updateDID = async (
   options: UpdateDIDInterface & {
-    services?: any[];
+    services?: ServiceEndpoint[];
     domain?: string;
     address?: string;
     paths?: string[];
