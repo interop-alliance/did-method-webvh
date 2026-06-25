@@ -558,6 +558,16 @@ describe('Witness Implementation Tests', async () => {
     );
   });
 
+  test('parseDidKeyVerificationMethod rejects fragment that differs from body multibase', () => {
+    const validMultibase = witness1.publicKeyMultibase!;
+    const differentMultibase = 'z6MkhaXgBZDvotzL8V6N3XQfZ47fRhVvKiHbhQr6CoCo2V4p'; // different key
+    const withMismatchedFragment = `did:key:${validMultibase}#${differentMultibase}`;
+
+    expect(() => parseDidKeyVerificationMethod(withMismatchedFragment)).toThrow(
+      'did:key verificationMethod fragment must equal body multibase'
+    );
+  });
+
   test('signWitnessProofEntry signs for every configured witness', async () => {
     const versionId = initialDID.log[0].versionId;
     const created = '2026-05-22T12:00:00Z';

@@ -145,6 +145,22 @@ describe('didDocument create pass-through', () => {
       console.warn = originalWarn;
     }
   });
+
+  test('rejects pass-through didDocument whose substituted id does not match the created DID', async () => {
+    const authKey = await generateTestVerificationMethod();
+
+    await expect(
+      createDID({
+        domain: 'example.com',
+        signer: createTestSigner(authKey),
+        verifier: createTestVerifier(authKey),
+        updateKeys: [authKey.publicKeyMultibase!],
+        didDocument: {
+          id: '{DID}garbage',
+        },
+      })
+    ).rejects.toThrow(/must match expected DID/);
+  });
 });
 
 describe('generateParallelDidWeb', () => {

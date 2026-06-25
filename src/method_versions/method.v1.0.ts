@@ -608,8 +608,12 @@ export const updateDID = async (
   const parsedLastEntryDid = parseDidWebvhIdentifier(lastEntryDid, 'last entry state.id');
   const lastMeta = (await resolveDIDFromLog(log, { verifier: options.verifier, witnessProofs: options.witnessProofs }))
     .meta;
+  const currentUpdateKeys = options.updateKeys;
   if (lastMeta.deactivated) {
     throw new Error('Cannot update deactivated DID');
+  }
+  if (lastMeta.prerotation && currentUpdateKeys === undefined) {
+    throw new Error('updateKeys must be provided while pre-rotation is active');
   }
   const versionNumber = log.length + 1;
   // Validate user-provided timestamp with skew tolerance before creating the versionTime
@@ -618,6 +622,7 @@ export const updateDID = async (
   }
   const createdDate = createNextVersionTime(lastMeta.updated, options.updated, createDate);
   const watchersValue = options.watchers !== undefined ? options.watchers : lastMeta.watchers;
+  const resolvedNextKeyHashes = options.nextKeyHashes ?? lastMeta.nextKeyHashes ?? [];
   const witnessInput = options.witness;
   const witness = witnessInput?.witnesses?.length
     ? {
@@ -631,8 +636,10 @@ export const updateDID = async (
     );
   }
   const params = {
-    updateKeys: options.updateKeys ?? [],
-    nextKeyHashes: options.nextKeyHashes ?? [],
+    ...(options.updateKeys !== undefined || lastMeta.prerotation
+      ? { updateKeys: options.updateKeys ?? lastMeta.updateKeys }
+      : {}),
+    ...(options.nextKeyHashes !== undefined ? { nextKeyHashes: options.nextKeyHashes } : {}),
     ...(options.portable === false ? { portable: false } : {}),
     witness,
     watchers: watchersValue ?? [],
@@ -640,6 +647,10 @@ export const updateDID = async (
 
   if (params.witness?.witnesses?.length) {
     validateWitnessParameter(params.witness);
+  }
+
+  if (lastMeta.prerotation) {
+    await newKeysAreInNextKeys(currentUpdateKeys ?? [], lastMeta.nextKeyHashes ?? []);
   }
 
   // Safety guard: Strip secret keys from verification methods before creating DID document
@@ -687,7 +698,7 @@ export const updateDID = async (
     controller = lastEntryDid;
   }
 
-  const { doc } = await createDIDDoc({
+  const { doc: normalizedUpdateDoc } = await createDIDDoc({
     ...options,
     controller,
     context: options.context || lastEntry.state['@context'],
@@ -697,19 +708,40 @@ export const updateDID = async (
     verificationMethods: safeVerificationMethods ?? [],
   });
 
-  // Add services if provided
-  if (options.services && options.services.length > 0) {
+  // Carry the prior DID document forward and selectively overlay only the fields
+  // this update actually supplies, so a sparse updateDID() preserves prior state.
+  const doc = deepClone(lastEntry.state);
+  doc['@context'] = normalizedUpdateDoc['@context'];
+  doc.id = normalizedUpdateDoc.id;
+  doc.controller = normalizedUpdateDoc.controller;
+
+  if (safeVerificationMethods !== undefined) {
+    doc.verificationMethod = normalizedUpdateDoc.verificationMethod;
+    doc.authentication = normalizedUpdateDoc.authentication;
+    doc.assertionMethod = normalizedUpdateDoc.assertionMethod;
+    doc.keyAgreement = normalizedUpdateDoc.keyAgreement;
+    doc.capabilityDelegation = normalizedUpdateDoc.capabilityDelegation;
+    doc.capabilityInvocation = normalizedUpdateDoc.capabilityInvocation;
+  }
+
+  if (options.services !== undefined) {
     doc.service = options.services;
   }
 
-  // Add assertionMethod if provided
-  if (options.assertionMethod) {
+  if (options.authentication !== undefined) {
+    doc.authentication = options.authentication;
+  }
+
+  if (options.assertionMethod !== undefined) {
     doc.assertionMethod = options.assertionMethod;
   }
 
-  // Add keyAgreement if provided
-  if (options.keyAgreement) {
+  if (options.keyAgreement !== undefined) {
     doc.keyAgreement = options.keyAgreement;
+  }
+
+  if (options.alsoKnownAs !== undefined) {
+    doc.alsoKnownAs = options.alsoKnownAs;
   }
 
   const logEntry: DIDLogEntry = {
@@ -731,7 +763,10 @@ export const updateDID = async (
   const signedProof = await options.signer.sign({ document: prelimEntry, proof: proofTemplate });
   const allProofs: DataIntegrityProof[] = [{ ...proofTemplate, proofValue: signedProof.proofValue }];
   prelimEntry.proof = allProofs;
-  const keysToVerify = lastMeta.prerotation ? params.updateKeys : lastMeta.updateKeys;
+  const keysToVerify = lastMeta.prerotation ? currentUpdateKeys : lastMeta.updateKeys;
+  if (!keysToVerify) {
+    throw new Error('updateKeys could not be determined for update verification');
+  }
   const verified = await documentStateIsValid(prelimEntry, keysToVerify, lastMeta.witness, true, options.verifier);
   if (!verified) {
     throw new Error(`version ${prelimEntry.versionId} is invalid.`);
@@ -741,7 +776,7 @@ export const updateDID = async (
     ...lastMeta,
     versionId: prelimEntry.versionId,
     updated: prelimEntry.versionTime,
-    prerotation: (params.nextKeyHashes?.length ?? 0) > 0,
+    prerotation: resolvedNextKeyHashes.length > 0,
     ...params,
   };
 
