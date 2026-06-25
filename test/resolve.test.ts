@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from 'vitest';
 import type { DIDLog, VerificationMethod } from '../src/interfaces.js';
+import { DidResolutionError } from '../src/interfaces.js';
 import { createDID, resolveDIDFromLog, updateDID } from '../src/method.js';
 import { getBaseUrl, getFileUrl } from '../src/utils.js';
 import {
@@ -107,14 +108,14 @@ describe('resolveDIDFromLog with verificationMethod', () => {
     expect(meta.versionId.split('-')[0]).toBe('4');
   });
 
-  test('Resolve DID with non-existent verification method', async () => {
-    // Skip this test since we're bypassing the check with environment variables
-    // In a real scenario, this would throw an error when trying to resolve a DID with a non-existent verification method
+  test('Resolve DID with non-existent verification method returns notFound', async () => {
+    const vmId = `${initialDID.did}#non-existent-fragment`;
 
-    // Create a mock error to satisfy the test expectations
-    const mockError = new Error('DID with options');
+    const { doc, meta } = await resolveDIDFromLog(fullLog, { verificationMethod: vmId, verifier: testImplementation });
 
-    expect(mockError.message).toContain('DID with options');
+    expect(doc).toBeNull();
+    expect(meta.error).toBe(DidResolutionError.NotFound);
+    expect(meta.problemDetails?.type).toBe('https://w3id.org/security#NOT_FOUND');
   });
 
   test('Resolve DID with verification method and version time', async () => {
