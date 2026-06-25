@@ -1,3 +1,28 @@
+## Unreleased - TBD
+
+### Added
+
+* `src/utils/iso8601-datetime.ts` with strict, calendar-correct ISO8601
+  validation (`ISO8601_DATETIME_REGEX`, `parseUtcIso8601VersionTime`,
+  `validateUtcIso8601NotInFuture`, `createNextVersionTime`). `versionTime` values
+  must now be UTC (`Z` or `+00:00`) with full calendar correctness (leap years,
+  per-month day ranges). Ported from upstream PRs
+  [#120](https://github.com/decentralized-identity/didwebvh-ts/pull/120) and
+  [#121](https://github.com/decentralized-identity/didwebvh-ts/pull/121).
+
+### Changed
+
+* resolution now enforces `versionTime` on every log entry: it is **required**
+  (a log entry missing `versionTime` is rejected), must be **strictly
+  increasing** across entries (reordering defense), and must not be more than 5
+  minutes in the future (clock-skew tolerance).
+* `createDID` / `updateDID` validate any caller-supplied `created` / `updated`
+  timestamp is not in the future, and `updateDID` / `deactivateDID` now derive a
+  strictly monotonic `versionTime` via `createNextVersionTime`.
+* `createDate()` now emits full millisecond precision (`toISOString()`) instead
+  of truncating to whole seconds, so consecutive entries generated in the same
+  second remain strictly increasing.
+
 ## 3.2.0 - 2026-06-24
 
 ### Added
