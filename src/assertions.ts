@@ -2,7 +2,13 @@ import type { DIDLogEntry, Verifier, WitnessParameterResolution } from './interf
 import { concatBuffers } from './utils/buffer.js';
 import { canonicalizeStrict } from './utils/canonicalize.js';
 import { createHash } from './utils/crypto.js';
-import { decodeBase58Btc, decodeMultihash, MultihashAlgorithm, multibaseDecode } from './utils/multiformats.js';
+import {
+  decodeBase58Btc,
+  decodeMultihash,
+  isEd25519Multikey,
+  MultihashAlgorithm,
+  multibaseDecode,
+} from './utils/multiformats.js';
 import { createSCID, deriveNextKeyHash, parseDidKeyVerificationMethod, resolveVM } from './utils.js';
 import { validateWitnessParameter } from './witness.js';
 
@@ -68,7 +74,7 @@ export const documentStateIsValid = async (
     }
 
     const publicKey = multibaseDecode(vm.publicKeyMultibase).bytes;
-    if (publicKey[0] !== 0xed || publicKey[1] !== 0x01) {
+    if (!isEd25519Multikey(publicKey)) {
       throw new Error(`multiKey doesn't include ed25519 header (0xed01)`);
     }
 
@@ -109,18 +115,14 @@ export const newKeysAreInNextKeys = async (updateKeys: string[], previousNextKey
  * Per spec: "SHA-256 [[spec:rfc6234]] (multihash code `0x12`) **only**"
  */
 const validateScidAlgorithmIsSha256 = (scid: string): void => {
+  let algorithm: number;
   try {
-    const multihashBytes = decodeBase58Btc(scid);
-    const { algorithm } = decodeMultihash(multihashBytes);
-
-    if (algorithm !== MultihashAlgorithm.SHA2_256) {
-      throw new Error(`SCID multihash algorithm must be SHA-256 (0x12), but got 0x${algorithm.toString(16)}`);
-    }
+    algorithm = decodeMultihash(decodeBase58Btc(scid)).algorithm;
   } catch (error) {
-    if (error instanceof Error && error.message.includes('SCID multihash algorithm')) {
-      throw error;
-    }
     throw new Error(`Invalid SCID format: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (algorithm !== MultihashAlgorithm.SHA2_256) {
+    throw new Error(`SCID multihash algorithm must be SHA-256 (0x12), but got 0x${algorithm.toString(16)}`);
   }
 };
 

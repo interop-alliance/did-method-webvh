@@ -53,8 +53,6 @@ import {
 } from '../utils.js';
 import { countVerifiedWitnessApprovals, fetchWitnessProofs, validateWitnessParameter } from '../witness.js';
 
-const hasOwn = (obj: object, key: PropertyKey): boolean => Object.hasOwn(obj, key);
-
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
 
 const requireDidId = (id: string | undefined): string => {
@@ -267,7 +265,6 @@ export const resolveDIDFromLog = async (
   let didIdMatchCount = 0;
   let host = '';
   let previousVersionTime: Date | undefined;
-  const activeMethod = METHOD_PROTOCOL_V1_0; // Track method value across entries
   const requiredWitnessChecks: RequiredWitnessCheck[] = [];
   let witnessThresholdFailure = false;
 
@@ -345,19 +342,19 @@ export const resolveDIDFromLog = async (
       } else {
         // version number > 1
 
-        // Validate method parameter: must not be present or must equal active method
-        if (hasOwn(parameters, METHOD_PARAMETER_KEYS.method)) {
+        // Validate method parameter: must not be present or must equal the supported method
+        if (Object.hasOwn(parameters, METHOD_PARAMETER_KEYS.method)) {
           const entryMethod = parameters.method as string;
-          if (entryMethod !== activeMethod) {
+          if (entryMethod !== METHOD_PROTOCOL_V1_0) {
             throw new Error(
               `version '${version}' has unsupported or downgraded method '${entryMethod}'; ` +
-                `expected '${activeMethod}'`
+                `expected '${METHOD_PROTOCOL_V1_0}'`
             );
           }
         }
 
         // scid MUST NOT appear in later entries
-        if (hasOwn(parameters, METHOD_PARAMETER_KEYS.scid)) {
+        if (Object.hasOwn(parameters, METHOD_PARAMETER_KEYS.scid)) {
           throw new Error(`version '${version}' must not contain SCID parameter`);
         }
 
@@ -370,7 +367,7 @@ export const resolveDIDFromLog = async (
         }
 
         // Setting portable: false in a later entry permanently locks portability off
-        if (hasOwn(parameters, METHOD_PARAMETER_KEYS.portable) && parameters.portable === false) {
+        if (Object.hasOwn(parameters, METHOD_PARAMETER_KEYS.portable) && parameters.portable === false) {
           meta.portable = false;
         }
 
@@ -403,13 +400,13 @@ export const resolveDIDFromLog = async (
           await newKeysAreInNextKeys(parameters.updateKeys ?? [], meta.nextKeyHashes ?? []);
         }
 
-        if (hasOwn(parameters, METHOD_PARAMETER_KEYS.updateKeys)) {
+        if (Object.hasOwn(parameters, METHOD_PARAMETER_KEYS.updateKeys)) {
           meta.updateKeys = parameters.updateKeys ?? [];
         }
         if (parameters.deactivated === true) {
           meta.deactivated = true;
         }
-        if (hasOwn(parameters, METHOD_PARAMETER_KEYS.nextKeyHashes)) {
+        if (Object.hasOwn(parameters, METHOD_PARAMETER_KEYS.nextKeyHashes)) {
           meta.nextKeyHashes = parameters.nextKeyHashes ?? [];
           meta.prerotation = meta.nextKeyHashes.length > 0;
         }
@@ -418,7 +415,7 @@ export const resolveDIDFromLog = async (
           witnessThreshold?: string | number;
         };
 
-        if (hasOwn(parameters, METHOD_PARAMETER_KEYS.witness)) {
+        if (Object.hasOwn(parameters, METHOD_PARAMETER_KEYS.witness)) {
           meta.witness = parameters.witness;
         } else if (legacyParameters.witnesses) {
           meta.witness = {
@@ -429,7 +426,7 @@ export const resolveDIDFromLog = async (
         if (meta.witness?.witnesses?.length) {
           validateWitnessParameter(meta.witness);
         }
-        if (hasOwn(parameters, METHOD_PARAMETER_KEYS.watchers)) {
+        if (Object.hasOwn(parameters, METHOD_PARAMETER_KEYS.watchers)) {
           meta.watchers = parameters.watchers ?? null;
         }
       }
@@ -472,35 +469,19 @@ export const resolveDIDFromLog = async (
         });
       }
 
-      if (options.verificationMethod && findVerificationMethod(doc, options.verificationMethod)) {
-        if (!resolvedDoc) {
-          resolvedDoc = deepClone(doc);
-          resolvedDid = did;
-          resolvedMeta = { ...meta };
-        }
+      // Latch the first entry matching the requested selector as the resolved result.
+      let matchesSelector =
+        (!!options.verificationMethod && !!findVerificationMethod(doc, options.verificationMethod)) ||
+        options.versionNumber === versionNumber ||
+        options.versionId === meta.versionId;
+      if (!matchesSelector && options.versionTime && options.versionTime > new Date(meta.updated)) {
+        const nextEntry = resolutionLog[i + 1];
+        matchesSelector = !nextEntry || options.versionTime < new Date(nextEntry.versionTime);
       }
-
-      if (options.versionNumber === versionNumber || options.versionId === meta.versionId) {
-        if (!resolvedDoc) {
-          resolvedDoc = deepClone(doc);
-          resolvedDid = did;
-          resolvedMeta = { ...meta };
-        }
-      }
-      if (options.versionTime && options.versionTime > new Date(meta.updated)) {
-        if (resolutionLog[i + 1] && options.versionTime < new Date(resolutionLog[i + 1].versionTime)) {
-          if (!resolvedDoc) {
-            resolvedDoc = deepClone(doc);
-            resolvedDid = did;
-            resolvedMeta = { ...meta };
-          }
-        } else if (!resolutionLog[i + 1]) {
-          if (!resolvedDoc) {
-            resolvedDoc = deepClone(doc);
-            resolvedDid = did;
-            resolvedMeta = { ...meta };
-          }
-        }
+      if (matchesSelector && !resolvedDoc) {
+        resolvedDoc = deepClone(doc);
+        resolvedDid = did;
+        resolvedMeta = { ...meta };
       }
 
       lastValidDoc = deepClone(doc);

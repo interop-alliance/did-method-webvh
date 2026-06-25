@@ -347,3 +347,8 @@ export function decodeMultihashFromMultibase(str: string): {
     encoding,
   };
 }
+
+/** Multicodec prefix (`0xed 0x01`) for an Ed25519 public key multikey. */
+export function isEd25519Multikey(keyBytes: Uint8Array): boolean {
+  return keyBytes.length >= 2 && keyBytes[0] === 0xed && keyBytes[1] === 0x01;
+}
