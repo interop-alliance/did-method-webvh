@@ -98,22 +98,13 @@ This command runs: `tsx watch examples/express-resolver.ts`
    npm run test:log
    ```
 
-5. `cli`: Run the CLI tool.
-
-   ```bash
-   npm run cli
-   ```
-
-   The CLI accepts a `--watcher` option during create and update operations to
-   specify one or more watcher URLs.
-
-6. `build`: Build the package.
+5. `build`: Build the package.
 
    ```bash
    npm run build
    ```
 
-7. `build:clean`: Clean the build directory.
+6. `build:clean`: Clean the build directory.
 
    ```bash
    npm run build:clean

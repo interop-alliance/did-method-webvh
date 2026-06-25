@@ -97,6 +97,12 @@
 
 ### Removed
 
+* **Breaking:** the standalone CLI (`src/cli.ts`, the `didwebvh` `bin`, the `cli`
+  npm script, and `test/cli-e2e.test.ts`). CLI workflows now live in the separate
+  `did-cli-typescript` project, which consumes this library's public API. As a
+  result `@stablelib/ed25519` -- previously a runtime dependency only because the
+  unbundled CLI imported it -- moved to `devDependencies`, shrinking the published
+  package's runtime closure to `@noble/hashes` and `json-canonicalize`.
 * **Breaking:** the non-normative `fastResolve` resolution option. The spec
   mandates full verification of every log entry, so resolution always verifies
   every entry's proof; there is no opt-in fast path. Ported from upstream PR
