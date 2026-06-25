@@ -21,6 +21,7 @@ import type {
   DIDLogEntry,
   DIDResolutionMeta,
   ResolutionOptions,
+  ServiceEndpoint,
   UpdateDIDInterface,
   UpdateDIDResult,
   WitnessParameterResolution,
@@ -613,7 +614,7 @@ export const resolveDIDFromLog = async (
 
 export const updateDID = async (
   options: UpdateDIDInterface & {
-    services?: any[];
+    services?: ServiceEndpoint[];
     domain?: string;
     address?: string;
     paths?: string[];
@@ -778,7 +779,7 @@ export const updateDID = async (
 
 export const deactivateDID = async (
   options: DeactivateDIDInterface & { updateKeys?: string[] }
-): Promise<{ did: string; doc: any; meta: DIDResolutionMeta; log: DIDLog }> => {
+): Promise<{ did: string; doc: DIDDoc; meta: DIDResolutionMeta; log: DIDLog }> => {
   const log = options.log;
   const lastEntry = log[log.length - 1];
   const lastMeta = (await resolveDIDFromLog(log, { verifier: options.verifier })).meta;
@@ -851,10 +852,11 @@ const getEntryWitnessParameter = (parameters: DIDLogEntry['parameters']): Witnes
     return parameters.witness ?? {};
   }
 
-  if ((parameters as any).witnesses) {
+  if ((parameters as { witnesses?: { id: string }[]; witnessThreshold?: string | number }).witnesses) {
+    const legacyParameters = parameters as { witnesses: { id: string }[]; witnessThreshold?: string | number };
     return {
-      witnesses: (parameters as any).witnesses,
-      threshold: (parameters as any).witnessThreshold || (parameters as any).witnesses.length,
+      witnesses: legacyParameters.witnesses,
+      threshold: legacyParameters.witnessThreshold || legacyParameters.witnesses.length,
     };
   }
 

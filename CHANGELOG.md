@@ -37,6 +37,17 @@
 
 ### Changed
 
+* Type-safety hardening across the public surface (no behavior change). `Signer`
+  and `SigningInput` are now generic over a `SignableDocument` union;
+  `createDocumentSigner` is generic and returns `TDocument & { proof }`;
+  `VerificationMethod.publicKeyJwk` is typed `JsonObject` and
+  `ServiceEndpoint.serviceEndpoint` is typed with `JsonValue` instead of `any`.
+  `catch (e: any)` blocks now use `e instanceof Error` narrowing. `updateDID`
+  service params are typed `ServiceEndpoint[]`. The CLI gains
+  `requirePublicKeyMultibase`/`parseExplicitPaths` helpers, typed
+  `resolutionOptions`/`envVMs`, and honors `--update-key` when selecting the
+  signing verification method. Ported from upstream PR
+  [#119](https://github.com/decentralized-identity/didwebvh-ts/pull/119).
 * `updateDID` now rejects `portable: true` in an update entry (portability can
   only be enabled in the first entry) and refuses to move a DID whose
   portability is disabled (`Cannot move DID: portability is disabled`).
