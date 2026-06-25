@@ -37,6 +37,37 @@
 
 ### Changed
 
+* Ported straggling runtime type-safety hardening from upstream to `src/utils.ts`:
+  `validateDidKeyMultibase` now extracts the caught error message defensively
+  (`error instanceof Error ? error.message : String(error)`); `resolveVM` throws
+  a "not found" error when `resolveDIDFromLog` yields no document instead of
+  passing it on; `findVerificationMethod` is typed `(doc: DIDDoc, ...)` and guards
+  relationship-array entries against non-objects; and `writeVerificationMethodToEnv`
+  guards the decoded env payload with `Array.isArray` before reuse.
+* Implicit `#files`/`#whois` services now reference the `SERVICE_TYPE_RELATIVE_REF`,
+  `SERVICE_TYPE_LINKED_VP`, and `CONTEXT_LINKED_VP` constants from
+  `src/constants.ts` instead of hardcoded string literals, matching upstream.
+* `updateDID` parameter and DID-document handling now match upstream:
+  - Sparse updates preserve prior DID document state: the previous entry's
+    `state` is carried forward and only the fields an update actually supplies
+    (`verificationMethods`, `services`, `authentication`, `assertionMethod`,
+    `keyAgreement`, `alsoKnownAs`) are overlaid, instead of rebuilding the
+    document from scratch. Ported from upstream
+    `keep prior DIDDoc state with sparse updateDID() calls` (commit `1459ed6`).
+  - `updateKeys` is omitted from an update entry's `parameters` when unchanged
+    and not under active pre-rotation (and inherited from the prior entry while
+    pre-rotation is active), rather than always being written; resolution tracks
+    it via the presence of the key. `nextKeyHashes` is likewise only written
+    when explicitly supplied, so an omitted value inherits the prior
+    pre-rotation state. Ported from upstream `track updateKeys` (commit
+    `5bc85bf`).
+  - Pre-rotation key commitment is now enforced at write time: `updateDID`
+    rejects an omitted `updateKeys` while pre-rotation is active
+    (`updateKeys must be provided while pre-rotation is active`) and rejects
+    update keys not committed in the prior entry's `nextKeyHashes`
+    (`Invalid update key`) before the entry is produced, in addition to the
+    existing read-time check. Ported from upstream
+    `enforce pre-rotation key commitment` (commit `b40eb06`).
 * Type-safety hardening across the public surface (no behavior change). `Signer`
   and `SigningInput` are now generic over a `SignableDocument` union;
   `createDocumentSigner` is generic and returns `TDocument & { proof }`;
@@ -125,6 +156,33 @@
   `watchers` asserts the cleared-watchers (`[]`) shape. Ported from upstream PRs
   [#129](https://github.com/decentralized-identity/didwebvh-ts/pull/129) and
   [#131](https://github.com/decentralized-identity/didwebvh-ts/pull/131).
+* Further backfilled `method.v1.0` coverage against upstream's
+  `enhance test coverage of method.v1.0` change: `versionTime` clock-skew
+  tolerance (accepts up to, rejects beyond, 5 minutes in the future, via a new
+  `createFutureDIDLog` test helper), `versionId` structural validation
+  (missing/multiple `-` separators, empty hash component), rejection of unknown,
+  downgraded, or `scid`-bearing `method`/parameters in later entries, rejection
+  of a non-SHA-256 SCID multihash, `requestedDid` mismatch and not-present
+  cases, the empty-log "no entries to process" case, and historical
+  `versionId`/`versionTime` selectors that stay successful when a later entry is
+  corrupted (`not-so-happy-path`); explicit `versionId`/`versionTime` misses
+  returning `NotFound` without a latest fallback, explicit empty
+  `nextKeyHashes` disabling pre-rotation, and absolute service IDs preventing
+  implicit `#files` duplication (`features`); the `did:key` verificationMethod
+  fragment-mismatch rejection (`witness`); rejection of a pass-through
+  `didDocument` whose substituted id does not match the created DID
+  (`did-document-passthrough`); and rejection of DID identifiers containing
+  fragment/query contamination or traversal-style path segments (`resolve`).
+* Coverage for the `updateDID` behavior changes above (see _Changed_): sparse
+  updates preserving prior `alsoKnownAs`/`service` state and omitted
+  `updateKeys` staying omitted from update parameters (`happy-path`); omitted
+  `nextKeyHashes` inheriting prior pre-rotation state and omitted `updateKeys`
+  being rejected while pre-rotation is active (`features`). The existing
+  pre-rotation tests were updated for write-time enforcement: `updateKeys MUST
+  be in previous nextKeyHashes when updating` now asserts `updateDID` itself
+  rejects, `updateKeys MUST be in nextKeyHashes when reading` hand-builds the
+  offending entry to still exercise the read-time check, and the now-redundant
+  `Require nextKeyHashes to continue if previously set` test was removed.
 
 ## 3.2.0 - 2026-06-24
 

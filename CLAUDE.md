@@ -165,6 +165,22 @@ of `fetchLogFromIdentifier`, the `controlled` result field, or `src/routes/` map
 to `examples/express-resolver.ts` (or are dropped if they only serve the
 in-library mechanism).
 
+### `http://localhost` is allowed for local testing
+
+Upstream (PR that landed `8ebada3`, "remove special-casing for localhost,
+enforce HTTPS") rejects all `http:` URLs and always builds resolution URLs with
+the `https` scheme. This fork deliberately keeps an `http://localhost` escape
+hatch for local development and testing: `parseCanonicalAddress` only rejects
+`http:` when the host is **not** `localhost`, and `toASCII` / `getBaseUrl` in
+[src/utils.ts](src/utils.ts) emit `http` for `localhost` and `https` for every
+other host. Non-local hosts are still HTTPS-only, matching upstream.
+
+**When porting:** upstream changes that tighten HTTPS enforcement should preserve
+this `localhost`-only `http` exception -- keep the `hostname !== 'localhost'`
+guard in `parseCanonicalAddress` and the `localhost` scheme selection in
+`toASCII` / `getBaseUrl` rather than reverting to upstream's unconditional
+`https`.
+
 ### Build system is plain tsc, not esbuild
 
 Upstream builds with `scripts/build.ts` (esbuild) into four targets (`dist/esm`,

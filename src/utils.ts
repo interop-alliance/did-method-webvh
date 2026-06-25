@@ -1,5 +1,11 @@
 import { config } from './config.js';
-import { BASE_CONTEXT, METHOD } from './constants.js';
+import {
+  BASE_CONTEXT,
+  CONTEXT_LINKED_VP,
+  METHOD,
+  SERVICE_TYPE_LINKED_VP,
+  SERVICE_TYPE_RELATIVE_REF,
+} from './constants.js';
 import type {
   CreateDIDInterface,
   DIDDoc,
@@ -24,8 +30,9 @@ function validateDidKeyMultibase(keyMultibase: string): void {
 
   try {
     multibaseDecode(keyMultibase);
-  } catch (error: any) {
-    throw new Error(`Malformed did:key identifier: ${error.message}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Malformed did:key identifier: ${message}`);
   }
 }
 
@@ -427,16 +434,16 @@ export function generateParallelDidWeb(didwebvhDid: string, didwebvhDoc: DIDDoc)
   if (!existingServiceIds.some((id: string) => id.endsWith('#files'))) {
     implicitServices.push({
       id: '#files',
-      type: 'relativeRef',
+      type: SERVICE_TYPE_RELATIVE_REF,
       serviceEndpoint: httpsBase,
     });
   }
 
   if (!existingServiceIds.some((id: string) => id.endsWith('#whois'))) {
     implicitServices.push({
-      '@context': 'https://identity.foundation/linked-vp/contexts/v1',
+      '@context': CONTEXT_LINKED_VP,
       id: '#whois',
-      type: 'LinkedVerifiablePresentation',
+      type: SERVICE_TYPE_LINKED_VP,
       serviceEndpoint: `${httpsBase}whois.vp`,
     });
   }
@@ -519,14 +526,15 @@ export const writeVerificationMethodToEnv = async (verificationMethod: Verificat
   const fs = await getFS();
   try {
     let envContent = '';
-    let existingData: any[] = [];
+    let existingData: Array<typeof vmData> = [];
 
     if (fs.existsSync(envFilePath)) {
       envContent = fs.readFileSync(envFilePath, 'utf8');
       const match = envContent.match(/DID_VERIFICATION_METHODS=(.*)/);
       if (match?.[1]) {
         const decodedData = bufferToString(createBuffer(match[1], 'base64'));
-        existingData = JSON.parse(decodedData);
+        const parsedData = JSON.parse(decodedData) as unknown;
+        existingData = Array.isArray(parsedData) ? (parsedData as Array<typeof vmData>) : [];
 
         // Check if verification method with same ID already exists
         const existingIndex = existingData.findIndex((vm) => vm.id === vmData.id);
@@ -827,6 +835,9 @@ export const resolveVM = async (vm: string) => {
         .split('\n')
         .map((l) => JSON.parse(l));
       const { doc } = await resolveDIDFromLog(logEntries, { verificationMethod: vm });
+      if (!doc) {
+        throw new Error(`Verification method ${vm} not found`);
+      }
       return findVerificationMethod(doc, vm);
     }
     throw new Error(`Verification method ${vm} not found`);
@@ -835,10 +846,10 @@ export const resolveVM = async (vm: string) => {
   }
 };
 
-export const findVerificationMethod = (doc: any, vmId: string): VerificationMethod | null => {
+export const findVerificationMethod = (doc: DIDDoc, vmId: string): VerificationMethod | null => {
   // Check in the verificationMethod array
-  if (doc.verificationMethod?.some((vm: any) => vm.id === vmId)) {
-    return doc.verificationMethod.find((vm: any) => vm.id === vmId);
+  if (doc.verificationMethod?.some((vm) => vm.id === vmId)) {
+    return doc.verificationMethod.find((vm) => vm.id === vmId) ?? null;
   }
 
   // Check in other verification method relationship arrays
@@ -850,9 +861,22 @@ export const findVerificationMethod = (doc: any, vmId: string): VerificationMeth
     'capabilityDelegation',
   ];
   for (const relationship of vmRelationships) {
-    if (doc[relationship]) {
-      if (doc[relationship].some((item: any) => item.id === vmId)) {
-        return doc[relationship].find((item: any) => item.id === vmId);
+    const relationshipValues = doc[relationship as keyof DIDDoc];
+    if (
+      Array.isArray(relationshipValues) &&
+      relationshipValues.some((item) => {
+        if (typeof item !== 'object' || item === null) return false;
+        const maybeId = (item as { id?: unknown }).id;
+        return maybeId === vmId;
+      })
+    ) {
+      const match = relationshipValues.find((item) => {
+        if (typeof item !== 'object' || item === null) return false;
+        const maybeId = (item as { id?: unknown }).id;
+        return maybeId === vmId;
+      });
+      if (match && typeof match === 'object') {
+        return match as VerificationMethod;
       }
     }
   }
