@@ -47,7 +47,7 @@ export const resolveDID = async (
   const scid = didParts.length > 2 && didParts[0] === 'did' && didParts[1] === 'webvh' ? didParts[2] : undefined;
   try {
     const log = await fetchLogFromIdentifier(did);
-    const result = await v1.resolveDIDFromLog(log, { ...options, scid });
+    const result = await v1.resolveDIDFromLog(log, { ...options, scid, requestedDid: did });
     maybeWriteTestLog(result.did, log);
 
     return result;
@@ -101,7 +101,13 @@ export const resolveDIDFromLog = async (
  * @returns The updated DID, resolved document, and DID log.
  */
 export const updateDID = async (
-  options: UpdateDIDInterface & { services?: any[]; domain?: string; updated?: string }
+  options: UpdateDIDInterface & {
+    services?: any[];
+    domain?: string;
+    address?: string;
+    paths?: string[];
+    updated?: string;
+  }
 ): Promise<UpdateDIDResult> => {
   const result = await v1.updateDID(options);
   maybeWriteTestLog(result.did, result.log);

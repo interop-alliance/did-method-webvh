@@ -13,8 +13,57 @@
   returning a structured `{ scid, didDomainComponent, paths, locationKey }`) in
   `src/utils.ts`. Ported from upstream PR
   [#120](https://github.com/decentralized-identity/didwebvh-ts/pull/120).
+* SCID multihash algorithm enforcement: SCIDs must use SHA-256 (multihash code
+  `0x12`); other algorithms are rejected in `scidIsFromHash`. Ported from
+  upstream PR
+  [#121](https://github.com/decentralized-identity/didwebvh-ts/pull/121).
+* `serviceFragmentExists` in `src/utils.ts`, matching both `#files`/`#whois`
+  fragment form and the absolute `did:webvh:...#files` form when deciding whether
+  to inject implicit services. New method-version constants in
+  `src/constants.ts` (`METHOD_VERSION_1_0`, `METHOD_PROTOCOL_V1_0`,
+  `METHOD_PARAMETER_KEYS`, `ServiceFragment`, service-type/context/error-type
+  constants). Ported from upstream PR
+  [#121](https://github.com/decentralized-identity/didwebvh-ts/pull/121).
+* `requestedDid` resolution option: when set, resolution fails unless some log
+  version's `state.id` matches it. Threaded through `resolveDID`. Ported from
+  upstream PR
+  [#121](https://github.com/decentralized-identity/didwebvh-ts/pull/121).
+* `address` and `paths` options on `updateDID` (for parity with `createDID`). A
+  portable DID can now move to a new location: the controller is rebuilt from the
+  requested `address`/`domain`/`paths` while preserving the SCID. Re-passing a
+  bare domain on a pathed DID preserves the prior paths instead of dropping them.
+  Ported from upstream PR
+  [#127](https://github.com/decentralized-identity/didwebvh-ts/pull/127).
 
 ### Changed
+
+* `updateDID` now rejects `portable: true` in an update entry (portability can
+  only be enabled in the first entry) and refuses to move a DID whose
+  portability is disabled (`Cannot move DID: portability is disabled`).
+  `portable: false` in an update is permitted and permanently locks portability
+  off. `verificationMethod` is included in the historical-selector determination
+  so a requested-but-absent VM resolves to the last valid document plus an error
+  rather than `null`. Ported from upstream PR
+  [#129](https://github.com/decentralized-identity/didwebvh-ts/pull/129).
+
+* **Breaking:** `resolveDIDFromLog` now returns `doc: DIDDoc | null`. A
+  deactivated DID resolved without an explicit historical selector returns
+  `doc: null`, and an explicit selector (`versionNumber` / `versionId` /
+  `versionTime` / `verificationMethod`) that matches no entry returns
+  `doc: null` with a `NotFound` error rather than falling back to the last valid
+  document. Ported from upstream PR
+  [#121](https://github.com/decentralized-identity/didwebvh-ts/pull/121).
+* resolution enforces strict `versionId` structure (`parseAndValidateVersionId`:
+  exactly one `-`, numeric version prefix, non-empty hash, version equal to the
+  entry index + 1) and stricter method-parameter rules for entries after the
+  first: `scid` must not reappear, `method` must not change away from
+  `did:webvh:1.0`, `portable: true` may only be enabled in the first entry, and
+  `portable: false` permanently locks portability off. Each entry's `state.id`
+  SCID must match the log's SCID. Ported from upstream PR
+  [#121](https://github.com/decentralized-identity/didwebvh-ts/pull/121).
+* `did:key` verification-method parsing now rejects a fragment that does not
+  equal the key multibase. Ported from upstream PR
+  [#121](https://github.com/decentralized-identity/didwebvh-ts/pull/121).
 
 * resolution now enforces `versionTime` on every log entry: it is **required**
   (a log entry missing `versionTime` is rejected), must be **strictly
@@ -34,6 +83,13 @@
 * `createDate()` now emits full millisecond precision (`toISOString()`) instead
   of truncating to whole seconds, so consecutive entries generated in the same
   second remain strictly increasing.
+
+### Removed
+
+* **Breaking:** the non-normative `fastResolve` resolution option. The spec
+  mandates full verification of every log entry, so resolution always verifies
+  every entry's proof; there is no opt-in fast path. Ported from upstream PR
+  [#120](https://github.com/decentralized-identity/didwebvh-ts/pull/120).
 
 ## 3.2.0 - 2026-06-24
 

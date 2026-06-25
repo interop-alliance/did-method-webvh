@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'vitest';
-import { type DIDLog, DidResolutionError, type VerificationMethod } from '../src/interfaces.js';
+import type { DIDLog, VerificationMethod } from '../src/interfaces.js';
 import { createDID, resolveDIDFromLog, updateDID } from '../src/method.js';
 import { resolveDIDFromLog as resolveDIDFromLogV1 } from '../src/method_versions/method.v1.0.js';
 import {
@@ -35,12 +35,14 @@ describe('Not So Happy Path Tests', () => {
     const originalSCID = modifiedLog[0].parameters.scid;
     modifiedLog[0].parameters.scid = `${originalSCID}tampered`;
 
-    // Attempt to resolve the DID from the tampered log
-    expect(
+    // Attempt to resolve the DID from the tampered log. Appending to the SCID
+    // breaks its multihash structure, so the SHA-256 algorithm check rejects it
+    // before the derived-hash comparison.
+    await expect(
       resolveDIDFromLog(modifiedLog, {
         verifier: testImplementation,
       })
-    ).rejects.toThrow(`SCID '${originalSCID}tampered' not derived from logEntryHash`);
+    ).rejects.toThrow(/Invalid SCID format/);
   });
 
   test('Hash chain tampering is detected', async () => {
@@ -68,7 +70,7 @@ describe('Not So Happy Path Tests', () => {
     await expect(resolveDIDFromLog(tamperedLog, { verifier: testImplementation })).rejects.toThrow('Hash chain broken');
   });
 
-  test('Fast-resolve catches hash chain break on middle entries', async () => {
+  test('Resolve catches hash chain break on middle entries', async () => {
     // Build a log with 12+ entries
     let currentLog: DIDLog;
     const { log: log0 } = await createDID({
@@ -97,10 +99,8 @@ describe('Not So Happy Path Tests', () => {
     const tamperedLog: DIDLog = JSON.parse(JSON.stringify(currentLog));
     tamperedLog[3].state.alsoKnownAs = ['did:example:tampered'];
 
-    // Hash chain validation remains active even when fastResolve is opted in.
-    await expect(resolveDIDFromLog(tamperedLog, { verifier: testImplementation, fastResolve: true })).rejects.toThrow(
-      'Hash chain broken'
-    );
+    // Hash chain validation is always active for every entry.
+    await expect(resolveDIDFromLog(tamperedLog, { verifier: testImplementation })).rejects.toThrow('Hash chain broken');
   });
 
   test('Default resolve verifies every log entry proof', async () => {
@@ -126,17 +126,12 @@ describe('Not So Happy Path Tests', () => {
     }
 
     const tamperedLog: DIDLog = JSON.parse(JSON.stringify(currentLog));
-    // With 13 entries, index 1 is outside the fastResolve verification window
-    // (first entry + last 10 entries), but still checked in default full mode.
+    // Every entry proof is verified, including non-trailing entries such as index 1.
     tamperedLog[1]!.proof![0]!.proofValue = 'zinvalid-proof';
     await expect(resolveDIDFromLog(tamperedLog, { verifier: testImplementation })).rejects.toThrow();
-
-    await expect(
-      resolveDIDFromLog(tamperedLog, { verifier: testImplementation, fastResolve: true })
-    ).resolves.toBeDefined();
   });
 
-  test('Error metadata on later-entry failure', async () => {
+  test('Explicit version selector resolves a valid historical version despite later corruption', async () => {
     // Create a 3-entry log
     const { log: log1 } = await createDID({
       domain: 'example.com',
@@ -166,21 +161,18 @@ describe('Not So Happy Path Tests', () => {
     const tamperedLog: DIDLog = JSON.parse(JSON.stringify(log3));
     tamperedLog[2].state.alsoKnownAs = ['did:example:tampered'];
 
-    // Request version 1 — it should resolve, but with error metadata
-    // because entry 3 fails verification
+    // Request version 1 explicitly. Because it was explicitly requested and is
+    // itself valid, the later-entry corruption does not taint the result with
+    // error metadata: the resolver returns the clean historical version.
     const result = await resolveDIDFromLog(tamperedLog, {
       versionNumber: 1,
       verifier: testImplementation,
     });
 
     expect(result.doc).not.toBeNull();
-    expect(result.meta.error).toBe(DidResolutionError.InvalidDid);
-    expect(result.meta.problemDetails).toBeDefined();
-    expect(result.meta.problemDetails!.type).toBe(
-      'https://w3id.org/security#INVALID_CONTROLLED_IDENTIFIER_DOCUMENT_ID'
-    );
-    expect(result.meta.problemDetails!.title).toBe('The resolved DID is invalid.');
-    expect(result.meta.problemDetails!.detail).toContain('Hash chain broken');
+    expect(result.meta.versionId.split('-')[0]).toBe('1');
+    expect(result.meta.error).toBeUndefined();
+    expect(result.meta.problemDetails).toBeUndefined();
   });
 
   test('Protocol version rejection in v1.0', async () => {
