@@ -1,3 +1,19 @@
+## Unreleased - TBD
+
+### Changed
+
+* `versionTime` is now trimmed to whole-second accuracy (`createDate` in
+  `src/utils.ts` drops sub-second milliseconds), and `updateDID` uses the real
+  wall-clock time instead of auto-bumping to `previous + 1ms` when no `updated`
+  is supplied (`createNextVersionTime` in `src/utils/iso8601-datetime.ts`).
+  Ports upstream `12244b0`. Tests that chain rapid sequential `updateDID` /
+  `deactivateDID` calls now thread an explicit `updated` via a new `nextSecond`
+  test helper (`test/utils.ts`) and wait for a second boundary before
+  re-deactivation (ports upstream `053ff0c` and `c759c43`; the latter's
+  `Bun.sleep` is translated to `setTimeout` for this de-Bunned fork).
+* Condensed the controller-computation comment in
+  `src/method_versions/method.v1.0.ts` (ports upstream `3f20a7f`).
+
 ## 3.4.0 - 2026-06-25
 
 ### Removed
