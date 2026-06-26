@@ -1,5 +1,11 @@
 import { beforeAll, describe, expect, test } from 'vitest';
-import type { DataIntegrityProofTemplate, DIDLog, Signer, VerificationMethod } from '../src/interfaces.js';
+import type {
+  CreateDIDResult,
+  DataIntegrityProofTemplate,
+  DIDLog,
+  Signer,
+  VerificationMethod,
+} from '../src/interfaces.js';
 import { DidResolutionError } from '../src/interfaces.js';
 import { createDID, resolveDIDFromLog, updateDID } from '../src/method.js';
 import { MultibaseEncoding, multibaseEncode } from '../src/utils/multiformats.js';
@@ -21,7 +27,7 @@ import {
 describe('Witness Implementation Tests', async () => {
   let authKey: VerificationMethod;
   let witness1: VerificationMethod, witness2: VerificationMethod, witness3: VerificationMethod;
-  let initialDID: { did: string; doc: any; meta: any; log: DIDLog };
+  let initialDID: CreateDIDResult;
   let testImplementation: TestCryptoImplementation;
 
   beforeAll(async () => {
@@ -993,8 +999,8 @@ describe('Witness Implementation Tests', async () => {
 
   const createWitnessSigner = (verificationMethod: VerificationMethod) => {
     const signer = createTestSigner(verificationMethod);
-    return async (data: any, proofTemplate?: any) => {
-      const proof = {
+    return async (data: { versionId: string }, proofTemplate?: DataIntegrityProofTemplate) => {
+      const proof: DataIntegrityProofTemplate = {
         type: 'DataIntegrityProof',
         cryptosuite: 'eddsa-jcs-2022',
         verificationMethod: signer.getVerificationMethodId(),

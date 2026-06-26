@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'vitest';
-import type { CreateDIDInterface, DIDLog, VerificationMethod } from '../src/interfaces.js';
+import type { CreateDIDInterface, CreateDIDResult, DIDLog, VerificationMethod } from '../src/interfaces.js';
 import { createDID, deactivateDID, resolveDIDFromLog, updateDID } from '../src/method.js';
 import { resolveDIDFromLog as resolveDIDFromLogV1 } from '../src/method_versions/method.v1.0.js';
 import { createMultihash, encodeBase58Btc, MultihashAlgorithm } from '../src/utils/multiformats.js';
@@ -15,7 +15,7 @@ import {
 describe('Not So Happy Path Tests', () => {
   let authKey: VerificationMethod;
   let testImplementation: TestCryptoImplementation;
-  let initialDID: { did: string; doc: any; meta: any; log: DIDLog };
+  let initialDID: CreateDIDResult;
 
   const waitForNextSecondBoundary = async () => {
     const startSecond = Math.floor(Date.now() / 1000);

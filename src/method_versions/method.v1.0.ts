@@ -33,7 +33,6 @@ import {
   createDate,
   createDIDDoc,
   createSCID,
-  deepClone,
   deriveHash,
   enrichAlsoKnownAs,
   findVerificationMethod,
@@ -124,7 +123,7 @@ export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDR
   let doc: DIDDoc;
   if (options.didDocument) {
     validateCreateDidDocument(options.didDocument);
-    doc = deepClone(options.didDocument);
+    doc = structuredClone(options.didDocument);
   } else {
     if (!safeVerificationMethods || safeVerificationMethods.length === 0) {
       throw new Error('verificationMethods must be provided when didDocument is not supplied');
@@ -221,7 +220,7 @@ export const resolveDIDFromLog = async (
   if (options.verificationMethod && (options.versionNumber || options.versionId)) {
     throw new Error('Cannot specify both verificationMethod and version number/id');
   }
-  const resolutionLog = log.map((l) => deepClone(l));
+  const resolutionLog = log.map((l) => structuredClone(l));
   if (resolutionLog.length === 0) {
     throw new Error(`Log identity binding check failed: no entries to process`);
   }
@@ -266,7 +265,7 @@ export const resolveDIDFromLog = async (
     while (i < resolutionLog.length) {
       const { versionId, versionTime, parameters, state, proof } = resolutionLog[i];
       const { version, versionNumber, entryHash } = parseAndValidateVersionId(versionId, i + 1);
-      const previousWitness = meta.witness ? deepClone(meta.witness) : undefined;
+      const previousWitness = meta.witness ? structuredClone(meta.witness) : undefined;
       meta.versionId = versionId;
       if (!versionTime) {
         throw new Error(`version '${version}' is missing versionTime`);
@@ -434,8 +433,7 @@ export const resolveDIDFromLog = async (
         });
       }
 
-      // Optimized: Use efficient cloning instead of clone() function
-      doc = deepClone(newDoc) as DIDDoc;
+      doc = structuredClone(newDoc) as DIDDoc;
       did = requireDidId(doc.id);
 
       if (options.requestedDid && did === options.requestedDid) {
@@ -452,12 +450,12 @@ export const resolveDIDFromLog = async (
         matchesSelector = !nextEntry || options.versionTime < new Date(nextEntry.versionTime);
       }
       if (matchesSelector && !resolvedDoc) {
-        resolvedDoc = deepClone(doc);
+        resolvedDoc = structuredClone(doc);
         resolvedDid = did;
         resolvedMeta = { ...meta };
       }
 
-      lastValidDoc = deepClone(doc);
+      lastValidDoc = structuredClone(doc);
       lastValidDid = did;
       lastValidMeta = { ...meta };
 
@@ -680,7 +678,7 @@ export const updateDID = async (
 
   // Carry the prior DID document forward and selectively overlay only the fields
   // this update actually supplies, so a sparse updateDID() preserves prior state.
-  const doc = deepClone(lastEntry.state);
+  const doc = structuredClone(lastEntry.state);
   doc['@context'] = normalizedUpdateDoc['@context'];
   doc.id = normalizedUpdateDoc.id;
   doc.controller = normalizedUpdateDoc.controller;
@@ -867,18 +865,18 @@ const getRequiredWitnessForEntry = (
 
   if (explicitWitness !== undefined) {
     if (isWitnessActive(currentWitness)) {
-      return deepClone(currentWitness);
+      return structuredClone(currentWitness);
     }
 
     if (isWitnessActive(previousWitness)) {
-      return deepClone(previousWitness);
+      return structuredClone(previousWitness);
     }
 
     return undefined;
   }
 
   if (isWitnessActive(previousWitness)) {
-    return deepClone(previousWitness);
+    return structuredClone(previousWitness);
   }
 
   return undefined;
