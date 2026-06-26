@@ -1,4 +1,4 @@
-## Unreleased - TBD
+## 3.5.2 - 2026-06-26
 
 ### Fixed
 
