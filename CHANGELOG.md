@@ -1,3 +1,27 @@
+## Unreleased - TBD
+
+### Fixed
+
+* Witness proof verification now hashes each witness proof against its own
+  `versionId` (the value the witness actually signed in `did-witness.json`)
+  rather than the target log entry's `versionId`. This restores the spec's
+  cumulative-approval rule -- a later proof approves all prior entries -- so a
+  pruned `did-witness.json` resolves instead of failing with `Witness threshold
+  not met`. Ported from upstream
+  [`7c97a7a`](https://github.com/decentralized-identity/didwebvh-ts/commit/7c97a7a3ed55459dc6e776f8bdc70171d38d52f1).
+* A witness-list change is now governed by the *previous* list, not the new one.
+  Per spec a replaced/reduced witness list activates only after its defining
+  entry is published, so that entry must be witnessed by the prior list
+  (activation from `{}` is the one immediate case). `getRequiredWitnessForEntry`
+  now checks the previous list first. Ported from upstream
+  [`7c97a7a`](https://github.com/decentralized-identity/didwebvh-ts/commit/7c97a7a3ed55459dc6e776f8bdc70171d38d52f1).
+* `updateDID` now appends the prior DID to the new document's `alsoKnownAs` when
+  a portable DID moves to a new location (`controller !== lastEntryDid`), keeping
+  the old identifier discoverable. Completes the portable-move support added in
+  3.3.0. Ported from upstream PR
+  [#133](https://github.com/decentralized-identity/didwebvh-ts/pull/133)
+  (commits `46c494e`, `dcd8393`).
+
 ## 3.5.1 - 2026-06-25
 
 ### Fixed
