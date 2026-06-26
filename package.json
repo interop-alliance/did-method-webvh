@@ -45,6 +45,7 @@
     "vitest": "^4.0.0"
   },
   "dependencies": {
+    "@noble/curves": "^2.2.0",
     "@noble/hashes": "^2.2.0",
     "json-canonicalize": "^2.0.0"
   },
@@ -62,6 +63,12 @@
     "./types": {
       "types": "./dist/types.d.ts",
       "default": "./dist/types.js"
+    },
+    "./driver": {
+      "types": "./dist/driver.d.ts",
+      "react-native": "./dist/driver.js",
+      "import": "./dist/driver.js",
+      "default": "./dist/driver.js"
     }
   }
 }

@@ -1,5 +1,19 @@
 ## Unreleased - TBD
 
+### Added
+
+* `@interop/did-method-webvh/driver` subpath export with `createDidWebvhDriver()`
+  -- a did-io-compatible `{ method, get }` driver for JSON-LD document loaders
+  (e.g. `@interop/security-document-loader`'s `CachedResolver`). It resolves
+  `did:webvh` DIDs and dereferences `did#fragment` verification methods over
+  `resolveDID`, with fragment dereferencing inlined (no `@interop/did-web-resolver`
+  dependency) and the did-io driver shape implemented as a plain literal (no
+  `@interop/did-io` dependency). History-log proofs are verified with a
+  caller-supplied `verifier`, defaulting to the new `defaultWebvhLogVerifier`
+  (Ed25519 over `@noble/curves`), so the core stays crypto-agnostic. The root
+  export is unchanged -- resolver-only consumers pull none of the driver code.
+* `@noble/curves` dependency, reachable only via the `/driver` subpath.
+
 ### Changed
 
 * Removed the hand-rolled `deepClone` helper from `src/utils.ts` in favor of the
