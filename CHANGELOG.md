@@ -2,6 +2,12 @@
 
 ### Changed
 
+* Removed the hand-rolled `deepClone` helper from `src/utils.ts` in favor of the
+  global `structuredClone` (available on all supported runtimes, including React
+  Native 0.75+). All call sites in `src/utils.ts` and
+  `src/method_versions/method.v1.0.ts` now use `structuredClone`; behavior is
+  unchanged (it preserves `Date` instances, the one case the old helper
+  special-cased).
 * `versionTime` is now trimmed to whole-second accuracy (`createDate` in
   `src/utils.ts` drops sub-second milliseconds), and `updateDID` uses the real
   wall-clock time instead of auto-bumping to `previous + 1ms` when no `updated`
@@ -13,6 +19,22 @@
   `Bun.sleep` is translated to `setTimeout` for this de-Bunned fork).
 * Condensed the controller-computation comment in
   `src/method_versions/method.v1.0.ts` (ports upstream `3f20a7f`).
+* Tightened type safety in `src/utils.ts`: genericized
+  `replaceValueInObject<T>`, widened `deriveHash` / `getCachedHash` /
+  `setCachedHash` inputs from `any` to `unknown`, and typed `normalizeVMs`,
+  `isNodeEnvironment`, and `findVerificationMethod` without `any`. Removed the
+  unused deprecated `clone` export. Flipped Biome's `noExplicitAny` from `off`
+  to `error` for `src/` and `test/` (the `examples/` / `scripts/` override stays
+  `off`), and removed the remaining explicit `any`s from the test suite to
+  satisfy it. Ports the library-side portion of upstream `e58fe36` (its
+  `src/cli.ts` changes are N/A for this fork).
+* Replaced the remaining `as unknown as DIDLogEntry` / `as unknown as DIDLog`
+  double-casts in `test/cryptography.test.ts` and `test/features.test.ts` with
+  properly typed `DIDLogEntry` objects (full `versionId` / `versionTime` /
+  `parameters` / `state` shape and a `proof: [...]` array). Ports the remaining
+  applicable portion of upstream `988cf46`; most of that commit's `any`
+  removals were already done in this fork's `e58fe36` pass, and its
+  `test/cli-e2e.test.ts` change is N/A.
 
 ## 3.4.0 - 2026-06-25
 

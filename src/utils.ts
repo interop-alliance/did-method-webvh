@@ -325,11 +325,16 @@ export function parseDidWebvhIdentifier(did: string, context: string): ParsedDid
   };
 }
 
+type ProcessVersionsLike = { node?: string; bun?: string };
+
 // Environment detection - treat React Native like a browser, but Bun as Node-like
 const isNodeEnvironment =
   typeof process !== 'undefined' &&
   typeof window === 'undefined' &&
-  !!((process.versions && (process.versions as any).node) || (process.versions as any).bun);
+  !!(
+    (process.versions as ProcessVersionsLike | undefined)?.node ||
+    (process.versions as ProcessVersionsLike | undefined)?.bun
+  );
 
 const getFS = async (): Promise<typeof import('node:fs')> => {
   if (!isNodeEnvironment) {
@@ -402,7 +407,7 @@ export function enrichAlsoKnownAs(doc: DIDDoc, did: string, opts: { alsoKnownAsW
 }
 
 export function generateParallelDidWeb(didwebvhDid: string, didwebvhDoc: DIDDoc): DIDDoc {
-  let webDoc = deepClone(didwebvhDoc);
+  let webDoc = structuredClone(didwebvhDoc);
 
   const scidPrefix = didwebvhDid.replace(/^did:webvh:([^:]+):.*$/, 'did:webvh:$1:');
   webDoc = replaceValueInObject(webDoc, scidPrefix, 'did:web:');
@@ -524,20 +529,6 @@ export const writeVerificationMethodToEnv = async (verificationMethod: Verificat
   }
 };
 
-export const clone = (input: any) => JSON.parse(JSON.stringify(input));
-
-export function deepClone(obj: any): any {
-  if (obj === null || typeof obj !== 'object') return obj;
-  if (obj instanceof Date) return new Date(obj.getTime());
-  if (Array.isArray(obj)) return obj.map((item) => deepClone(item));
-
-  const cloned: any = {};
-  for (const [key, value] of Object.entries(obj)) {
-    cloned[key] = deepClone(value);
-  }
-  return cloned;
-}
-
 export const getBaseUrl = (id: string) => {
   if (hasFragmentOrQuery(id)) {
     throw new Error('did:webvh identifier must not include query or fragment components');
@@ -598,7 +589,7 @@ export const createSCID = async (logEntryHash: string): Promise<string> => {
 // Cache for deriveHash operations to avoid redundant computation
 const hashCache = new Map<string, string>();
 
-function getCachedHash(input: any): string | undefined {
+function getCachedHash(input: unknown): string | undefined {
   try {
     const key = JSON.stringify(input);
     return hashCache.get(key);
@@ -607,7 +598,7 @@ function getCachedHash(input: any): string | undefined {
   }
 }
 
-function setCachedHash(input: any, hash: string): void {
+function setCachedHash(input: unknown, hash: string): void {
   try {
     const key = JSON.stringify(input);
     hashCache.set(key, hash);
@@ -617,7 +608,7 @@ function setCachedHash(input: any, hash: string): void {
 }
 
 // Input must be strict JSON-compatible and must not contain explicit undefined values.
-export async function deriveHash(input: any): Promise<string> {
+export async function deriveHash(input: unknown): Promise<string> {
   const cached = getCachedHash(input);
   if (cached) {
     return cached;
@@ -721,8 +712,23 @@ export const createVMID = (vm: VerificationMethod, did: string | null) => {
   return `${did ?? ''}#${vm.publicKeyMultibase?.slice(-8) || generateRandomId(8)}`;
 };
 
-export const normalizeVMs = (verificationMethod: VerificationMethod[] | undefined, did: string | null = null) => {
-  const all: any = {
+type NormalizedVerificationMethods = Required<
+  Pick<
+    DIDDoc,
+    | 'verificationMethod'
+    | 'authentication'
+    | 'assertionMethod'
+    | 'keyAgreement'
+    | 'capabilityDelegation'
+    | 'capabilityInvocation'
+  >
+>;
+
+export const normalizeVMs = (
+  verificationMethod: VerificationMethod[] | undefined,
+  did: string | null = null
+): NormalizedVerificationMethods => {
+  const all: NormalizedVerificationMethods = {
     verificationMethod: [],
     authentication: [],
     assertionMethod: [],
@@ -744,7 +750,7 @@ export const normalizeVMs = (verificationMethod: VerificationMethod[] | undefine
     // Default controller to the DID — required by W3C DID Core §5.2
     controller: vm.controller ?? did,
   }));
-  all.verificationMethod = vms;
+  all.verificationMethod = vms as unknown as VerificationMethod[];
 
   // A VM's `purpose` may name a single relationship or several; an absent (or
   // empty) purpose defaults the key into authentication.
@@ -853,19 +859,19 @@ export async function fetchWitnessProofs(did: string): Promise<WitnessProofFileE
   }
 }
 
-export function replaceValueInObject(obj: any, searchValue: string, replaceValue: string): any {
+export function replaceValueInObject<T>(obj: T, searchValue: string, replaceValue: string): T {
   if (typeof obj === 'string') {
-    return obj.replaceAll(searchValue, replaceValue);
+    return obj.replaceAll(searchValue, replaceValue) as T;
   }
   if (Array.isArray(obj)) {
-    return obj.map((item) => replaceValueInObject(item, searchValue, replaceValue));
+    return obj.map((item) => replaceValueInObject(item, searchValue, replaceValue)) as T;
   }
   if (obj && typeof obj === 'object') {
-    const result: any = {};
-    for (const [key, value] of Object.entries(obj)) {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
       result[key] = replaceValueInObject(value, searchValue, replaceValue);
     }
-    return result;
+    return result as T;
   }
   return obj;
 }

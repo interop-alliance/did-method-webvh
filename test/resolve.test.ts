@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'vitest';
-import type { DIDLog, VerificationMethod } from '../src/interfaces.js';
+import type { CreateDIDResult, DIDLog, VerificationMethod } from '../src/interfaces.js';
 import { DidResolutionError } from '../src/interfaces.js';
 import { createDID, resolveDIDFromLog, updateDID } from '../src/method.js';
 import { getBaseUrl, getFileUrl } from '../src/utils.js';
@@ -11,7 +11,7 @@ import {
 } from './utils.js';
 
 describe('resolveDIDFromLog with verificationMethod', () => {
-  let initialDID: { did: string; doc: any; meta: any; log: DIDLog };
+  let initialDID: CreateDIDResult;
   let fullLog: DIDLog;
   let authKey1: VerificationMethod,
     authKey2: VerificationMethod,

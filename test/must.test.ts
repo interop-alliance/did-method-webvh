@@ -1,5 +1,12 @@
 import { beforeAll, describe, expect, test } from 'vitest';
-import type { DIDLog, VerificationMethod } from '../src/interfaces.js';
+import type {
+  CreateDIDResult,
+  DataIntegrityProofTemplate,
+  DIDDoc,
+  DIDLog,
+  VerificationMethod,
+  WitnessProofFileEntry,
+} from '../src/interfaces.js';
 import { createDID, deactivateDID, resolveDIDFromLog, updateDID } from '../src/method.js';
 import { createWitnessProof } from '../src/witness.js';
 import {
@@ -10,7 +17,7 @@ import {
 } from './utils.js';
 
 describe('did:webvh normative tests', async () => {
-  let newDoc1: any;
+  let newDoc1: DIDDoc;
   let newLog1: DIDLog;
   let authKey1: VerificationMethod;
   let testImplementation: TestCryptoImplementation;
@@ -41,7 +48,7 @@ describe('did:webvh normative tests', async () => {
     let err: unknown;
     const malformedLog = 'malformed log content';
     try {
-      await resolveDIDFromLog(malformedLog as any, { verifier: testImplementation });
+      await resolveDIDFromLog(malformedLog as unknown as DIDLog, { verifier: testImplementation });
     } catch (e) {
       err = e;
     }
@@ -85,7 +92,7 @@ describe('did:webvh normative tests', async () => {
 describe('did:webvh normative witness tests', async () => {
   let authKey1: VerificationMethod;
   let witness1: VerificationMethod, witness2: VerificationMethod, witness3: VerificationMethod;
-  let initialDID: { did: string; doc: any; meta: any; log: DIDLog };
+  let initialDID: CreateDIDResult;
   let testImplementation: TestCryptoImplementation;
   let witnessImpl1: TestCryptoImplementation,
     witnessImpl2: TestCryptoImplementation,
@@ -96,8 +103,8 @@ describe('did:webvh normative witness tests', async () => {
 
   const createWitnessSigner = (verificationMethod: VerificationMethod) => {
     const signer = createTestSigner(verificationMethod);
-    return async (data: any, proofTemplate?: any) => {
-      const proof = {
+    return async (data: { versionId: string }, proofTemplate?: DataIntegrityProofTemplate) => {
+      const proof: DataIntegrityProofTemplate = {
         type: 'DataIntegrityProof',
         cryptosuite: 'eddsa-jcs-2022',
         verificationMethod: signer.getVerificationMethodId(),
@@ -185,7 +192,7 @@ describe('did:webvh normative witness tests', async () => {
     let err: unknown;
     try {
       await resolveDIDFromLog(initialDID.log, {
-        witnessProofs: mockWitnessProofs as any,
+        witnessProofs: mockWitnessProofs as unknown as WitnessProofFileEntry[],
         verifier: testImplementation,
       });
     } catch (e) {
@@ -227,7 +234,7 @@ describe('did:webvh normative witness tests', async () => {
     let err: unknown;
     try {
       await resolveDIDFromLog(initialDID.log, {
-        witnessProofs: mockWitnessProofs as any,
+        witnessProofs: mockWitnessProofs as unknown as WitnessProofFileEntry[],
         verifier: testImplementation,
       });
     } catch (e) {
@@ -259,7 +266,7 @@ describe('did:webvh normative witness tests', async () => {
     let err: unknown;
     try {
       await resolveDIDFromLog(initialDID.log, {
-        witnessProofs: mockWitnessProofs as any,
+        witnessProofs: mockWitnessProofs as unknown as WitnessProofFileEntry[],
         verifier: testImplementation,
       });
     } catch (e) {
