@@ -121,12 +121,25 @@ export function createNextVersionTime(
   const previous = parseUtcIso8601VersionTime(previousVersionTime, 'previous versionTime');
 
   if (requestedVersionTime) {
-    const requested = parseUtcIso8601VersionTime(requestedVersionTime, 'requested versionTime');
-    if (requested.getTime() <= previous.getTime()) {
+    parseUtcIso8601VersionTime(requestedVersionTime, 'requested versionTime');
+    // Compare the formatted (whole-second-trimmed) value, since that is what is
+    // written: a sub-second requested time that trims down to `previous` would
+    // otherwise pass the raw comparison yet emit a colliding versionTime.
+    const formatted = formatDate(requestedVersionTime);
+    if (new Date(formatted).getTime() <= previous.getTime()) {
       throw new Error('versionTime must be greater than previous versionTime');
     }
-    return formatDate(requestedVersionTime);
+    return formatted;
   }
 
-  return formatDate(new Date());
+  // versionTime is trimmed to whole seconds, so a wall-clock `now` within the
+  // same second as the previous entry collides. Bump to `previous + 1s` to keep
+  // versionTime strictly increasing (the resolver requires it).
+  const nowFormatted = formatDate(new Date());
+  const nowTrimmed = new Date(nowFormatted);
+  if (nowTrimmed.getTime() <= previous.getTime()) {
+    return formatDate(new Date(previous.getTime() + 1000));
+  }
+
+  return nowFormatted;
 }

@@ -1,3 +1,18 @@
+## 3.5.1 - TBD
+
+### Fixed
+
+* `createNextVersionTime` now keeps `versionTime` strictly increasing when
+  consecutive entries land in the same wall-clock second. Since `versionTime` is
+  trimmed to whole seconds (3.4.0+), a rapid create-then-update produced an equal
+  timestamp that the resolver rejects (`versionTime for version 'N' must be
+  greater than previous entry time`). It now bumps a colliding `now` to
+  `previous + 1s`, and the `requestedVersionTime` branch compares the formatted
+  (whole-second) value so a sub-second request that trims down to the previous
+  second is rejected rather than emitting a collision. Restores parity with
+  canonical upstream `didwebvh-ts` (the `previous + 1000` fallback was dropped in
+  the 3.4.0 whole-second port).
+
 ## 3.5.0 - 2026-06-25
 
 ### Added
