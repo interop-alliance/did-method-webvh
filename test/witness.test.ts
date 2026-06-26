@@ -14,6 +14,7 @@ import {
   asPublicVerificationMethods,
   createTestSigner,
   generateTestVerificationMethod,
+  nextSecond,
   TestCryptoImplementation,
 } from './utils.js';
 
@@ -95,6 +96,7 @@ describe('Witness Implementation Tests', async () => {
 
     const updatedDID = await updateDID({
       log: noWitnessDID.log,
+      updated: nextSecond(noWitnessDID.log),
       signer: createTestSigner(authKey),
       updateKeys: [newAuthKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(newAuthKey),
@@ -145,6 +147,7 @@ describe('Witness Implementation Tests', async () => {
 
     const updatedDID = await updateDID({
       log: noWitnessDID.log,
+      updated: nextSecond(noWitnessDID.log),
       signer: createTestSigner(authKey),
       updateKeys: [newAuthKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(newAuthKey),
@@ -230,6 +233,7 @@ describe('Witness Implementation Tests', async () => {
 
     const updated = await updateDID({
       log: created.log,
+      updated: nextSecond(created.log),
       signer: createTestSigner(authKey),
       updateKeys: [authKey2.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey2),
@@ -290,6 +294,7 @@ describe('Witness Implementation Tests', async () => {
 
     const firstUpdate = await updateDID({
       log: created.log,
+      updated: nextSecond(created.log),
       signer: createTestSigner(authKey),
       updateKeys: [`did:key:${authKey2.publicKeyMultibase}`],
       verificationMethods: asPublicVerificationMethods(authKey2),
@@ -311,6 +316,7 @@ describe('Witness Implementation Tests', async () => {
     await expect(
       updateDID({
         log: firstUpdate.log,
+        updated: nextSecond(firstUpdate.log),
         signer: createTestSigner(authKey2),
         updateKeys: [authKey3.publicKeyMultibase!],
         verificationMethods: asPublicVerificationMethods(authKey3),
@@ -349,6 +355,7 @@ describe('Witness Implementation Tests', async () => {
     await expect(
       updateDID({
         log: created.log,
+        updated: nextSecond(created.log),
         signer: nonCompliantSigner,
         updateKeys: [authKey2.publicKeyMultibase!],
         verificationMethods: asPublicVerificationMethods(authKey2),
@@ -372,6 +379,7 @@ describe('Witness Implementation Tests', async () => {
 
     const updatedDID = await updateDID({
       log: initialDID.log,
+      updated: nextSecond(initialDID.log),
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -415,6 +423,7 @@ describe('Witness Implementation Tests', async () => {
 
     const updatedDID = await updateDID({
       log: initialDID.log,
+      updated: nextSecond(initialDID.log),
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -660,6 +669,7 @@ describe('Witness Implementation Tests', async () => {
 
     const updatedDid = await updateDID({
       log: didWithWitness.log,
+      updated: nextSecond(didWithWitness.log),
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -713,6 +723,7 @@ describe('Witness Implementation Tests', async () => {
 
     const updatedDid = await updateDID({
       log: didWithWitness.log,
+      updated: nextSecond(didWithWitness.log),
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -815,6 +826,7 @@ describe('Witness Implementation Tests', async () => {
 
     const updatedDid = await updateDID({
       log: didWithWitness.log,
+      updated: nextSecond(didWithWitness.log),
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -873,6 +885,7 @@ describe('Witness Implementation Tests', async () => {
     expect(
       updateDID({
         log: noWitnessDID.log,
+        updated: nextSecond(noWitnessDID.log),
         signer: createTestSigner(authKey),
         updateKeys: [authKey.publicKeyMultibase!],
         verificationMethods: asPublicVerificationMethods(authKey),
@@ -896,6 +909,7 @@ describe('Witness Implementation Tests', async () => {
 
     const updatedDID = await updateDID({
       log: noWitnessDID.log,
+      updated: nextSecond(noWitnessDID.log),
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),

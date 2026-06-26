@@ -582,7 +582,8 @@ export async function fetchLogFromIdentifier(identifier: string): Promise<DIDLog
   }
 }
 
-export const createDate = (created?: Date | string) => new Date(created ?? Date.now()).toISOString();
+export const createDate = (created?: Date | string) =>
+  new Date(created ?? Date.now()).toISOString().replace(/\.\d{1,3}Z$/, 'Z');
 
 export function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes)
