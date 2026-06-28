@@ -1,4 +1,10 @@
-import { config } from '../config.js';
+import { base64 } from '@scure/base';
+
+// Node and Bun expose a global `Buffer`; browsers, React Native, and Web/Service
+// Workers do not. Testing for the global directly (rather than sniffing for
+// `window`) routes every non-Node runtime -- including workers, which have
+// neither `window` nor `process` -- to the pure-JS / @scure/base path.
+const hasNodeBuffer = typeof Buffer !== 'undefined';
 
 // Helper to convert bytes to hex string
 const bytesToHex = (bytes: Uint8Array): string => {
@@ -7,28 +13,15 @@ const bytesToHex = (bytes: Uint8Array): string => {
     .join('');
 };
 
-// Helper to convert hex string to bytes
-const hexToBytes = (hex: string): Uint8Array => {
-  if (hex.length % 2 !== 0) {
-    throw new Error('Hex string must have an even number of characters');
-  }
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
-  }
-  return bytes;
-};
-
 // Buffer polyfill for browser environments
 export const createBuffer = (input: string, encoding?: BufferEncoding): Uint8Array => {
-  if (!config.isBrowser) {
-    return Buffer.from(input, encoding);
+  // Handle base64 encoding via @scure/base (browser/RN-safe, no Buffer)
+  if (encoding === 'base64') {
+    return base64.decode(input);
   }
 
-  // Handle base64 encoding specifically
-  if (encoding === 'base64') {
-    const binaryString = atob(input);
-    return new Uint8Array(binaryString.length).map((_, i) => binaryString.charCodeAt(i));
+  if (hasNodeBuffer) {
+    return Buffer.from(input, encoding);
   }
 
   // Default to UTF-8 encoding
@@ -36,7 +29,12 @@ export const createBuffer = (input: string, encoding?: BufferEncoding): Uint8Arr
 };
 
 export const bufferToString = (buffer: Uint8Array, encoding?: BufferEncoding): string => {
-  if (!config.isBrowser) {
+  // Handle base64 encoding via @scure/base (browser/RN-safe, no Buffer)
+  if (encoding === 'base64') {
+    return base64.encode(buffer);
+  }
+
+  if (hasNodeBuffer) {
     return Buffer.from(buffer).toString(encoding);
   }
 
@@ -45,18 +43,12 @@ export const bufferToString = (buffer: Uint8Array, encoding?: BufferEncoding): s
     return bytesToHex(buffer);
   }
 
-  // Handle base64 encoding specifically
-  if (encoding === 'base64') {
-    const binary = String.fromCharCode(...buffer);
-    return btoa(binary);
-  }
-
   // Default to UTF-8 encoding
   return new TextDecoder().decode(buffer);
 };
 
 export const concatBuffers = (...buffers: Uint8Array[]): Uint8Array => {
-  if (!config.isBrowser) {
+  if (hasNodeBuffer) {
     return Buffer.concat(buffers);
   }
 

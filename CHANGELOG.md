@@ -1,3 +1,22 @@
+## Unreleased - TBD
+
+### Fixed
+
+* Browser/Vite compatibility: base64 and base64url encoding now go through
+  `@scure/base` (`base64` / `base64urlnopad`) instead of Node's `Buffer`. This
+  removes the only unguarded `Buffer` reference in `src/` -- `encodeBase64Url`
+  in `src/utils/multiformats.ts`, reachable from the public `multibaseEncode()`
+  -- which threw `Buffer is not defined` in browser bundles that do not polyfill
+  Node built-ins. The `base64` branch of `createBuffer` / `bufferToString` in
+  `src/utils/buffer.ts` was unified onto `@scure/base` as well, dropping its
+  `atob`/`btoa` browser fork. Adds `@scure/base` as a runtime dependency.
+* `src/utils/buffer.ts` now selects the Node `Buffer` fast path via
+  `typeof Buffer !== 'undefined'` instead of sniffing for `window`. Web/Service
+  Workers have neither `window` nor `process`, so the old check misrouted them
+  to the `Buffer` branch and threw; they now use the pure-JS path like any other
+  non-Node runtime. This also removes `buffer.ts`'s dependency on `config`
+  (eliminating a `buffer` to `config` import cycle).
+
 ## 3.5.2 - 2026-06-26
 
 ### Fixed
