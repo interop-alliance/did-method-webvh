@@ -432,11 +432,30 @@ export const readLogFromDisk = async (path: string): Promise<DIDLog> => {
   return readLogFromString(fs.readFileSync(path, 'utf8'));
 };
 
+/**
+ * Parses a JSON Lines (`.jsonl`) DID log into an in-memory {@link DIDLog}.
+ *
+ * Tolerance rules: leading/trailing whitespace (including a trailing newline)
+ * is trimmed before splitting, so a file ending in `\n` parses cleanly. Each
+ * remaining line must be a complete JSON object; blank lines *between* entries
+ * are not tolerated and will throw (`JSON.parse('')`). This is the inverse of
+ * {@link logToJsonlString}.
+ */
 export const readLogFromString = (str: string): DIDLog => {
   return str
     .trim()
     .split('\n')
     .map((l) => JSON.parse(l));
+};
+
+/**
+ * Serializes a {@link DIDLog} to a JSON Lines (`.jsonl`) string: one JSON
+ * object per line, newline-separated, with no trailing newline. Inverse of
+ * {@link readLogFromString} (which tolerates a trailing newline on read). Every
+ * self-hosting consumer needs this to publish the log as `did.jsonl`.
+ */
+export const logToJsonlString = (log: DIDLog): string => {
+  return log.map((entry) => JSON.stringify(entry)).join('\n');
 };
 
 export const writeLogToDisk = async (path: string, log: DIDLog) => {
@@ -586,8 +605,14 @@ export const createSCID = async (logEntryHash: string): Promise<string> => {
   return logEntryHash;
 };
 
-// Cache for deriveHash operations to avoid redundant computation
+// Cache for deriveHash operations to avoid redundant computation. Bounded with
+// a simple FIFO eviction so a long-lived process (e.g. a resolver serving many
+// DIDs, keyed by full log entries) cannot grow it without limit.
+export const HASH_CACHE_MAX_ENTRIES = 500;
 const hashCache = new Map<string, string>();
+
+/** @internal Test-only accessor for the bounded deriveHash memo cache size. */
+export const getHashCacheSizeForTests = (): number => hashCache.size;
 
 function getCachedHash(input: unknown): string | undefined {
   try {
@@ -602,6 +627,13 @@ function setCachedHash(input: unknown, hash: string): void {
   try {
     const key = JSON.stringify(input);
     hashCache.set(key, hash);
+    // Map preserves insertion order, so the first key is the oldest insertion.
+    if (hashCache.size > HASH_CACHE_MAX_ENTRIES) {
+      const oldestKey = hashCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        hashCache.delete(oldestKey);
+      }
+    }
   } catch {
     // Ignore caching errors
   }
@@ -621,6 +653,13 @@ export async function deriveHash(input: unknown): Promise<string> {
   return result;
 }
 
+/**
+ * Derives a `nextKeyHashes` entry from an update key (its `did:key`
+ * multibase). Returns the spec's bare base58btc multihash, NOT `z`-prefixed
+ * multibase -- did:webvh 1.0 mandates `nextKeyHashes` entries be multihash
+ * base58btc. Do NOT multibase-encode the result; the asymmetry with every
+ * other `z`-prefixed value in this API is intentional and spec-required.
+ */
 export const deriveNextKeyHash = async (input: string): Promise<string> => {
   const hash = await createHash(input);
   const multihash = createMultihash(new Uint8Array(hash), MultihashAlgorithm.SHA2_256);
@@ -629,7 +668,7 @@ export const deriveNextKeyHash = async (input: string): Promise<string> => {
 
 export const createDIDDoc = async (options: CreateDIDInterface): Promise<{ doc: DIDDoc }> => {
   const { controller } = options;
-  const all = normalizeVMs(options.verificationMethods, controller);
+  const all = normalizeVMs(options.verificationMethods, controller, options.vmIdFragment);
 
   // Create the base document
   const doc: DIDDoc = {
@@ -708,8 +747,23 @@ export const generateRandomId = (length: number = 8): string => {
   return result;
 };
 
-export const createVMID = (vm: VerificationMethod, did: string | null) => {
-  return `${did ?? ''}#${vm.publicKeyMultibase?.slice(-8) || generateRandomId(8)}`;
+/**
+ * Builds a verification-method id (`<did>#<fragment>`). The fragment is derived
+ * from `publicKeyMultibase`: `'short'` (default, and the historical behavior)
+ * uses its last 8 characters; `'multibase'` uses the full multibase, yielding a
+ * self-describing `#<publicKeyMultibase>` fragment. When no `publicKeyMultibase`
+ * is present, a random 8-char id is used regardless of mode.
+ */
+export const createVMID = (
+  vm: VerificationMethod,
+  did: string | null,
+  vmIdFragment: 'short' | 'multibase' = 'short'
+) => {
+  const fragment =
+    vmIdFragment === 'multibase' && vm.publicKeyMultibase
+      ? vm.publicKeyMultibase
+      : vm.publicKeyMultibase?.slice(-8) || generateRandomId(8);
+  return `${did ?? ''}#${fragment}`;
 };
 
 type NormalizedVerificationMethods = Required<
@@ -726,7 +780,8 @@ type NormalizedVerificationMethods = Required<
 
 export const normalizeVMs = (
   verificationMethod: VerificationMethod[] | undefined,
-  did: string | null = null
+  did: string | null = null,
+  vmIdFragment: 'short' | 'multibase' = 'short'
 ): NormalizedVerificationMethods => {
   const all: NormalizedVerificationMethods = {
     verificationMethod: [],
@@ -746,7 +801,7 @@ export const normalizeVMs = (
   // it is dropped from the emitted entries.
   const vms = verificationMethod.map(({ purpose, ...vm }) => ({
     ...vm,
-    id: vm.id ?? createVMID(vm, did),
+    id: vm.id ?? createVMID(vm, did, vmIdFragment),
     // Default controller to the DID — required by W3C DID Core §5.2
     controller: vm.controller ?? did,
   }));
@@ -756,7 +811,7 @@ export const normalizeVMs = (
   // empty) purpose defaults the key into authentication.
   const purposesOf = (vm: VerificationMethod): string[] =>
     vm.purpose == null ? [] : Array.isArray(vm.purpose) ? vm.purpose : [vm.purpose];
-  const idOf = (vm: VerificationMethod) => vm.id ?? createVMID(vm, did);
+  const idOf = (vm: VerificationMethod) => vm.id ?? createVMID(vm, did, vmIdFragment);
 
   // Then handle relationships - default to authentication if no purpose is specified
   all.authentication = verificationMethod

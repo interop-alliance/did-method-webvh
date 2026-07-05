@@ -1,10 +1,13 @@
 import { base64 } from '@scure/base';
 
-// Node and Bun expose a global `Buffer`; browsers, React Native, and Web/Service
-// Workers do not. Testing for the global directly (rather than sniffing for
-// `window`) routes every non-Node runtime -- including workers, which have
-// neither `window` nor `process` -- to the pure-JS / @scure/base path.
-const hasNodeBuffer = typeof Buffer !== 'undefined';
+// These byte helpers are deliberately realm-agnostic: they never touch Node's
+// `Buffer`, so every value they return is a plain `Uint8Array` created from the
+// ambient intrinsic. Branching on a Node `Buffer` fast path used to break
+// dual-realm runtimes (e.g. vitest + jsdom): `Buffer.concat(...)` returns a
+// value whose realm's `Uint8Array` differs from the one loaded modules see, so
+// downstream `instanceof Uint8Array` checks (inside `@noble/curves`) fail. The
+// pure-JS paths below cost microseconds on functions that are nowhere hot;
+// correctness in every runtime wins.
 
 // Helper to convert bytes to hex string
 const bytesToHex = (bytes: Uint8Array): string => {
@@ -20,10 +23,6 @@ export const createBuffer = (input: string, encoding?: BufferEncoding): Uint8Arr
     return base64.decode(input);
   }
 
-  if (hasNodeBuffer) {
-    return Buffer.from(input, encoding);
-  }
-
   // Default to UTF-8 encoding
   return new TextEncoder().encode(input);
 };
@@ -32,10 +31,6 @@ export const bufferToString = (buffer: Uint8Array, encoding?: BufferEncoding): s
   // Handle base64 encoding via @scure/base (browser/RN-safe, no Buffer)
   if (encoding === 'base64') {
     return base64.encode(buffer);
-  }
-
-  if (hasNodeBuffer) {
-    return Buffer.from(buffer).toString(encoding);
   }
 
   // Handle hex encoding specifically
@@ -48,10 +43,6 @@ export const bufferToString = (buffer: Uint8Array, encoding?: BufferEncoding): s
 };
 
 export const concatBuffers = (...buffers: Uint8Array[]): Uint8Array => {
-  if (hasNodeBuffer) {
-    return Buffer.concat(buffers);
-  }
-
   // Calculate total length
   const totalLength = buffers.reduce((acc, buf) => acc + buf.length, 0);
 

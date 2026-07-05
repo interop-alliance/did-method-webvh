@@ -1,3 +1,62 @@
+## 3.6.0 - TBD
+
+Additive API ergonomics surfaced by the first real downstream consumer
+integration. No breaking changes.
+
+### Added
+
+* The core API now defaults `verifier` to `defaultWebvhLogVerifier` (Ed25519
+  over `@noble/curves`). `createDID`, `updateDID`, `resolveDID`,
+  `resolveDIDFromLog`, and `deactivateDID` no longer require a `verifier` --
+  pass one only to bring your own crypto. `defaultWebvhLogVerifier` moved to a
+  new `src/verifier.ts` module (re-exported from `src/driver.ts` for
+  compatibility) and is now exported from the package root.
+* `signerFromExternalKey({ publicKeyMultibase, sign })` -- a `Signer` factory
+  for external signing primitives (KMS, HSM, WebCrypto, hardware wallets). It
+  prepares the signing input, base58btc-multibase-encodes the signature, and
+  emits the load-bearing `did:key:<pkm>#<pkm>` verification-method id the
+  resolver requires.
+* New `vmIdFragment?: 'short' | 'multibase'` option on `createDID` / `updateDID`
+  (default `'short'`, the existing last-8-chars behavior). `'multibase'` emits a
+  self-describing `#<publicKeyMultibase>` verification-method fragment.
+* Re-exported log and URL utilities so consumers stop reimplementing the
+  canonical mappings: `readLogFromString`, `getBaseUrl`, `getFileUrl`,
+  `convertWebvhIdToWebId`, plus a new `logToJsonlString` serializer (inverse of
+  `readLogFromString`).
+* Exported the SCID placeholder from the root as `SCID_PLACEHOLDER` (restores
+  symmetry with the already-exported `DID_PLACEHOLDER`).
+
+### Changed
+
+* The `deriveHash` memo cache is now bounded (FIFO eviction at 500 entries),
+  preventing unbounded growth in long-lived processes such as resolver servers.
+  No behavior change.
+
+### Documentation
+
+* Documented `updateDID`'s overlay semantics (which fields are always
+  re-derived vs. preserved unless supplied) on the function and in the README --
+  the load-bearing contract for key-only rotation updates.
+* Documented that `deriveNextKeyHash` returns the spec's bare base58btc
+  multihash, NOT `z`-prefixed multibase, and must not be multibase-encoded.
+
+## 3.5.4 - TBD
+
+### Fixed
+
+* Realm-safe bytes: dropped the Node `Buffer` fast paths from `concatBuffers`,
+  `createBuffer`, and `bufferToString` in `src/utils/buffer.ts`, keeping only
+  the realm-agnostic pure-JS / `@scure/base` / `TextEncoder` paths. Under
+  dual-realm runtimes (e.g. vitest + jsdom) a `Buffer`-derived value fails
+  `instanceof Uint8Array` inside `@noble/curves`, which surfaced as a spurious
+  `Proof 0 failed verification` on every `createDID` self-verify. Plain Node and
+  real browsers were unaffected; the pure-JS paths cost only microseconds on
+  functions that are nowhere hot.
+* Narrowed the catch-all in `defaultWebvhLogVerifier`: a clean signature
+  mismatch still returns `false`, but programming errors (wrong types or
+  lengths, cross-realm `Uint8Array`s) now propagate instead of being masked as a
+  misleading verification failure.
+
 ## 3.5.3 - 2026-06-27
 
 ### Fixed

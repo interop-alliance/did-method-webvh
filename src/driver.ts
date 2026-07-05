@@ -14,27 +14,19 @@
  * package stays crypto-agnostic for callers who bring their own (an
  * `AbstractCrypto` subclass, an HSM-backed verifier, etc.).
  */
-import { ed25519 } from '@noble/curves/ed25519.js';
 import type { DIDDoc, Verifier } from './interfaces.js';
 import { resolveDID } from './method.js';
+import { defaultWebvhLogVerifier } from './verifier.js';
+
+/**
+ * Default did:webvh history-log verifier, re-exported from {@link ./verifier}
+ * for backward compatibility (its canonical home moved so the core API can
+ * default `verifier` to it without importing this did-io driver module).
+ */
+export { defaultWebvhLogVerifier };
 
 /** JSON-LD context for `Multikey` verification methods. */
 const MULTIKEY_CONTEXT = 'https://w3id.org/security/multikey/v1';
-
-/**
- * Default did:webvh history-log verifier: Ed25519 over `@noble/curves`. The
- * resolver passes the raw 32-byte public key (multicodec header already
- * stripped), so this verifies the signature directly.
- */
-export const defaultWebvhLogVerifier: Verifier = {
-  async verify(signature: Uint8Array, message: Uint8Array, publicKey: Uint8Array): Promise<boolean> {
-    try {
-      return ed25519.verify(signature, message, publicKey);
-    } catch {
-      return false;
-    }
-  },
-};
 
 /**
  * Dereferences a `did#fragment` to its node (verification method or service)
