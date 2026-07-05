@@ -1,4 +1,4 @@
-## 3.6.0 - TBD
+## 3.6.0 - 2026-07-05
 
 Additive API ergonomics surfaced by the first real downstream consumer
 integration. No breaking changes.
