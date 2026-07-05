@@ -12,6 +12,7 @@ import type {
 import { concatBuffers } from './utils/buffer.js';
 import { canonicalizeStrict } from './utils/canonicalize.js';
 import { createHash } from './utils/crypto.js';
+import { MultibaseEncoding, multibaseEncode } from './utils/multiformats.js';
 import { createDate } from './utils.js';
 
 /**
@@ -86,6 +87,47 @@ export abstract class AbstractCrypto implements Signer, Verifier {
       ? `did:key:${this.verificationMethod.publicKeyMultibase}#${this.verificationMethod.publicKeyMultibase}`
       : this.verificationMethod.id || '';
   }
+}
+
+/**
+ * Builds a {@link Signer} around an external signing primitive (KMS, HSM,
+ * WebCrypto, hardware wallet) whose key is not raw bytes. Handles the two
+ * pieces every such consumer otherwise re-implements: preparing the
+ * hash-and-concatenate signing input via {@link prepareDataForSigning}, and
+ * multibase-encoding (base58btc) the resulting signature into a `proofValue`.
+ *
+ * The verification-method id form is load-bearing: the resolver rejects proof
+ * verification methods that do not start with `did:key:` and matches the
+ * embedded multibase against the log's `updateKeys`, so the id MUST be
+ * `did:key:<publicKeyMultibase>#<publicKeyMultibase>` -- which is exactly what
+ * this factory emits.
+ *
+ * @param publicKeyMultibase The signing key's `did:key` multibase (Ed25519
+ *   multikey, `z6Mk…`).
+ * @param sign Callback that signs the prepared bytes and returns the raw
+ *   signature bytes.
+ * @returns A `Signer` usable directly by `createDID` / `updateDID`.
+ */
+export function signerFromExternalKey({
+  publicKeyMultibase,
+  sign,
+}: {
+  publicKeyMultibase: string;
+  sign(input: { data: Uint8Array }): Promise<Uint8Array>;
+}): Signer {
+  const verificationMethodId = `did:key:${publicKeyMultibase}#${publicKeyMultibase}`;
+  return {
+    async sign({ document, proof }) {
+      const data = await prepareDataForSigning(document, proof);
+      const signature = await sign({ data });
+      return {
+        proofValue: multibaseEncode(signature, MultibaseEncoding.BASE58_BTC),
+      };
+    },
+    getVerificationMethodId() {
+      return verificationMethodId;
+    },
+  };
 }
 
 /**

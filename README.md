@@ -235,12 +235,27 @@ Resolver URL mapping uses `http://localhost` for local testing and `https://`
 for non-local hosts.
 If `alsoKnownAsWeb: true` is supplied, the result also includes `webDoc`, the
 parallel `did:web` DID document to publish as `did.json`.
+The `vmIdFragment` option controls verification-method id fragments: `'short'`
+(default) uses the last 8 chars of `publicKeyMultibase`; `'multibase'` uses the
+full multibase for a self-describing `#<publicKeyMultibase>` fragment.
 
 -
 `updateDID(options: UpdateDIDInterface): Promise<{did: string, doc: any, meta: DIDResolutionMeta, log: DIDLog, webDoc?: DIDDoc}>`
 Updates an existing DID.
 Returns `webDoc` when the updated DID document carries a `did:web:` alias in
 `alsoKnownAs`.
+**Overlay semantics:** the prior entry's DID document is carried forward and
+only the fields you supply are overwritten. `@context`, `id`, and `controller`
+are always re-derived; verification-method fields are preserved unless
+`verificationMethods` is passed, and `service` / `alsoKnownAs` / the individual
+relationship arrays overwrite only when explicitly supplied. A key-only update
+(`updateKeys` + `nextKeyHashes`, no document directives) preserves the prior
+document verbatim -- the contract every rotation ceremony relies on.
+
+The `verifier` option on `createDID` / `updateDID` / `resolveDID` /
+`resolveDIDFromLog` / `deactivateDID` defaults to `defaultWebvhLogVerifier`
+(Ed25519 over `@noble/curves`), so you only pass it when bringing your own
+crypto (an `AbstractCrypto` subclass, an HSM-backed verifier, etc.).
 
 -
 `deactivateDID(options: DeactivateDIDInterface): Promise<{did: string, doc: any, meta: DIDResolutionMeta, log: DIDLog}>`
@@ -269,6 +284,13 @@ Signs did-witness proof entries for multiple target versions.
 - `createDocumentSigner(options: SignerOptions): Signer`
   Creates a signer for signing DID documents.
 
+- `signerFromExternalKey({ publicKeyMultibase, sign }): Signer`
+  Builds a `Signer` around an external signing primitive (KMS, HSM, WebCrypto,
+  hardware wallet) whose key is not raw bytes. Prepares the signing input and
+  multibase-encodes the signature, and emits the load-bearing
+  `did:key:<publicKeyMultibase>#<publicKeyMultibase>` verification-method id the
+  resolver requires.
+
 - `prepareDataForSigning(data: any): Uint8Array`
   Prepares data for signing.
 
@@ -280,6 +302,28 @@ Signs did-witness proof entries for multiple target versions.
 
 - `AbstractCrypto`
   An abstract class for implementing custom signers.
+
+### Log and URL Utilities
+
+- `readLogFromString(str: string): DIDLog`
+  Parses a JSON Lines (`.jsonl`) DID log. Trims surrounding whitespace, so a
+  trailing newline is tolerated; blank lines between entries are not.
+
+- `logToJsonlString(log: DIDLog): string`
+  Serializes a DID log to JSON Lines (one entry per line, no trailing newline).
+  Inverse of `readLogFromString`; use it to publish `did.jsonl`.
+
+- `getBaseUrl(id: string): string` / `getFileUrl(id: string): string`
+  Map a `did:webvh` identifier to its base URL and its `did.jsonl` URL,
+  including the port/`%3A` and localhost-`http` rules.
+
+- `convertWebvhIdToWebId(id: string): string`
+  Converts a `did:webvh:<scid>:<host>...` id to its parallel `did:web:<host>...`
+  id.
+
+- `deriveNextKeyHash(publicKeyMultibase: string): Promise<string>`
+  Derives a `nextKeyHashes` entry. Returns the spec's **bare base58btc**
+  multihash (NOT `z`-prefixed multibase); do not multibase-encode it.
 
 ## License
 

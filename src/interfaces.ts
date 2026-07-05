@@ -205,6 +205,10 @@ export interface CreateDIDInterface {
   signer: Signer;
   updateKeys: string[];
   verificationMethods?: VerificationMethod[];
+  // How to derive verification-method id fragments from `publicKeyMultibase`:
+  // 'short' (default) uses the last 8 chars; 'multibase' uses the full
+  // multibase for a self-describing `#<publicKeyMultibase>` fragment.
+  vmIdFragment?: 'short' | 'multibase';
   didDocument?: DIDDoc;
   services?: ServiceEndpoint[];
   paths?: string[];
@@ -236,6 +240,8 @@ export interface UpdateDIDInterface {
   signer: Signer;
   updateKeys?: string[];
   verificationMethods?: VerificationMethod[];
+  // See CreateDIDInterface.vmIdFragment.
+  vmIdFragment?: 'short' | 'multibase';
   controller?: string;
   context?: string | string[] | object | object[];
   alsoKnownAs?: string[];

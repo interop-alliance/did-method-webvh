@@ -48,7 +48,12 @@ describe('defaultWebvhLogVerifier', () => {
     );
   });
 
-  test('returns false (does not throw) on malformed input', async () => {
-    expect(await defaultWebvhLogVerifier.verify(new Uint8Array(1), new Uint8Array(1), new Uint8Array(1))).toBe(false);
+  test('throws (does not swallow) on malformed input', async () => {
+    // A clean signature mismatch returns false (see above); a programming error
+    // -- here a wrong-length signature -- propagates rather than being masked as
+    // a misleading verification failure. This is the R1 catch-all narrowing.
+    await expect(
+      defaultWebvhLogVerifier.verify(new Uint8Array(1), new Uint8Array(1), new Uint8Array(1))
+    ).rejects.toThrow(/Uint8Array of length 64/);
   });
 });
