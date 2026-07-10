@@ -229,8 +229,7 @@ full log parsing.
 -
 `createDID(options: CreateDIDInterface): Promise<{did: string, doc: any, meta: DIDResolutionMeta, log: DIDLog, webDoc?: DIDDoc}>`
 Creates a new DID.
-Accepts `address` (`host`, `host:port`, `https://...`, or `did:webvh:...`) or
-legacy `domain`.
+Accepts `address` (`host`, `host:port`, `https://...`, or `did:webvh:...`).
 Resolver URL mapping uses `http://localhost` for local testing and `https://`
 for non-local hosts.
 If `alsoKnownAsWeb: true` is supplied, the result also includes `webDoc`, the
@@ -296,9 +295,6 @@ Signs did-witness proof entries for multiple target versions.
 
 - `createProof(options: SigningInput): Promise<SigningOutput>`
   Creates a proof for a DID document.
-
-- `createSigner(options: SignerOptions): Signer`
-  Creates a signer for signing data.
 
 - `AbstractCrypto`
   An abstract class for implementing custom signers.

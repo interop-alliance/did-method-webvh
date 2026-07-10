@@ -3,7 +3,6 @@ export {
   AbstractCrypto,
   createDocumentSigner,
   createProof,
-  createSigner,
   prepareDataForSigning,
   signerFromExternalKey,
 } from './cryptography.js';

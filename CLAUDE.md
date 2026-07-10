@@ -252,3 +252,11 @@ don't apply.
 2. `npm run lint:fix`, then `npm run check`, `npm run build`, `npm test`.
 3. Record the port in `CHANGELOG.md` (use `TBD` as the date for unreleased
    entries) with a reference to the upstream PR number.
+
+`npm run check` is the only thing that type-checks `test/` -- Vitest transpiles
+each test file in isolation and never cross-checks types, so a test file can pass
+its own assertions while referencing an option that no longer exists. When a port
+renames or removes a public option, sweep **all** of `test/` for the old name, not
+just the files the upstream diff touched. (`npm test` runs `check` first, and a
+Stop hook in [.claude/settings.json](.claude/settings.json) runs it again, so a
+missed call site fails locally rather than in CI.)

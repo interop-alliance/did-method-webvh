@@ -92,9 +92,9 @@ export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDR
   }
 
   // Parse address input with strict validation
-  const addressInput = options.address || options.domain;
+  const addressInput = options.address;
   if (!addressInput) {
-    throw new Error('Either address or domain must be provided');
+    throw new Error('Address must be provided');
   }
 
   const parsed = parseCanonicalAddress(addressInput);
@@ -130,7 +130,6 @@ export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDR
     }
     const didDocResult = await createDIDDoc({
       ...options,
-      domain: addressInput,
       paths: allPaths,
       controller,
       verificationMethods: safeVerificationMethods,
@@ -567,7 +566,6 @@ export const resolveDIDFromLog = async (
 export const updateDID = async (
   options: UpdateDIDInterface & {
     services?: ServiceEndpoint[];
-    domain?: string;
     address?: string;
     paths?: string[];
     updated?: string;
@@ -637,7 +635,7 @@ export const updateDID = async (
   });
 
   // Compute controller DID id; rebuild with new address if moving, keep SCID stable.
-  const requestedAddress = options.address || options.domain;
+  const requestedAddress = options.address;
   let controller: string;
   let controllerPaths = parsedLastEntryDid.paths;
   if (options.controller) {
@@ -670,7 +668,6 @@ export const updateDID = async (
     ...options,
     controller,
     context: options.context || lastEntry.state['@context'],
-    domain: requestedAddress ?? parsedLastEntryDid.didDomainComponent,
     paths: controllerPaths,
     updateKeys: options.updateKeys ?? [],
     verificationMethods: safeVerificationMethods ?? [],

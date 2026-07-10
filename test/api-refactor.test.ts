@@ -22,7 +22,7 @@ describe('R2: default verifier', () => {
     const authKey = await generateTestVerificationMethod();
 
     const { did, log } = await createDID({
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -41,7 +41,7 @@ describe('R3: exported log and URL utilities', () => {
   test('readLogFromString / logToJsonlString round-trip', async () => {
     const authKey = await generateTestVerificationMethod();
     const { log } = await createDID({
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -55,7 +55,7 @@ describe('R3: exported log and URL utilities', () => {
   test('readLogFromString tolerates a trailing newline', async () => {
     const authKey = await generateTestVerificationMethod();
     const { log } = await createDID({
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -97,7 +97,7 @@ describe('R4: signerFromExternalKey', () => {
     expect(signer.getVerificationMethodId()).toBe(`did:key:${publicKeyMultibase}#${publicKeyMultibase}`);
 
     const { did, log } = await createDID({
-      domain: 'example.com',
+      address: 'example.com',
       signer,
       updateKeys: [publicKeyMultibase],
       verificationMethods: [{ type: 'Multikey', publicKeyMultibase, purpose: 'authentication' }],
@@ -114,7 +114,7 @@ describe('R5: vmIdFragment option', () => {
   test("default 'short' uses the last 8 chars of the multibase", async () => {
     const authKey = await generateTestVerificationMethod();
     const { doc } = await createDID({
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -127,7 +127,7 @@ describe('R5: vmIdFragment option', () => {
   test("'multibase' emits a self-describing #<publicKeyMultibase> fragment", async () => {
     const authKey = await generateTestVerificationMethod();
     const { doc } = await createDID({
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -149,7 +149,7 @@ describe('R6: sparse updateDID preserves the prior document', () => {
     const vm3 = await generateTestVerificationMethod('keyAgreement');
 
     const { doc: createdDoc, log } = await createDID({
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey, vm2, vm3),

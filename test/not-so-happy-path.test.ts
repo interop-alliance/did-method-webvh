@@ -29,7 +29,7 @@ describe('Not So Happy Path Tests', () => {
     testImplementation = new TestCryptoImplementation({ verificationMethod: authKey });
 
     initialDID = await createDID({
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -58,7 +58,7 @@ describe('Not So Happy Path Tests', () => {
   test('Hash chain tampering is detected', async () => {
     // Create a DID and update it
     const { log: log1 } = await createDID({
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -85,7 +85,7 @@ describe('Not So Happy Path Tests', () => {
     // Build a log with 12+ entries
     let currentLog: DIDLog;
     const { log: log0 } = await createDID({
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -118,7 +118,7 @@ describe('Not So Happy Path Tests', () => {
   test('Default resolve verifies every log entry proof', async () => {
     let currentLog: DIDLog;
     const { log: log0 } = await createDID({
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -147,7 +147,7 @@ describe('Not So Happy Path Tests', () => {
   test('Explicit version selector resolves a valid historical version despite later corruption', async () => {
     // Create a 3-entry log
     const { log: log1 } = await createDID({
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -192,7 +192,7 @@ describe('Not So Happy Path Tests', () => {
 
   test('Historical versionId selector remains successful when a later entry fails', async () => {
     const { log: log1 } = await createDID({
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -233,7 +233,7 @@ describe('Not So Happy Path Tests', () => {
 
   test('Historical versionTime selector remains successful when a later entry fails', async () => {
     const { log: log1 } = await createDID({
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -293,7 +293,7 @@ describe('Not So Happy Path Tests', () => {
   test('Protocol version rejection in v1.0', async () => {
     // Build a valid log but with the v0.5 protocol marker
     const { log } = await createDID({
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -311,7 +311,7 @@ describe('Not So Happy Path Tests', () => {
   test('createDID rejects when updateKeys is not supplied', async () => {
     await expect(
       createDID({
-        domain: 'example.com',
+        address: 'example.com',
         signer: createTestSigner(authKey),
         updateKeys: undefined as unknown as string[],
         verificationMethods: asPublicVerificationMethods(authKey),
@@ -320,7 +320,7 @@ describe('Not So Happy Path Tests', () => {
     ).rejects.toThrow('Update keys not supplied');
   });
 
-  test('createDID rejects when neither address nor domain is provided', async () => {
+  test('createDID rejects when address is not provided', async () => {
     await expect(
       createDID({
         signer: createTestSigner(authKey),
@@ -328,13 +328,13 @@ describe('Not So Happy Path Tests', () => {
         verificationMethods: asPublicVerificationMethods(authKey),
         verifier: testImplementation,
       } as unknown as CreateDIDInterface)
-    ).rejects.toThrow('Either address or domain must be provided');
+    ).rejects.toThrow('Address must be provided');
   });
 
   test('createDID rejects when verificationMethods is absent and no didDocument', async () => {
     await expect(
       createDID({
-        domain: 'example.com',
+        address: 'example.com',
         signer: createTestSigner(authKey),
         updateKeys: [authKey.publicKeyMultibase!],
         verifier: testImplementation,
@@ -433,7 +433,7 @@ describe('Not So Happy Path Tests', () => {
 
   test('deactivateDID rejects when the DID is already deactivated', async () => {
     const { log: log1 } = await createDID({
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -459,7 +459,7 @@ describe('Not So Happy Path Tests', () => {
 
   test('Requested DID with matching SCID but mismatched location is rejected', async () => {
     const { log } = await createDID({
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -478,7 +478,7 @@ describe('Not So Happy Path Tests', () => {
 
   test('Requested DID not present in log is rejected', async () => {
     const { log } = await createDID({
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -505,7 +505,7 @@ describe('Not So Happy Path Tests', () => {
 
   test('rejects versionId with missing dash', async () => {
     const { log } = await createDID({
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -522,7 +522,7 @@ describe('Not So Happy Path Tests', () => {
 
   test('rejects versionId with multiple dashes', async () => {
     const { log } = await createDID({
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -539,7 +539,7 @@ describe('Not So Happy Path Tests', () => {
 
   test('rejects versionId with empty hash component', async () => {
     const { log } = await createDID({
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
@@ -559,7 +559,7 @@ describe('Not So Happy Path Tests', () => {
     const updateResult = await updateDID({
       log,
       updated: nextSecond(log),
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verifier: testImplementation,
@@ -578,7 +578,7 @@ describe('Not So Happy Path Tests', () => {
     const updateResult = await updateDID({
       log,
       updated: nextSecond(log),
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verifier: testImplementation,
@@ -597,7 +597,7 @@ describe('Not So Happy Path Tests', () => {
     const updateResult = await updateDID({
       log,
       updated: nextSecond(log),
-      domain: 'example.com',
+      address: 'example.com',
       signer: createTestSigner(authKey),
       updateKeys: [authKey.publicKeyMultibase!],
       verifier: testImplementation,

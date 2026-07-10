@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && out=$(npm run check --silent 2>&1) || { printf \"Type check failed (npm run check):\\n%s\\n\" \"$out\" >&2; exit 2; }",
+            "statusMessage": "Type checking (tsc --noEmit)",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}
