@@ -17,6 +17,12 @@
   and `LegacyInvalidDidDocument` from the `DidResolutionError` enum. Ported from
   upstream
   [PR #141](https://github.com/decentralized-identity/didwebvh-ts/pull/141).
+* Moved the optional `updated` timestamp option for `updateDID()` onto the
+  `UpdateDIDInterface` type, where it is now documented as intended for
+  deterministic test and migration flows. Behavior is unchanged: an explicit
+  timestamp is still validated for ISO 8601 compliance and clock skew, and is
+  generated internally when omitted. Ported from upstream
+  [PR #146](https://github.com/decentralized-identity/didwebvh-ts/pull/146).
 
 ## 3.6.0 - 2026-07-05
 
