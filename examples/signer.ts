@@ -84,7 +84,7 @@ const vm = await generateEd25519VerificationMethod();
 const crypto = await createExampleCrypto(vm);
 
 const did = await createDID({
-  domain: 'example.com',
+  address: 'example.com',
   signer: crypto,
   verifier: crypto,
   updateKeys: [`did:key:${vm.publicKeyMultibase}#${vm.publicKeyMultibase}`],

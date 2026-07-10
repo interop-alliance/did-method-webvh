@@ -19,7 +19,7 @@ test('createDID wires capabilityDelegation and capabilityInvocation from options
   const ref = placeholderRef(authKey.publicKeyMultibase!);
 
   const { doc } = await createDID({
-    domain: 'example.com',
+    address: 'example.com',
     signer: createTestSigner(authKey),
     verifier: createTestVerifier(authKey),
     updateKeys: [authKey.publicKeyMultibase!],
@@ -46,7 +46,7 @@ test('a verification method may declare multiple purposes (referenced by id)', a
   ]);
 
   const { doc } = await createDID({
-    domain: 'example.com',
+    address: 'example.com',
     signer: createTestSigner(authKey),
     verifier: createTestVerifier(authKey),
     updateKeys: [authKey.publicKeyMultibase!],
@@ -68,7 +68,7 @@ test('a verification method may declare multiple purposes (referenced by id)', a
 test('updateDID wires capabilityDelegation and capabilityInvocation from options', async () => {
   const authKey = await generateTestVerificationMethod();
   const { doc: created, log } = await createDID({
-    domain: 'example.com',
+    address: 'example.com',
     signer: createTestSigner(authKey),
     verifier: createTestVerifier(authKey),
     updateKeys: [authKey.publicKeyMultibase!],

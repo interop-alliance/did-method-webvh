@@ -1,3 +1,23 @@
+## 3.7.0 - TBD
+
+### Changed
+
+* **BREAKING**: Removed the deprecated `domain` option from `createDID()` and
+  `updateDID()`. Use `address` instead, which accepts the same `host` /
+  `host:port` forms plus `https://...` URLs and `did:webvh:...` identifiers.
+  `createDID()` called without an `address` now throws
+  `Address must be provided`. Ported from upstream
+  [PR #141](https://github.com/decentralized-identity/didwebvh-ts/pull/141).
+* **BREAKING**: Removed the deprecated `createSigner()` export. It has thrown on
+  every call since it was deprecated; implement `Signer` (for example by
+  extending `AbstractCrypto`) and use `createDocumentSigner()` instead. Ported
+  from upstream
+  [PR #141](https://github.com/decentralized-identity/didwebvh-ts/pull/141).
+* **BREAKING**: Removed the legacy aliases `LegacyNotFound`, `LegacyInvalidDid`,
+  and `LegacyInvalidDidDocument` from the `DidResolutionError` enum. Ported from
+  upstream
+  [PR #141](https://github.com/decentralized-identity/didwebvh-ts/pull/141).
+
 ## 3.6.0 - 2026-07-05
 
 Additive API ergonomics surfaced by the first real downstream consumer

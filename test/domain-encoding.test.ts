@@ -23,7 +23,7 @@ async function createFromInput(kind: InputKind, value: string) {
   if (kind === 'domain') {
     return createDID({
       ...baseOptions,
-      domain: value,
+      address: value,
     });
   }
 
