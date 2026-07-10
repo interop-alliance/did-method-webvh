@@ -119,7 +119,6 @@ export const updateDID = async (
     services?: ServiceEndpoint[];
     address?: string;
     paths?: string[];
-    updated?: string;
   }
 ): Promise<UpdateDIDResult> => {
   options.verifier ??= defaultWebvhLogVerifier;
