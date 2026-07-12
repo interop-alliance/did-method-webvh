@@ -14,7 +14,6 @@ import type {
   Verifier,
 } from '@interop/did-method-webvh/types';
 import { generateKeyPair, sign, verify } from '@stablelib/ed25519';
-import { base58btc } from 'multiformats/bases/base58';
 
 class ExampleCrypto extends AbstractCrypto implements Verifier, Signer {
   constructor(
@@ -63,13 +62,16 @@ export async function generateEd25519VerificationMethod(): Promise<VerificationM
   const { secretKey, publicKey } = generateKeyPair();
   return {
     type: 'Multikey',
-    publicKeyMultibase: base58btc.encode(new Uint8Array([0xed, 0x01, ...publicKey])),
-    secretKeyMultibase: base58btc.encode(new Uint8Array([0x80, 0x26, ...secretKey])),
+    publicKeyMultibase: multibaseEncode(new Uint8Array([0xed, 0x01, ...publicKey]), MultibaseEncoding.BASE58_BTC),
+    secretKeyMultibase: multibaseEncode(new Uint8Array([0x80, 0x26, ...secretKey]), MultibaseEncoding.BASE58_BTC),
     purpose: 'assertionMethod',
   };
 }
 
 export const createExampleCrypto = async (vm: VerificationMethod) => {
+  if (!vm.publicKeyMultibase) {
+    throw new Error('Verification method is missing publicKeyMultibase');
+  }
   return new ExampleCrypto({
     id: `did:key:${vm.publicKeyMultibase}#${vm.publicKeyMultibase}`,
     controller: `did:key:${vm.publicKeyMultibase}`,
@@ -80,6 +82,9 @@ export const createExampleCrypto = async (vm: VerificationMethod) => {
 };
 
 const vm = await generateEd25519VerificationMethod();
+if (!vm.publicKeyMultibase) {
+  throw new Error('Verification method is missing publicKeyMultibase');
+}
 
 const crypto = await createExampleCrypto(vm);
 
@@ -87,7 +92,7 @@ const did = await createDID({
   address: 'example.com',
   signer: crypto,
   verifier: crypto,
-  updateKeys: [`did:key:${vm.publicKeyMultibase}#${vm.publicKeyMultibase}`],
+  updateKeys: [vm.publicKeyMultibase],
   verificationMethods: [vm],
 });
 
