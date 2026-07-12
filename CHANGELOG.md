@@ -1,3 +1,27 @@
+## 3.7.1 - TBD
+
+### Changed
+
+* Replaced the hand-rolled base58btc encoder/decoder in
+  `src/utils/multiformats.ts` with `base58` from `@scure/base` (already a
+  dependency). Behavior is unchanged apart from the error message thrown on
+  invalid input characters. Ported from upstream commits
+  [`25882fc`](https://github.com/decentralized-identity/didwebvh-ts/commit/25882fc)
+  and
+  [`603be84`](https://github.com/decentralized-identity/didwebvh-ts/commit/603be84).
+* Updated the example resolver (`examples/express-resolver.ts`) to Express 5,
+  adopting the new `*splat` wildcard route syntax, and bumped `express` /
+  `@types/express` in `examples/package.json`. Ported from upstream
+  [PR #140](https://github.com/decentralized-identity/didwebvh-ts/pull/140).
+
+### Fixed
+
+* Repaired the `examples/signer.ts` example: it imported base58btc from
+  `multiformats`, which is not a dependency of `examples/` (now uses the
+  library's own `multibaseEncode`), and passed a `did:key:...#fragment` string
+  as an update key where the library expects a bare multikey, so the example
+  failed at runtime. Also resolved latent type errors in `examples/`.
+
 ## 3.7.0 - 2026-07-09
 
 ### Changed
