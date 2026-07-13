@@ -1,3 +1,20 @@
+## 3.7.2 - TBD
+
+### Removed
+
+* Removed internal dead code left over from machinery this fork previously
+  deleted: `config.getVerificationMethods`, `writeVerificationMethodToEnv`
+  (`src/utils.ts`), and the `createBuffer` / `bufferToString` helpers in
+  `src/utils/buffer.ts` (only `concatBuffers` remains). None of these were
+  exported from the package, so the public API is unchanged. Supersedes
+  upstream commits
+  [`c8c60e5`](https://github.com/decentralized-identity/didwebvh-ts/commit/c8c60e5),
+  [`29be4c7`](https://github.com/decentralized-identity/didwebvh-ts/commit/29be4c7),
+  [`4019589`](https://github.com/decentralized-identity/didwebvh-ts/commit/4019589),
+  and
+  [`a1a1ad1`](https://github.com/decentralized-identity/didwebvh-ts/commit/a1a1ad1),
+  which refactored the same code instead of removing it.
+
 ## 3.7.1 - 2026-07-12
 
 ### Changed
