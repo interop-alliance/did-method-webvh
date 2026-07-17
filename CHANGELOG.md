@@ -1,4 +1,4 @@
-## 4.0.0 - TBD
+## 4.0.0 - 2026-07-17
 
 (Tracking upstream `3.0.0@2f795b1b3b8b4ad0dbcab6ca1cf19f062f1b0905`)
 
