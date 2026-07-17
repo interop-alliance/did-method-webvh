@@ -1,3 +1,80 @@
+## 4.0.0 - TBD
+
+(Tracking upstream `3.0.0@2f795b1b3b8b4ad0dbcab6ca1cf19f062f1b0905`)
+
+### Added
+
+* Added `src/resolver-result.ts`: resolution error classification and spec
+  result mapping. Exports `mapErrorToCode` (classifies thrown errors into
+  resolution error codes: HTTP 404 / missing log to `notFound`; non-404 HTTP
+  statuses and network/transport failures to `internalError`; everything else
+  to `invalidDid`), `validateSingleVersionSelector` (rejects conflicting
+  `versionId`/`versionTime`/`versionNumber` selectors as a structured
+  `invalidOptions` failure), `toErrorMeta`/`toErrorResult` (RFC 9457
+  `problemDetails` per code), `toResolutionResult` (maps this package's
+  `{ did, doc, meta }` core result to a DID Resolution Result envelope,
+  `IDIDResolutionResult`, splitting document metadata from
+  resolution-process metadata and preserving a resolved document that
+  accompanies a warning-level error), `WEBVH_ERROR_TYPES` (did:webvh
+  resolution-error registry URIs), and the `WebvhDocumentMetadata` /
+  `ResolutionOptionsError` types. Adapted from upstream commits
+  [`709b462`](https://github.com/decentralized-identity/didwebvh-ts/commit/709b462),
+  [`3163f59`](https://github.com/decentralized-identity/didwebvh-ts/commit/3163f59),
+  [`415a7e3`](https://github.com/decentralized-identity/didwebvh-ts/commit/415a7e3),
+  and [`a2080de`](https://github.com/decentralized-identity/didwebvh-ts/commit/a2080de).
+* The did-io driver (`createDidWebvhDriver`) now also implements the optional
+  `resolveDID()` driver operation: non-throwing, spec-shaped resolution
+  returning an `IDIDResolutionResult` envelope built natively from the core
+  result (preserving webvh document metadata such as `scid` and `updateKeys`),
+  with support for `versionId`/`versionNumber`/`versionTime` selectors
+  (`versionTime` accepts a `Date` or a datetime string).
+
+### Changed
+
+* **BREAKING**: `resolveDID` now returns a DID Resolution spec result envelope
+  (`IDIDResolutionResult` from `@interop/data-integrity-core`:
+  `{ didDocument, didResolutionMetadata, didDocumentMetadata }`) instead of
+  this package's `{ did, doc, meta }` core shape. On success,
+  `didResolutionMetadata.contentType` is `application/did+ld+json` and webvh
+  document state (`versionId`, `scid`, `updateKeys`, `nextKeyHashes`,
+  `prerotation`, `witness`, etc.) is on `didDocumentMetadata`; on failure,
+  `didDocument` is `null` and the reason is on `didResolutionMetadata.error` /
+  `problemDetails`. Migration: `result.doc` becomes `result.didDocument`,
+  `result.meta.error` becomes `result.didResolutionMetadata.error`,
+  `result.did` becomes `result.didDocument?.id`, and document-state reads move
+  to `result.didDocumentMetadata`. `resolveDIDFromLog` deliberately keeps the
+  flat `{ did, doc, meta }` shape (it serves DID-management tooling acting on
+  log state, not spec resolution); use `toResolutionResult()` to convert its
+  result to an envelope when relaying one.
+* **BREAKING**: Replaced the `DidResolutionError` enum with a spec-accurate
+  string-literal union type (`'invalidDid' | 'invalidDidUrl' |
+  'invalidOptions' | 'notFound' | 'internalError'`), aligned with the shared
+  `IDIDResolutionErrorCode` vocabulary in `@interop/data-integrity-core`
+  (now a runtime dependency). The enum's value export is gone; compare
+  `meta.error` against the string literals instead. The two codes this
+  package actually emitted (`notFound`, `invalidDid`) had those exact string
+  values already, so serialized output is unchanged for them; the nine other
+  enum members (SCREAMING_CASE, never emitted) are removed. `ProblemDetails`
+  is now an alias of the shared `IProblemDetails`.
+* **BREAKING**: `resolveDID` now classifies failures with the refined error
+  model: non-404 HTTP statuses and network/transport failures report
+  `meta.error = 'internalError'` (previously `'invalidDid'`), 404s and
+  missing logs report `'notFound'` (previously matched on any "404"/"not
+  found" substring, which validation errors could spoof), and conflicting
+  version selectors are rejected up front as `'invalidOptions'` with a
+  did:webvh registry `problemDetails.type` (previously passed through to
+  selector precedence).
+* The did-io driver's `get()` now throws `DIDResolutionError` (from
+  `@interop/data-integrity-core`, carrying `code` and `problemDetails`)
+  instead of a plain `Error`, so document-loader callers can branch on the
+  failure class (e.g. `notFound` vs `internalError`) instead of
+  string-matching messages.
+* Removed the remaining `as unknown as VerificationMethod[]` cast in
+  `normalizeVMs` (`src/utils.ts`) by typing the mapped array explicitly and
+  normalizing a null `did` controller fallback to `undefined`. Internal
+  type-safety refactor; no behavior change. Ported from upstream commit
+  [`af200eb`](https://github.com/decentralized-identity/didwebvh-ts/commit/af200eb).
+
 ## 3.7.2 - 2026-07-12
 
 ### Removed

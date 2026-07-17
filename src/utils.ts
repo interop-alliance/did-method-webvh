@@ -738,13 +738,13 @@ export const normalizeVMs = (
   // First collect all VMs. `purpose` is a creation-time directive for the
   // relationship wiring below, not a DID Core verification-method property, so
   // it is dropped from the emitted entries.
-  const vms = verificationMethod.map(({ purpose, ...vm }) => ({
+  const vms: VerificationMethod[] = verificationMethod.map(({ purpose, ...vm }) => ({
     ...vm,
     id: vm.id ?? createVMID(vm, did, vmIdFragment),
     // Default controller to the DID — required by W3C DID Core §5.2
-    controller: vm.controller ?? did,
+    controller: vm.controller ?? did ?? undefined,
   }));
-  all.verificationMethod = vms as unknown as VerificationMethod[];
+  all.verificationMethod = vms;
 
   // A VM's `purpose` may name a single relationship or several; an absent (or
   // empty) purpose defaults the key into authentication.

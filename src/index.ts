@@ -8,6 +8,15 @@ export {
 } from './cryptography.js';
 export * from './interfaces.js';
 export { createDID, deactivateDID, resolveDID, resolveDIDFromLog, updateDID } from './method.js';
+export type { ResolutionOptionsError, WebvhDocumentMetadata } from './resolver-result.js';
+export {
+  mapErrorToCode,
+  toErrorMeta,
+  toErrorResult,
+  toResolutionResult,
+  validateSingleVersionSelector,
+  WEBVH_ERROR_TYPES,
+} from './resolver-result.js';
 export { MultibaseEncoding, multibaseDecode, multibaseEncode } from './utils/multiformats.js';
 export {
   convertWebvhIdToWebId,

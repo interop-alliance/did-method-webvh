@@ -1,3 +1,4 @@
+import type { IDIDResolutionResult } from '@interop/data-integrity-core';
 import { METHOD_PROTOCOL_V1_0 } from './constants.js';
 import type {
   CreateDIDInterface,
@@ -10,8 +11,8 @@ import type {
   UpdateDIDResult,
   WitnessProofFileEntry,
 } from './interfaces.js';
-import { DidResolutionError } from './interfaces.js';
 import * as v1 from './method_versions/method.v1.0.js';
+import { mapErrorToCode, toErrorResult, toResolutionResult, validateSingleVersionSelector } from './resolver-result.js';
 import { fetchLogFromIdentifier, maybeWriteTestLog } from './utils.js';
 import { defaultWebvhLogVerifier } from './verifier.js';
 
@@ -35,54 +36,48 @@ export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDR
 /**
  * Resolves a DID by fetching and validating its DID log.
  *
+ * Returns a DID Resolution spec result envelope: on failure, `didDocument` is
+ * `null` and the reason is on `didResolutionMetadata.error` (with RFC 9457
+ * `problemDetails`); document metadata (`versionId`, `scid`, `updateKeys`,
+ * etc.) is on `didDocumentMetadata`.
+ *
  * @param did The DID to resolve.
  * @param options Optional resolver settings.
- * @returns The resolved DID result with resolution metadata.
+ * @returns The DID resolution result envelope.
  */
 export const resolveDID = async (
   did: string,
   options: ResolutionOptions & { witnessProofs?: WitnessProofFileEntry[] } = {}
-) => {
+): Promise<IDIDResolutionResult> => {
   // Extract the expected SCID from the DID string so the resolver can
   // verify the log's SCID matches what the DID claims.
   const didParts = did.split(':');
   const scid = didParts.length > 2 && didParts[0] === 'did' && didParts[1] === 'webvh' ? didParts[2] : undefined;
   const verifier = options.verifier ?? defaultWebvhLogVerifier;
+  const selectorError = validateSingleVersionSelector(options);
+  if (selectorError) {
+    return toErrorResult(selectorError.code, selectorError.detail, selectorError.problemType);
+  }
   try {
     const log = await fetchLogFromIdentifier(did);
     const result = await v1.resolveDIDFromLog(log, { ...options, verifier, scid, requestedDid: did });
     maybeWriteTestLog(result.did, log);
 
-    return result;
+    return toResolutionResult(result);
   } catch (e) {
-    let errorType: DidResolutionError = DidResolutionError.InvalidDid;
     const message = e instanceof Error ? e.message : String(e);
-    if (/not found/i.test(message) || /404/.test(message)) {
-      errorType = DidResolutionError.NotFound;
-    }
-    return {
-      did,
-      doc: null,
-      meta: {
-        error: errorType,
-        problemDetails: {
-          type:
-            errorType === DidResolutionError.NotFound
-              ? 'https://w3id.org/security#NOT_FOUND'
-              : 'https://w3id.org/security#INVALID_CONTROLLED_IDENTIFIER_DOCUMENT_ID',
-          title:
-            errorType === DidResolutionError.NotFound
-              ? 'The DID Log or resource was not found.'
-              : 'The resolved DID is invalid.',
-          detail: message,
-        },
-      },
-    };
+    return toErrorResult(mapErrorToCode(e), message);
   }
 };
 
 /**
  * Resolves a DID from an in-memory DID log.
+ *
+ * Returns this package's core result shape (`{ did, doc, meta }`, with a flat
+ * `meta` combining document state and control parameters), which suits
+ * DID-management tooling acting on the log (key rotation, updates, repair).
+ * Callers relaying the outcome to a DID Resolution spec interface can convert
+ * it with {@link toResolutionResult}.
  *
  * @param log In-memory DID log entries.
  * @param options Optional resolver settings.

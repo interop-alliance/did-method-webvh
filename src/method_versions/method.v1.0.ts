@@ -23,7 +23,6 @@ import type {
   WitnessParameterResolution,
   WitnessProofFileEntry,
 } from '../interfaces.js';
-import { DidResolutionError } from '../interfaces.js';
 import {
   createNextVersionTime,
   parseUtcIso8601VersionTime,
@@ -499,7 +498,7 @@ export const resolveDIDFromLog = async (
     }
     if (resolvedMeta && (!hasExplicitHistoricalSelector || witnessThresholdFailure)) {
       const message = e instanceof Error ? e.message : String(e);
-      resolvedMeta.error = DidResolutionError.InvalidDid;
+      resolvedMeta.error = 'invalidDid';
       resolvedMeta.problemDetails = {
         type: ERROR_TYPE_INVALID_DID,
         title: 'The resolved DID is invalid.',
@@ -519,7 +518,7 @@ export const resolveDIDFromLog = async (
         doc: null,
         meta: {
           ...lastValidMeta,
-          error: DidResolutionError.NotFound,
+          error: 'notFound',
           problemDetails: {
             type: ERROR_TYPE_NOT_FOUND,
             title: 'The requested DID version was not found.',

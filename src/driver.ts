@@ -14,6 +14,9 @@
  * package stays crypto-agnostic for callers who bring their own (an
  * `AbstractCrypto` subclass, an HSM-backed verifier, etc.).
  */
+
+import type { IDIDResolutionResult } from '@interop/data-integrity-core';
+import { DIDResolutionError } from '@interop/data-integrity-core';
 import type { DIDDoc, Verifier } from './interfaces.js';
 import { resolveDID } from './method.js';
 import { defaultWebvhLogVerifier } from './verifier.js';
@@ -71,14 +74,24 @@ function dereferenceFragment(doc: DIDDoc, id: string): Record<string, unknown> {
  * resolver. A bare DID resolves to its DID document; a `did#fragment` URL is
  * dereferenced straight to its verification-method (or service) node.
  *
+ * Resolution failures in `get()` throw a `DIDResolutionError` (from
+ * `@interop/data-integrity-core`) carrying the resolution error `code` and RFC
+ * 9457 `problemDetails`, so callers can branch on the failure class instead of
+ * string-matching messages. The driver also implements the optional
+ * `resolveDID()` of did-io's `DidMethodDriver`: a non-throwing, spec-shaped
+ * resolution returning the DID Resolution Result envelope produced natively by
+ * this package's {@link resolveDID} (preserving webvh document metadata such
+ * as `scid` and `updateKeys`).
+ *
  * @param options Driver options.
  * @param [options.verifier] Verifier for the DID's history-log proofs. Defaults
  *   to {@link defaultWebvhLogVerifier}.
- * @returns A `{ method, get }` driver.
+ * @returns A `{ method, get, resolveDID }` driver.
  */
 export function createDidWebvhDriver({ verifier = defaultWebvhLogVerifier }: { verifier?: Verifier } = {}): {
   method: string;
   get(options: { did?: string; url?: string }): Promise<DIDDoc | Record<string, unknown>>;
+  resolveDID(options: { did: string; [key: string]: unknown }): Promise<IDIDResolutionResult>;
 } {
   return {
     method: 'webvh',
@@ -91,14 +104,37 @@ export function createDidWebvhDriver({ verifier = defaultWebvhLogVerifier }: { v
       const [didAuthority = ''] = didOrUrl.split(/[#?]/);
       const fragment = didOrUrl.includes('#') ? didOrUrl.slice(didOrUrl.indexOf('#') + 1) : undefined;
 
-      const { doc, meta } = await resolveDID(didAuthority, { verifier });
+      const { didDocument, didResolutionMetadata } = await resolveDID(didAuthority, { verifier });
+      // The envelope's IDIDDocument is structurally stricter than this
+      // package's DIDDoc; narrow back at this single boundary.
+      const doc = didDocument as unknown as DIDDoc | null;
       if (!doc) {
-        throw new Error(meta?.problemDetails?.detail ?? `Could not resolve "${didAuthority}".`);
+        const { error, problemDetails } = didResolutionMetadata;
+        const detail = problemDetails?.detail ?? `Could not resolve "${didAuthority}".`;
+        throw new DIDResolutionError(detail, {
+          code: error ?? 'internalError',
+          problemDetails,
+        });
       }
       if (fragment) {
         return dereferenceFragment(doc, `${doc.id}#${fragment}`);
       }
       return doc;
+    },
+    async resolveDID({ did, ...options }: { did: string; [key: string]: unknown }): Promise<IDIDResolutionResult> {
+      // The did-io driver contract passes resolution options untyped
+      // (spec-extensible); narrow the version selectors this method supports.
+      const { versionId, versionNumber, versionTime } = options as {
+        versionId?: string;
+        versionNumber?: number;
+        versionTime?: Date | string;
+      };
+      return resolveDID(did, {
+        verifier,
+        versionId,
+        versionNumber,
+        versionTime: typeof versionTime === 'string' ? new Date(versionTime) : versionTime,
+      });
     },
   };
 }

@@ -1,6 +1,5 @@
 import { beforeAll, expect, test } from 'vitest';
 import type { CreateDIDResult, DIDLog, DIDLogEntry, ServiceEndpoint, VerificationMethod } from '../src/interfaces.js';
-import { DidResolutionError } from '../src/interfaces.js';
 import { createDID, resolveDIDFromLog, updateDID } from '../src/method.js';
 import { createDate, deriveHash, deriveNextKeyHash } from '../src/utils.js';
 import {
@@ -327,7 +326,7 @@ test('Explicit versionId miss returns notFound without latest fallback', async (
   });
 
   expect(resolved.doc).toBeNull();
-  expect(resolved.meta.error).toBe(DidResolutionError.NotFound);
+  expect(resolved.meta.error).toBe('notFound');
   expect(resolved.meta.problemDetails?.type).toBe('https://w3id.org/security#NOT_FOUND');
   expect(resolved.meta.versionId.split('-')[0]).toBe('4');
 });
@@ -339,7 +338,7 @@ test('Explicit versionTime miss returns notFound without latest fallback', async
   });
 
   expect(resolved.doc).toBeNull();
-  expect(resolved.meta.error).toBe(DidResolutionError.NotFound);
+  expect(resolved.meta.error).toBe('notFound');
   expect(resolved.meta.problemDetails?.type).toBe('https://w3id.org/security#NOT_FOUND');
   expect(resolved.meta.versionId.split('-')[0]).toBe('4');
 });
