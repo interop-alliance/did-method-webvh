@@ -1,6 +1,5 @@
 import { beforeAll, describe, expect, test } from 'vitest';
 import type { CreateDIDResult, DIDLog, VerificationMethod } from '../src/interfaces.js';
-import { DidResolutionError } from '../src/interfaces.js';
 import { createDID, resolveDIDFromLog, updateDID } from '../src/method.js';
 import { getBaseUrl, getFileUrl } from '../src/utils.js';
 import {
@@ -114,7 +113,7 @@ describe('resolveDIDFromLog with verificationMethod', () => {
     const { doc, meta } = await resolveDIDFromLog(fullLog, { verificationMethod: vmId, verifier: testImplementation });
 
     expect(doc).toBeNull();
-    expect(meta.error).toBe(DidResolutionError.NotFound);
+    expect(meta.error).toBe('notFound');
     expect(meta.problemDetails?.type).toBe('https://w3id.org/security#NOT_FOUND');
   });
 

@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { resolveDID, resolveDIDFromLog } from '@interop/did-method-webvh';
+import { resolveDID, resolveDIDFromLog, toResolutionResult } from '@interop/did-method-webvh';
 import type {
   DIDDoc,
   DIDLog,
@@ -38,7 +38,8 @@ const readLocalDIDLog = async (did: string): Promise<DIDLog> => {
 };
 
 // Resolve a DID, serving DIDs this server controls from the local routes
-// directory instead of fetching them over HTTPS.
+// directory instead of fetching them over HTTPS. Returns a DID Resolution
+// Result envelope, with `controlled` riding along as a non-standard extension.
 const resolveDIDLocalFirst = async (did: string, options: ResolutionOptions = {}) => {
   const controlled = getActiveDIDs().includes(did);
   if (!controlled) {
@@ -49,7 +50,7 @@ const resolveDIDLocalFirst = async (did: string, options: ResolutionOptions = {}
   const didParts = did.split(':');
   const scid = didParts.length > 2 && didParts[0] === 'did' && didParts[1] === 'webvh' ? didParts[2] : undefined;
   const result = await resolveDIDFromLog(log, { ...options, scid });
-  return { ...result, controlled };
+  return { ...toResolutionResult(result), controlled };
 };
 
 class ExpressVerifier implements Verifier {
@@ -182,9 +183,9 @@ app.get('/resolve/:id', async (req, res) => {
       return res.json(result);
     }
 
-    const { did, doc, controlled } = await resolveDIDLocalFirst(didPart, { verifier: expressVerifier });
+    const { didDocument, controlled } = await resolveDIDLocalFirst(didPart, { verifier: expressVerifier });
 
-    const didParts = did.split(':');
+    const didParts = (didDocument?.id ?? didPart).split(':');
     const domain = didParts[didParts.length - 1];
     const fileIdentifier = didParts[didParts.length - 2];
 
@@ -194,7 +195,8 @@ app.get('/resolve/:id', async (req, res) => {
         file: pathParts.join('/'),
       },
       isRemote: !controlled,
-      didDocument: doc ?? undefined,
+      // The envelope's IDIDDocument is structurally stricter than DIDDoc.
+      didDocument: (didDocument as unknown as DIDDoc) ?? undefined,
     });
 
     res.send(fileContent);

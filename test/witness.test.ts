@@ -6,7 +6,6 @@ import type {
   Signer,
   VerificationMethod,
 } from '../src/interfaces.js';
-import { DidResolutionError } from '../src/interfaces.js';
 import { createDID, resolveDIDFromLog, updateDID } from '../src/method.js';
 import { MultibaseEncoding, multibaseEncode } from '../src/utils/multiformats.js';
 import { deriveHash, parseDidKeyDid, parseDidKeyVerificationMethod } from '../src/utils.js';
@@ -980,7 +979,7 @@ describe('Witness Implementation Tests', async () => {
       ],
     });
 
-    expect(resolved.meta.error).toBe(DidResolutionError.InvalidDid);
+    expect(resolved.meta.error).toBe('invalidDid');
     expect(resolved.meta.problemDetails).toBeDefined();
     expect(resolved.meta.problemDetails!.type).toBe(
       'https://w3id.org/security#INVALID_CONTROLLED_IDENTIFIER_DOCUMENT_ID'
