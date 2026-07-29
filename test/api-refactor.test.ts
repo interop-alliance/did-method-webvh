@@ -1,18 +1,11 @@
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { describe, expect, test } from 'vitest';
 import { signerFromExternalKey } from '../src/cryptography.js';
+import { convertWebvhIdToWebId } from '../src/did-document.js';
 import { createDID, resolveDIDFromLog, updateDID } from '../src/method.js';
+import { deriveNextKeyHash, getHashCacheSizeForTests, HASH_CACHE_MAX_ENTRIES } from '../src/utils/crypto.js';
 import { MultibaseEncoding, multibaseEncode } from '../src/utils/multiformats.js';
-import {
-  convertWebvhIdToWebId,
-  deriveNextKeyHash,
-  getBaseUrl,
-  getFileUrl,
-  getHashCacheSizeForTests,
-  HASH_CACHE_MAX_ENTRIES,
-  logToJsonlString,
-  readLogFromString,
-} from '../src/utils.js';
+import { getBaseUrl, getFileUrl, logToJsonlString, readLogFromString } from '../src/utils.js';
 import { asPublicVerificationMethods, createTestSigner, generateTestVerificationMethod, nextSecond } from './utils.js';
 
 // R2 -- the core API defaults `verifier` to defaultWebvhLogVerifier, so a
@@ -177,7 +170,7 @@ describe('R6: sparse updateDID preserves the prior document', () => {
 // R8 -- the deriveHash memo cache is bounded.
 describe('R8: bounded deriveHash cache', () => {
   test('cache size stays within the cap under many distinct inputs', async () => {
-    const { deriveHash } = await import('../src/utils.js');
+    const { deriveHash } = await import('../src/utils/crypto.js');
     for (let i = 0; i < HASH_CACHE_MAX_ENTRIES * 2 + 50; i++) {
       await deriveHash({ marker: 'R8-cache-bound', i });
     }

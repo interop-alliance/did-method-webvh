@@ -1,6 +1,15 @@
 import { describe, expect, test } from 'vitest';
+import {
+  createDIDDoc,
+  createVMID,
+  enrichAlsoKnownAs,
+  findVerificationMethod,
+  generateParallelDidWeb,
+  normalizeVMs,
+  validateCreateDidDocument,
+} from '../src/did-document.js';
+import type { DIDDoc, VerificationMethod } from '../src/interfaces.js';
 import { createDID, updateDID } from '../src/method.js';
-import { generateParallelDidWeb } from '../src/utils.js';
 import {
   asPublicVerificationMethods,
   createTestSigner,
@@ -332,5 +341,109 @@ describe('generateParallelDidWeb', () => {
     expect(updated.webDoc).toBeDefined();
     expect(updated.webDoc?.id).toBe('did:web:example.com');
     expect(updated.webDoc?.alsoKnownAs).toContain(updated.did);
+  });
+});
+
+describe('did-document helper branches', () => {
+  test('validateCreateDidDocument rejects non-object and non-string id', () => {
+    expect(() => validateCreateDidDocument(null as unknown as DIDDoc)).toThrow('didDocument must be an object');
+    expect(() => validateCreateDidDocument({ id: 123 } as unknown as DIDDoc)).toThrow(
+      "didDocument 'id' field must be a string"
+    );
+  });
+
+  test('enrichAlsoKnownAs rejects invalid did:webvh identifier when alias flag is enabled', () => {
+    expect(() => enrichAlsoKnownAs({ id: '{DID}' } as DIDDoc, 'did:example:123', { alsoKnownAsWeb: true })).toThrow(
+      "Invalid did:webvh id 'did:example:123'"
+    );
+  });
+
+  test('createVMID falls back to random suffix when publicKeyMultibase is missing', () => {
+    const vm: VerificationMethod = {
+      id: '#temporary',
+      type: 'Multikey',
+    };
+
+    const vmId = createVMID(vm, 'did:webvh:zQmExample:example.com');
+    expect(vmId).toMatch(/^did:webvh:zQmExample:example.com#[a-z0-9]{8}$/);
+  });
+
+  test('normalizeVMs defaults a vm without purpose into authentication only', () => {
+    const did = 'did:webvh:zQmExample:example.com';
+    const normalized = normalizeVMs(
+      [
+        {
+          type: 'Multikey',
+          publicKeyMultibase: 'z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK',
+        },
+      ],
+      did
+    );
+
+    expect(normalized.verificationMethod).toHaveLength(1);
+    expect(normalized.authentication).toHaveLength(1);
+    expect(normalized.assertionMethod).toEqual([]);
+  });
+
+  test('normalizeVMs relationship entries reuse the materialized id for a vm with no id or publicKeyMultibase', () => {
+    const did = 'did:webvh:zQmExample:example.com';
+    const normalized = normalizeVMs(
+      [
+        // Neither `id` nor `publicKeyMultibase`: the id is materialized from a
+        // random fragment. Relationship entries must reference that exact id, not
+        // a second, independently generated random id.
+        { type: 'Multikey' } as VerificationMethod,
+      ],
+      did
+    );
+
+    expect(normalized.verificationMethod).toHaveLength(1);
+    const materializedId = normalized.verificationMethod[0].id;
+    expect(materializedId?.startsWith(`${did}#`)).toBe(true);
+    // Absent purpose defaults into authentication; the ref must match exactly.
+    expect(normalized.authentication).toEqual([materializedId]);
+  });
+
+  test('findVerificationMethod resolves from relationship object and returns null when not found', () => {
+    const vm: VerificationMethod = {
+      id: '#rel-vm',
+      type: 'Multikey',
+      publicKeyMultibase: 'z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK',
+    };
+
+    const doc: DIDDoc = {
+      id: 'did:webvh:zQmExample:example.com',
+      authentication: [vm as unknown as string],
+    };
+
+    expect(findVerificationMethod(doc, '#rel-vm')).toEqual(vm);
+    expect(findVerificationMethod(doc, '#missing')).toBeNull();
+  });
+
+  test('createDIDDoc propagates a populated relationship field and omits empty ones', async () => {
+    const assertionVmId = 'did:webvh:zQmExample:example.com#assertion-key-1';
+
+    const { doc } = await createDIDDoc({
+      did: 'did:webvh:zQmExample:example.com',
+      verificationMethods: [
+        {
+          id: assertionVmId,
+          type: 'Multikey',
+          publicKeyMultibase: 'z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK',
+          purpose: 'assertionMethod',
+        },
+      ],
+      authentication: [],
+      keyAgreement: [],
+      alsoKnownAs: [],
+    });
+
+    expect(doc.assertionMethod).toEqual([assertionVmId]);
+    expect(doc.verificationMethod).toHaveLength(1);
+    // Empty relationship arrays are omitted rather than emitted as `[]`.
+    expect(doc.authentication).toBeUndefined();
+    expect(doc.keyAgreement).toBeUndefined();
+    expect(doc.alsoKnownAs).toBeUndefined();
+    expect('capabilityInvocation' in doc).toBe(false);
   });
 });

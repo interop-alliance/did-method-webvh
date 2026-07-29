@@ -1,9 +1,9 @@
+import { createDataIntegrityProofTemplate, signDataIntegrityProof } from './cryptography.js';
 import type {
   DataIntegrityProof,
   DataIntegrityProofTemplate,
   DIDLogEntry,
   Signer,
-  SigningInput,
   Verifier,
   WitnessEntry,
   WitnessParameterResolution,
@@ -14,31 +14,9 @@ import type {
 import { concatBuffers } from './utils/buffer.js';
 import { canonicalizeStrict } from './utils/canonicalize.js';
 import { createHash } from './utils/crypto.js';
+import { createDate } from './utils/iso8601-datetime.js';
 import { isEd25519Multikey, multibaseDecode } from './utils/multiformats.js';
 import { fetchWitnessProofs, parseDidKeyDid, parseDidKeyVerificationMethod, resolveVM } from './utils.js';
-
-function createWitnessProofSigner(signer: Signer) {
-  return async (
-    document: { versionId: string },
-    proofTemplate?: DataIntegrityProofTemplate
-  ): Promise<{ proof: Partial<DataIntegrityProof> }> => {
-    if (!proofTemplate) {
-      throw new Error('Witness proof template is required');
-    }
-
-    const signed = await signer.sign({
-      document,
-      proof: proofTemplate,
-    } satisfies SigningInput);
-
-    return {
-      proof: {
-        verificationMethod: proofTemplate.verificationMethod,
-        proofValue: signed.proofValue,
-      },
-    };
-  };
-}
 
 /**
  * Creates a single witness DataIntegrityProof for one `versionId`.
@@ -56,43 +34,30 @@ export async function createWitnessProof(
   ) => Promise<{ proof: Partial<DataIntegrityProof> }>,
   versionId: string,
   verificationMethod: string,
-  created: string = new Date().toISOString()
+  created: string = createDate()
 ): Promise<DataIntegrityProof> {
-  const proofTemplate: DataIntegrityProofTemplate = {
-    type: 'DataIntegrityProof',
-    cryptosuite: 'eddsa-jcs-2022',
+  const proofTemplate = createDataIntegrityProofTemplate({
     verificationMethod,
     created,
     proofPurpose: 'assertionMethod',
+  });
+
+  const adaptedSigner: Signer<{ versionId: string }> = {
+    getVerificationMethodId: () => verificationMethod,
+    sign: async ({ document, proof }): Promise<{ proofValue: string }> => {
+      const signedData = await signer(document, proof);
+      // Only `proofValue` is taken from the signer; the rest of the proof comes
+      // from the template. Optional chaining keeps a malformed signer output
+      // (no proof at all) reported as the descriptive error below.
+      const proofValue = signedData?.proof?.proofValue;
+      if (!proofValue) {
+        throw new Error('Witness proof is missing proofValue');
+      }
+      return { proofValue };
+    },
   };
 
-  const signedData = await signer({ versionId }, proofTemplate);
-  const mergedProof = {
-    ...proofTemplate,
-    ...signedData.proof,
-  };
-
-  // Strip undefined fields to keep the proof JSON-compatible.
-  const sanitizedProof = JSON.parse(JSON.stringify(mergedProof)) as Partial<DataIntegrityProof>;
-
-  const verificationMethodValue = mergedProof.verificationMethod;
-  if (!verificationMethodValue) {
-    throw new Error('Witness proof is missing verificationMethod');
-  }
-  const proofValue = mergedProof.proofValue;
-  if (!proofValue) {
-    throw new Error('Witness proof is missing proofValue');
-  }
-
-  return {
-    id: sanitizedProof.id,
-    type: sanitizedProof.type ?? proofTemplate.type,
-    cryptosuite: sanitizedProof.cryptosuite ?? proofTemplate.cryptosuite,
-    verificationMethod: verificationMethodValue,
-    created: sanitizedProof.created ?? proofTemplate.created,
-    proofValue,
-    proofPurpose: sanitizedProof.proofPurpose ?? proofTemplate.proofPurpose,
-  };
+  return signDataIntegrityProof({ versionId }, proofTemplate, adaptedSigner);
 }
 
 /**
@@ -129,12 +94,13 @@ export async function signWitnessProofEntry(options: WitnessSigningOptions): Pro
         throw new Error(`Witness signer verificationMethod DID does not match witness id: ${did}`);
       }
 
-      return createWitnessProof(
-        createWitnessProofSigner(signer),
-        options.versionId,
+      const proofTemplate = createDataIntegrityProofTemplate({
         verificationMethod,
-        options.created
-      );
+        created: options.created,
+        proofPurpose: 'assertionMethod',
+      });
+
+      return signDataIntegrityProof({ versionId: options.versionId }, proofTemplate, signer);
     })
   );
 
@@ -171,16 +137,45 @@ export async function signWitnessProofEntries(
   );
 }
 
+export function normalizeWitnessThreshold(threshold: string | number | undefined | null): number {
+  return parseInt((threshold ?? 0).toString(), 10);
+}
+
+export function hasActiveWitnessRequirement(
+  witness?: WitnessParameterResolution | null
+): witness is WitnessParameterResolution {
+  if (!witness?.witnesses || witness.witnesses.length === 0) {
+    return false;
+  }
+
+  const threshold = normalizeWitnessThreshold(witness.threshold);
+  return threshold > 0;
+}
+
+export function resolveWitnessParameter(parameters: DIDLogEntry['parameters']): WitnessParameterResolution | undefined {
+  if ('witness' in parameters) {
+    return parameters.witness ?? {};
+  }
+
+  if ((parameters as { witnesses?: { id: string }[]; witnessThreshold?: string | number }).witnesses) {
+    const legacyParameters = parameters as { witnesses: { id: string }[]; witnessThreshold?: string | number };
+    return {
+      witnesses: legacyParameters.witnesses,
+      threshold: legacyParameters.witnessThreshold || legacyParameters.witnesses.length,
+    };
+  }
+
+  return undefined;
+}
+
 export function validateWitnessParameter(witness: WitnessParameterResolution): void {
   if (!witness.witnesses || !Array.isArray(witness.witnesses) || witness.witnesses.length === 0) {
     throw new Error('Witness list cannot be empty');
   }
 
-  if (
-    !witness.threshold ||
-    parseInt(witness.threshold.toString(), 10) < 1 ||
-    parseInt(witness.threshold.toString(), 10) > witness.witnesses.length
-  ) {
+  const normalizedThreshold = normalizeWitnessThreshold(witness.threshold);
+
+  if (!witness.threshold || normalizedThreshold < 1 || normalizedThreshold > witness.witnesses.length) {
     throw new Error('Witness threshold must be between 1 and the number of witnesses');
   }
 

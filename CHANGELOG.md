@@ -1,3 +1,65 @@
+## 5.0.0 - TBD
+
+### Changed
+
+* **BREAKING:** Removed the `createProof` export. Data Integrity proof
+  construction is now split into two composable helpers, both exported from the
+  package root: `createDataIntegrityProofTemplate(options)`, which builds a proof
+  template from explicit values (`verificationMethod`, and optional `created`,
+  `proofPurpose`, and `id`), and `signDataIntegrityProof(document, template,
+  signer)`, which signs a document against a template and returns a complete
+  `DataIntegrityProof`. Replace `createProof(vmId)` with
+  `createDataIntegrityProofTemplate({ verificationMethod: vmId })`, then sign with
+  `signDataIntegrityProof`.
+* `createWitnessProof` now takes only `proofValue` from a custom signer's
+  returned proof; the template is authoritative for every other field. A signer
+  that previously overrode `verificationMethod`, `created`, or supplied an `id`
+  in its returned proof no longer affects the emitted witness proof.
+* Witness proof `created` timestamps are now emitted at whole-second precision
+  (previously millisecond precision), matching DID log entry proofs.
+* Renamed two proof error messages: `Witness proof is missing verificationMethod`
+  is now `Data Integrity proof is missing verificationMethod`, and the sibling
+  missing-`proofValue` error raised during proof signing is now `Data Integrity
+  proof is missing proofValue`.
+* **BREAKING:** Removed the `controller` option from the public `createDID` and
+  `updateDID` interfaces (`CreateDIDInterface`, `UpdateDIDInterface`). The
+  controller/`id` of a DID document is now derived solely from the SCID and the
+  resolved location (address plus path segments); a caller-supplied `controller`
+  can no longer override the constructed identifier. Remove any `controller`
+  values passed to these functions.
+* `updateDID` now validates the method-specific path segments of the new DID
+  location (from `address`/`paths`) before constructing the identifier,
+  rejecting dot-segments and decoded/encoded slashes within a single segment.
+  This closes a gap where an update could smuggle such segments into the
+  identifier even though `createDID` already validated them.
+* `getBaseUrl` and `getFileUrl` now require a full `did:webvh` identifier as
+  input. Previously they accepted any address form (a bare domain string or an
+  `https://` URL); such inputs are now rejected with `... must be a valid
+  did:webvh identifier`. Pass the `did:webvh:...` identifier instead.
+* **BREAKING:** Created DID documents no longer include empty
+  verification-relationship arrays (`authentication: []`, `assertionMethod: []`,
+  etc.); empty arrays are now omitted, matching upstream. Because the document
+  state is hashed into the SCID, inputs that previously produced such empty
+  arrays now generate a different SCID. Existing published logs are unaffected
+  and continue to resolve.
+
+### Fixed
+
+* `deactivateDID` on a DID with active pre-rotation previously produced a log
+  that failed resolution with `Invalid update key ... Not found in
+  nextKeyHashes ...`, permanently bricking the DID. It now mirrors `updateDID`:
+  `updateKeys` (the pre-committed keys) must be provided while pre-rotation is
+  active (otherwise it throws `updateKeys must be provided while pre-rotation
+  is active`), the provided keys are validated against the prior
+  `nextKeyHashes` at deactivation time, and the deactivation entry carries
+  `nextKeyHashes: []` to close the rotation. The returned metadata now reports
+  `prerotation: false` for the deactivated DID.
+* `normalizeVMs` now points every verification-relationship entry at the same id
+  that was materialized into `verificationMethod`. Previously a verification
+  method supplied with neither an `id` nor a `publicKeyMultibase` received a
+  freshly generated random id in the relationship arrays, so its relationship
+  reference pointed at a fragment absent from `verificationMethod`.
+
 ## 4.0.0 - 2026-07-17
 
 (Tracking upstream `3.0.0@2f795b1b3b8b4ad0dbcab6ca1cf19f062f1b0905`)

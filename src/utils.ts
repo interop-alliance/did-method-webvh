@@ -1,17 +1,9 @@
 import { config } from './config.js';
-import { BASE_CONTEXT, METHOD } from './constants.js';
-import type {
-  CreateDIDInterface,
-  DIDDoc,
-  DIDLog,
-  ParsedDidKeyVerificationMethod,
-  VerificationMethod,
-  WitnessProofFileEntry,
-} from './interfaces.js';
+import { METHOD } from './constants.js';
+import { findVerificationMethod } from './did-document.js';
+import type { DIDLog, ParsedDidKeyVerificationMethod, WitnessProofFileEntry } from './interfaces.js';
 import { resolveDIDFromLog } from './method.js';
-import { canonicalizeStrict } from './utils/canonicalize.js';
-import { createHash } from './utils/crypto.js';
-import { createMultihash, encodeBase58Btc, MultihashAlgorithm, multibaseDecode } from './utils/multiformats.js';
+import { multibaseDecode } from './utils/multiformats.js';
 
 const DID_KEY_PREFIX = 'did:key:';
 
@@ -94,6 +86,41 @@ export interface ParsedDidWebvhIdentifier {
   locationKey: string;
 }
 
+export function parseAndValidateVersionId(versionId: string, expectedVersionNumber: number) {
+  const firstDashIndex = versionId.indexOf('-');
+  const lastDashIndex = versionId.lastIndexOf('-');
+
+  if (firstDashIndex === -1 || firstDashIndex !== lastDashIndex) {
+    throw new Error(`versionId '${versionId}' must contain exactly one '-' separator`);
+  }
+
+  const version = versionId.slice(0, firstDashIndex);
+  const entryHash = versionId.slice(firstDashIndex + 1);
+
+  if (!/^\d+$/.test(version)) {
+    throw new Error(`versionId '${versionId}' must have a numeric version prefix`);
+  }
+
+  if (entryHash.length === 0) {
+    throw new Error(`versionId '${versionId}' must have a non-empty hash component`);
+  }
+
+  const versionNumber = Number(version);
+  if (versionNumber !== expectedVersionNumber) {
+    throw new Error(`version '${version}' in log doesn't match expected '${expectedVersionNumber}'.`);
+  }
+
+  return { version, versionNumber, entryHash };
+}
+
+export function requireDidDocumentId(id: string | undefined): string {
+  if (!id) {
+    throw new Error('DID document id is missing');
+  }
+
+  return id;
+}
+
 function isIPAddress(host: string): boolean {
   // Reject IPv4
   if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) return true;
@@ -130,6 +157,10 @@ function parsePortNumber(rawPort: string): number {
 
 function toOptionalPaths(pathSegments: string[]): string[] | undefined {
   return pathSegments.length > 0 ? pathSegments : undefined;
+}
+
+function buildLocationKey(didDomainComponent: string, pathSegments: string[]): string {
+  return pathSegments.length ? `${didDomainComponent}:${pathSegments.join(':')}` : didDomainComponent;
 }
 
 function toDidDomainComponent(host: string, port?: number): string {
@@ -207,7 +238,52 @@ export function validateMethodSpecificPathSegments(pathSegments: string[], conte
   }
 }
 
-export function parseCanonicalAddress(input: string): ParsedAddress {
+export function normalizeDidAddress({
+  address,
+  scid,
+  paths,
+  fallbackPaths,
+  context,
+}: {
+  address: string;
+  scid: string;
+  paths?: string[];
+  fallbackPaths?: string[];
+  context: string;
+}): ParsedDidWebvhIdentifier & { controller: string } {
+  const parsed = parseCanonicalAddress(address);
+  const addressPaths = parsed.paths || [];
+  const resolvedPaths =
+    fallbackPaths !== undefined
+      ? paths !== undefined
+        ? [...addressPaths, ...paths]
+        : addressPaths.length
+          ? addressPaths
+          : fallbackPaths
+      : [...addressPaths, ...(paths || [])];
+
+  validateMethodSpecificPathSegments(resolvedPaths, context);
+
+  const locationKey = buildLocationKey(parsed.didDomainComponent, resolvedPaths);
+
+  return {
+    scid,
+    didDomainComponent: parsed.didDomainComponent,
+    paths: toOptionalPaths(resolvedPaths),
+    locationKey,
+    controller: `did:${METHOD}:${scid}:${locationKey}`,
+  };
+}
+
+/**
+ * Parses a `did:webvh` identifier, an `https://` (or `http://localhost`) URL,
+ * or a bare `host[:port]` string into its canonical host / port / path parts.
+ *
+ * `context` labels path-validation errors raised for the `did:webvh` input
+ * form, so callers can surface the identifier's provenance (for example
+ * `"last entry state.id"`).
+ */
+export function parseCanonicalAddress(input: string, context: string = 'did:webvh identifier'): ParsedAddress {
   if (!input || typeof input !== 'string') {
     throw new Error('Address input must be a non-empty string');
   }
@@ -230,7 +306,7 @@ export function parseCanonicalAddress(input: string): ParsedAddress {
       throw new Error('did:webvh identifier must not include query or fragment components');
     }
 
-    validateMethodSpecificPathSegments(pathParts, 'did:webvh identifier');
+    validateMethodSpecificPathSegments(pathParts, context);
 
     // Detect double encoding
     if (isDoubleEncoded(domainPart)) {
@@ -299,8 +375,16 @@ export function parseCanonicalAddress(input: string): ParsedAddress {
   return toParsedAddress(host, port);
 }
 
-export function parseDidWebvhIdentifier(did: string, context: string): ParsedDidWebvhIdentifier {
-  const parsedAddress = parseCanonicalAddress(did);
+/**
+ * Single parse pass over a `did:webvh` identifier. Returns both the public
+ * {@link ParsedDidWebvhIdentifier} shape and the underlying {@link ParsedAddress},
+ * so URL derivation can reuse the already-decoded host and port instead of
+ * re-splitting `didDomainComponent`.
+ */
+function parseDidWebvhAddress(
+  did: string,
+  context: string
+): { identifier: ParsedDidWebvhIdentifier; address: ParsedAddress } {
   const didParts = did.split(':');
 
   if (didParts.length < 4 || didParts[0] !== 'did' || didParts[1] !== METHOD) {
@@ -312,16 +396,22 @@ export function parseDidWebvhIdentifier(did: string, context: string): ParsedDid
     throw new Error(`${context} must include SCID segment`);
   }
 
-  const locationKey = parsedAddress.paths?.length
-    ? `${parsedAddress.didDomainComponent}:${parsedAddress.paths.join(':')}`
-    : parsedAddress.didDomainComponent;
+  const address = parseCanonicalAddress(did, context);
+  const paths = address.paths ?? [];
 
   return {
-    scid,
-    didDomainComponent: parsedAddress.didDomainComponent,
-    paths: parsedAddress.paths,
-    locationKey,
+    identifier: {
+      scid,
+      didDomainComponent: address.didDomainComponent,
+      paths: toOptionalPaths(paths),
+      locationKey: buildLocationKey(address.didDomainComponent, paths),
+    },
+    address,
   };
+}
+
+export function parseDidWebvhIdentifier(did: string, context: string): ParsedDidWebvhIdentifier {
+  return parseDidWebvhAddress(did, context).identifier;
 }
 
 type ProcessVersionsLike = { node?: string; bun?: string };
@@ -351,80 +441,6 @@ const toASCII = (domain: string): string => {
     return domain;
   }
 };
-
-export const DID_PLACEHOLDER = '{DID}';
-
-export function validateCreateDidDocument(didDocument: DIDDoc): void {
-  if (!didDocument || typeof didDocument !== 'object') {
-    throw new Error('didDocument must be an object');
-  }
-  if (typeof didDocument.id !== 'string') {
-    throw new Error("didDocument 'id' field must be a string");
-  }
-  if (!didDocument.id.includes('{SCID}') && !didDocument.id.includes(DID_PLACEHOLDER)) {
-    throw new Error("didDocument.id must contain a '{SCID}' or '{DID}' placeholder");
-  }
-}
-
-export function replaceCreateDidPlaceholders<T>(input: T, scid: string, did: string): T {
-  const withScid = replaceValueInObject(input, '{SCID}', scid);
-  return replaceValueInObject(withScid, DID_PLACEHOLDER, did) as T;
-}
-
-export function convertWebvhIdToWebId(id: string): string {
-  const parts = id.split(':');
-  if (parts.length < 4 || parts[0] !== 'did' || parts[1] !== 'webvh') {
-    throw new Error(`Invalid did:webvh id '${id}'`);
-  }
-  return `did:web:${parts.slice(3).join(':')}`;
-}
-
-export function enrichAlsoKnownAs(doc: DIDDoc, did: string, opts: { alsoKnownAsWeb?: boolean }): DIDDoc {
-  if (doc.alsoKnownAs !== undefined && !Array.isArray(doc.alsoKnownAs)) {
-    throw new Error('alsoKnownAs is not an array');
-  }
-
-  const aliases = Array.isArray(doc.alsoKnownAs) ? [...doc.alsoKnownAs] : [];
-  const addAlias = (alias: string) => {
-    if (!aliases.includes(alias)) {
-      aliases.push(alias);
-    }
-  };
-
-  if (opts.alsoKnownAsWeb) {
-    addAlias(convertWebvhIdToWebId(did));
-  }
-
-  if (aliases.length === 0) {
-    return doc;
-  }
-
-  return {
-    ...doc,
-    alsoKnownAs: aliases,
-  };
-}
-
-export function generateParallelDidWeb(didwebvhDid: string, didwebvhDoc: DIDDoc): DIDDoc {
-  let webDoc = structuredClone(didwebvhDoc);
-
-  const scidPrefix = didwebvhDid.replace(/^did:webvh:([^:]+):.*$/, 'did:webvh:$1:');
-  webDoc = replaceValueInObject(webDoc, scidPrefix, 'did:web:');
-
-  const webDid = webDoc.id as string;
-  const aliases = (Array.isArray(webDoc.alsoKnownAs) ? [...webDoc.alsoKnownAs] : []).filter(
-    (alias: string) => alias !== webDid
-  );
-
-  if (!aliases.includes(didwebvhDid)) {
-    aliases.push(didwebvhDid);
-  }
-
-  return {
-    ...webDoc,
-    alsoKnownAs: [...new Set(aliases)],
-  };
-}
 
 export const readLogFromDisk = async (path: string): Promise<DIDLog> => {
   const fs = await getFS();
@@ -487,28 +503,39 @@ export const maybeWriteTestLog = async (did: string, log: DIDLog) => {
   }
 };
 
-export const getBaseUrl = (id: string) => {
+/**
+ * Parses a `did:webvh` identifier for URL derivation, rejecting query/fragment
+ * contamination up front. `parseCanonicalAddress` already decoded the host and
+ * port, so no re-parsing of `didDomainComponent` is needed downstream.
+ */
+const parseDidWebvhIdentifierForUrl = (id: string) => {
   if (hasFragmentOrQuery(id)) {
     throw new Error('did:webvh identifier must not include query or fragment components');
   }
 
-  const parsed = parseCanonicalAddress(id);
+  return parseDidWebvhAddress(id, 'did:webvh identifier');
+};
+
+const buildBaseUrl = ({ identifier, address }: ReturnType<typeof parseDidWebvhIdentifierForUrl>) => {
   // This fork allows http for localhost (local testing); HTTPS everywhere else.
-  const protocol = parsed.canonicalHost === 'localhost' ? 'http' : 'https';
-  const host = toASCII(parsed.canonicalHost.normalize('NFC'));
-  const normalizedHost = parsed.canonicalPort ? `${host}:${parsed.canonicalPort}` : host;
-  const path = parsed.paths?.join('/') ?? '';
+  const protocol = address.canonicalHost === 'localhost' ? 'http' : 'https';
+  const host = toASCII(address.canonicalHost.normalize('NFC'));
+  const normalizedHost = address.canonicalPort ? `${host}:${address.canonicalPort}` : host;
+  const path = identifier.paths?.join('/') ?? '';
 
   return `${protocol}://${normalizedHost}${path ? `/${path}` : ''}`;
 };
 
-export const getFileUrl = (id: string) => {
-  const baseUrl = getBaseUrl(id);
-  const domainEndIndex = baseUrl.indexOf('/', baseUrl.indexOf('://') + 3);
+export const getBaseUrl = (id: string) => buildBaseUrl(parseDidWebvhIdentifierForUrl(id));
 
-  if (domainEndIndex !== -1) {
+export const getFileUrl = (id: string) => {
+  const parsed = parseDidWebvhIdentifierForUrl(id);
+  const baseUrl = buildBaseUrl(parsed);
+
+  if (parsed.identifier.paths?.length) {
     return `${baseUrl}/did.jsonl`;
   }
+
   return `${baseUrl}/.well-known/did.jsonl`;
 };
 
@@ -530,250 +557,6 @@ export async function fetchLogFromIdentifier(identifier: string): Promise<DIDLog
     throw error;
   }
 }
-
-export const createDate = (created?: Date | string) =>
-  new Date(created ?? Date.now()).toISOString().replace(/\.\d{1,3}Z$/, 'Z');
-
-export function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-export const createSCID = async (logEntryHash: string): Promise<string> => {
-  return logEntryHash;
-};
-
-// Cache for deriveHash operations to avoid redundant computation. Bounded with
-// a simple FIFO eviction so a long-lived process (e.g. a resolver serving many
-// DIDs, keyed by full log entries) cannot grow it without limit.
-export const HASH_CACHE_MAX_ENTRIES = 500;
-const hashCache = new Map<string, string>();
-
-/** @internal Test-only accessor for the bounded deriveHash memo cache size. */
-export const getHashCacheSizeForTests = (): number => hashCache.size;
-
-function getCachedHash(input: unknown): string | undefined {
-  try {
-    const key = JSON.stringify(input);
-    return hashCache.get(key);
-  } catch {
-    return undefined;
-  }
-}
-
-function setCachedHash(input: unknown, hash: string): void {
-  try {
-    const key = JSON.stringify(input);
-    hashCache.set(key, hash);
-    // Map preserves insertion order, so the first key is the oldest insertion.
-    if (hashCache.size > HASH_CACHE_MAX_ENTRIES) {
-      const oldestKey = hashCache.keys().next().value;
-      if (oldestKey !== undefined) {
-        hashCache.delete(oldestKey);
-      }
-    }
-  } catch {
-    // Ignore caching errors
-  }
-}
-
-// Input must be strict JSON-compatible and must not contain explicit undefined values.
-export async function deriveHash(input: unknown): Promise<string> {
-  const cached = getCachedHash(input);
-  if (cached) {
-    return cached;
-  }
-  const data = canonicalizeStrict(input);
-  const hash = await createHash(data);
-  const multihash = createMultihash(new Uint8Array(hash), MultihashAlgorithm.SHA2_256);
-  const result = encodeBase58Btc(multihash);
-  setCachedHash(input, result);
-  return result;
-}
-
-/**
- * Derives a `nextKeyHashes` entry from an update key (its `did:key`
- * multibase). Returns the spec's bare base58btc multihash, NOT `z`-prefixed
- * multibase -- did:webvh 1.0 mandates `nextKeyHashes` entries be multihash
- * base58btc. Do NOT multibase-encode the result; the asymmetry with every
- * other `z`-prefixed value in this API is intentional and spec-required.
- */
-export const deriveNextKeyHash = async (input: string): Promise<string> => {
-  const hash = await createHash(input);
-  const multihash = createMultihash(new Uint8Array(hash), MultihashAlgorithm.SHA2_256);
-  return encodeBase58Btc(multihash);
-};
-
-export const createDIDDoc = async (options: CreateDIDInterface): Promise<{ doc: DIDDoc }> => {
-  const { controller } = options;
-  const all = normalizeVMs(options.verificationMethods, controller, options.vmIdFragment);
-
-  // Create the base document
-  const doc: DIDDoc = {
-    '@context': options.context || BASE_CONTEXT,
-    id: controller,
-    controller,
-  };
-
-  // Add verification methods and relationships from normalizeVMs
-  if (all && typeof all === 'object') {
-    if (all.verificationMethod) {
-      doc.verificationMethod = all.verificationMethod;
-    }
-
-    if (all.authentication) {
-      doc.authentication = all.authentication;
-    }
-
-    if (all.assertionMethod) {
-      doc.assertionMethod = all.assertionMethod;
-    }
-
-    if (all.keyAgreement) {
-      doc.keyAgreement = all.keyAgreement;
-    }
-
-    if (all.capabilityDelegation) {
-      doc.capabilityDelegation = all.capabilityDelegation;
-    }
-
-    if (all.capabilityInvocation) {
-      doc.capabilityInvocation = all.capabilityInvocation;
-    }
-  }
-
-  // Add direct properties from options
-  if (options.authentication) {
-    doc.authentication = options.authentication;
-  }
-
-  if (options.assertionMethod) {
-    doc.assertionMethod = options.assertionMethod;
-  }
-
-  if (options.keyAgreement) {
-    doc.keyAgreement = options.keyAgreement;
-  }
-
-  if (options.capabilityDelegation) {
-    doc.capabilityDelegation = options.capabilityDelegation;
-  }
-
-  if (options.capabilityInvocation) {
-    doc.capabilityInvocation = options.capabilityInvocation;
-  }
-
-  if (options.alsoKnownAs) {
-    doc.alsoKnownAs = options.alsoKnownAs;
-  }
-
-  if (options.services) {
-    doc.service = options.services;
-  }
-
-  return { doc };
-};
-
-// Helper function to generate a random string (replacement for nanoid)
-export const generateRandomId = (length: number = 8): string => {
-  const characters = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  const charactersLength = characters.length;
-  for (let i = 0; i < length; i++) {
-    result += characters.charAt(Math.floor(Math.random() * charactersLength));
-  }
-  return result;
-};
-
-/**
- * Builds a verification-method id (`<did>#<fragment>`). The fragment is derived
- * from `publicKeyMultibase`: `'short'` (default, and the historical behavior)
- * uses its last 8 characters; `'multibase'` uses the full multibase, yielding a
- * self-describing `#<publicKeyMultibase>` fragment. When no `publicKeyMultibase`
- * is present, a random 8-char id is used regardless of mode.
- */
-export const createVMID = (
-  vm: VerificationMethod,
-  did: string | null,
-  vmIdFragment: 'short' | 'multibase' = 'short'
-) => {
-  const fragment =
-    vmIdFragment === 'multibase' && vm.publicKeyMultibase
-      ? vm.publicKeyMultibase
-      : vm.publicKeyMultibase?.slice(-8) || generateRandomId(8);
-  return `${did ?? ''}#${fragment}`;
-};
-
-type NormalizedVerificationMethods = Required<
-  Pick<
-    DIDDoc,
-    | 'verificationMethod'
-    | 'authentication'
-    | 'assertionMethod'
-    | 'keyAgreement'
-    | 'capabilityDelegation'
-    | 'capabilityInvocation'
-  >
->;
-
-export const normalizeVMs = (
-  verificationMethod: VerificationMethod[] | undefined,
-  did: string | null = null,
-  vmIdFragment: 'short' | 'multibase' = 'short'
-): NormalizedVerificationMethods => {
-  const all: NormalizedVerificationMethods = {
-    verificationMethod: [],
-    authentication: [],
-    assertionMethod: [],
-    keyAgreement: [],
-    capabilityDelegation: [],
-    capabilityInvocation: [],
-  };
-
-  if (!verificationMethod || verificationMethod.length === 0) {
-    return all;
-  }
-
-  // First collect all VMs. `purpose` is a creation-time directive for the
-  // relationship wiring below, not a DID Core verification-method property, so
-  // it is dropped from the emitted entries.
-  const vms: VerificationMethod[] = verificationMethod.map(({ purpose, ...vm }) => ({
-    ...vm,
-    id: vm.id ?? createVMID(vm, did, vmIdFragment),
-    // Default controller to the DID — required by W3C DID Core §5.2
-    controller: vm.controller ?? did ?? undefined,
-  }));
-  all.verificationMethod = vms;
-
-  // A VM's `purpose` may name a single relationship or several; an absent (or
-  // empty) purpose defaults the key into authentication.
-  const purposesOf = (vm: VerificationMethod): string[] =>
-    vm.purpose == null ? [] : Array.isArray(vm.purpose) ? vm.purpose : [vm.purpose];
-  const idOf = (vm: VerificationMethod) => vm.id ?? createVMID(vm, did, vmIdFragment);
-
-  // Then handle relationships - default to authentication if no purpose is specified
-  all.authentication = verificationMethod
-    .filter((vm) => {
-      const purposes = purposesOf(vm);
-      return purposes.length === 0 || purposes.includes('authentication');
-    })
-    .map(idOf);
-
-  all.assertionMethod = verificationMethod.filter((vm) => purposesOf(vm).includes('assertionMethod')).map(idOf);
-
-  all.keyAgreement = verificationMethod.filter((vm) => purposesOf(vm).includes('keyAgreement')).map(idOf);
-
-  all.capabilityDelegation = verificationMethod
-    .filter((vm) => purposesOf(vm).includes('capabilityDelegation'))
-    .map(idOf);
-
-  all.capabilityInvocation = verificationMethod
-    .filter((vm) => purposesOf(vm).includes('capabilityInvocation'))
-    .map(idOf);
-
-  return all;
-};
 
 export const resolveVM = async (vm: string) => {
   try {
@@ -799,44 +582,6 @@ export const resolveVM = async (vm: string) => {
   }
 };
 
-export const findVerificationMethod = (doc: DIDDoc, vmId: string): VerificationMethod | null => {
-  // Check in the verificationMethod array
-  if (doc.verificationMethod?.some((vm) => vm.id === vmId)) {
-    return doc.verificationMethod.find((vm) => vm.id === vmId) ?? null;
-  }
-
-  // Check in other verification method relationship arrays
-  const vmRelationships = [
-    'authentication',
-    'assertionMethod',
-    'keyAgreement',
-    'capabilityInvocation',
-    'capabilityDelegation',
-  ];
-  for (const relationship of vmRelationships) {
-    const relationshipValues = doc[relationship as keyof DIDDoc];
-    if (
-      Array.isArray(relationshipValues) &&
-      relationshipValues.some((item) => {
-        if (typeof item !== 'object' || item === null) return false;
-        const maybeId = (item as { id?: unknown }).id;
-        return maybeId === vmId;
-      })
-    ) {
-      const match = relationshipValues.find((item) => {
-        if (typeof item !== 'object' || item === null) return false;
-        const maybeId = (item as { id?: unknown }).id;
-        return maybeId === vmId;
-      });
-      if (match && typeof match === 'object') {
-        return match as VerificationMethod;
-      }
-    }
-  }
-
-  return null;
-};
-
 export async function fetchWitnessProofs(did: string): Promise<WitnessProofFileEntry[]> {
   try {
     const url = getFileUrl(did).replace('did.jsonl', 'did-witness.json');
@@ -853,19 +598,6 @@ export async function fetchWitnessProofs(did: string): Promise<WitnessProofFileE
   }
 }
 
-export function replaceValueInObject<T>(obj: T, searchValue: string, replaceValue: string): T {
-  if (typeof obj === 'string') {
-    return obj.replaceAll(searchValue, replaceValue) as T;
-  }
-  if (Array.isArray(obj)) {
-    return obj.map((item) => replaceValueInObject(item, searchValue, replaceValue)) as T;
-  }
-  if (obj && typeof obj === 'object') {
-    const result: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
-      result[key] = replaceValueInObject(value, searchValue, replaceValue);
-    }
-    return result as T;
-  }
-  return obj;
-}
+// Re-exported from the leaf module so existing importers of `./utils.js` are
+// unaffected while `did-document.ts` can import it without an import cycle.
+export { replaceValueInObject } from './utils/object.js';

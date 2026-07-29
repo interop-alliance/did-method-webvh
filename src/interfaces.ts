@@ -210,7 +210,6 @@ export interface CreateDIDInterface {
   didDocument?: DIDDoc;
   services?: ServiceEndpoint[];
   paths?: string[];
-  controller?: string;
   context?: string | string[] | object | object[];
   alsoKnownAs?: string[];
   alsoKnownAsWeb?: boolean;
@@ -247,7 +246,6 @@ export interface UpdateDIDInterface {
   verificationMethods?: VerificationMethod[];
   // See CreateDIDInterface.vmIdFragment.
   vmIdFragment?: 'short' | 'multibase';
-  controller?: string;
   context?: string | string[] | object | object[];
   alsoKnownAs?: string[];
   portable?: boolean;

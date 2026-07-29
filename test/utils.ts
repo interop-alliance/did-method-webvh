@@ -1,9 +1,9 @@
 import * as crypto from '@stablelib/ed25519';
 import { METHOD, PLACEHOLDER } from '../src/constants.js';
 import { AbstractCrypto, prepareDataForSigning } from '../src/cryptography.js';
+import { createDIDDoc, replaceCreateDidPlaceholders } from '../src/did-document.js';
 import type {
   DIDLog,
-  DIDLogEntry,
   Signer,
   SignerOptions,
   SigningInput,
@@ -11,26 +11,13 @@ import type {
   VerificationMethod,
   Verifier,
 } from '../src/interfaces.js';
+import { createSCID, deriveHash } from '../src/utils/crypto.js';
+import { createDate } from '../src/utils/iso8601-datetime.js';
 import { MultibaseEncoding, multibaseDecode, multibaseEncode } from '../src/utils/multiformats.js';
-import { createDate, createDIDDoc, createSCID, deriveHash, replaceCreateDidPlaceholders } from '../src/utils.js';
 
 /** Returns the versionTime one second after the last entry in a DID log. Use in tests when chaining rapid create/update/deactivate calls. */
 export const nextSecond = (log: DIDLog): string =>
   createDate(new Date(new Date(log[log.length - 1].versionTime).getTime() + 1000));
-
-export function createMockDIDLog(entries: Partial<DIDLogEntry>[]): DIDLog {
-  return entries.map((entry, index) => {
-    const versionNumber = index + 1;
-    const mockEntry: DIDLogEntry = {
-      versionId: entry.versionId || `${versionNumber}-${deriveHash(entry)}`,
-      versionTime: entry.versionTime || new Date().toISOString(),
-      parameters: entry.parameters || {},
-      state: entry.state || {},
-      proof: entry.proof || [],
-    };
-    return mockEntry;
-  });
-}
 
 // Test crypto implementation
 export class TestCryptoImplementation extends AbstractCrypto implements Verifier {
@@ -38,15 +25,13 @@ export class TestCryptoImplementation extends AbstractCrypto implements Verifier
 
   constructor(options: SignerOptions) {
     super(options);
-    // For tests, we'll generate a deterministic key if none provided
-    if (!options.verificationMethod?.secretKeyMultibase) {
-      const keyPair = crypto.generateKeyPair();
-      this.keyPair = keyPair;
-    } else {
-      const secretKey = multibaseDecode(options.verificationMethod.secretKeyMultibase).bytes;
-      const publicKey = multibaseDecode(options.verificationMethod.publicKeyMultibase!).bytes;
-      this.keyPair = { publicKey, secretKey };
+    if (!options.verificationMethod?.secretKeyMultibase || !options.verificationMethod.publicKeyMultibase) {
+      throw new Error('TestCryptoImplementation requires secret and public multibase keys');
     }
+
+    const secretKey = multibaseDecode(options.verificationMethod.secretKeyMultibase).bytes;
+    const publicKey = multibaseDecode(options.verificationMethod.publicKeyMultibase).bytes;
+    this.keyPair = { publicKey, secretKey };
   }
 
   async sign(input: SigningInput): Promise<SigningOutput> {
@@ -62,13 +47,6 @@ export class TestCryptoImplementation extends AbstractCrypto implements Verifier
       console.error('Error verifying signature:', error);
       return false;
     }
-  }
-}
-
-// Test implementation that always fails verification
-export class MockFailingImplementation extends TestCryptoImplementation {
-  async verify(signature: Uint8Array, message: Uint8Array, publicKey: Uint8Array): Promise<boolean> {
-    return false;
   }
 }
 
@@ -122,10 +100,8 @@ export const createFutureDIDLog = async (authKey: VerificationMethod, minutesAhe
   const controller = `did:${METHOD}:${PLACEHOLDER}:example.com`;
 
   const { doc } = await createDIDDoc({
-    controller,
+    did: controller,
     verificationMethods: asPublicVerificationMethods(authKey),
-    signer,
-    updateKeys: [authKey.publicKeyMultibase!],
   });
 
   const initialLogEntry: DIDLog[0] = {

@@ -1,4 +1,5 @@
 export const PLACEHOLDER = '{SCID}';
+export const DID_PLACEHOLDER = '{DID}';
 export const METHOD = 'webvh';
 export const BASE_CONTEXT = ['https://www.w3.org/ns/did/v1', 'https://w3id.org/security/multikey/v1'];
 
@@ -18,6 +19,13 @@ export const METHOD_PARAMETER_KEYS = {
   ttl: 'ttl',
 } as const;
 
-// Error type URLs
-export const ERROR_TYPE_INVALID_DID = 'https://w3id.org/security#INVALID_CONTROLLED_IDENTIFIER_DOCUMENT_ID';
-export const ERROR_TYPE_NOT_FOUND = 'https://w3id.org/security#NOT_FOUND';
+// Verification relationships
+export const VERIFICATION_RELATIONSHIPS = [
+  'authentication',
+  'assertionMethod',
+  'keyAgreement',
+  'capabilityDelegation',
+  'capabilityInvocation',
+] as const;
+
+export type VerificationRelationship = (typeof VERIFICATION_RELATIONSHIPS)[number];
