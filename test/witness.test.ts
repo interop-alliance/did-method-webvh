@@ -1,14 +1,17 @@
 import { beforeAll, describe, expect, test } from 'vitest';
+import { createDataIntegrityProofTemplate, signDataIntegrityProof } from '../src/cryptography.js';
 import type {
   CreateDIDResult,
   DataIntegrityProofTemplate,
   DIDLog,
+  DIDLogEntry,
   Signer,
   VerificationMethod,
 } from '../src/interfaces.js';
 import { createDID, resolveDIDFromLog, updateDID } from '../src/method.js';
+import { deriveHash } from '../src/utils/crypto.js';
 import { MultibaseEncoding, multibaseEncode } from '../src/utils/multiformats.js';
-import { deriveHash, parseDidKeyDid, parseDidKeyVerificationMethod } from '../src/utils.js';
+import { parseDidKeyDid, parseDidKeyVerificationMethod } from '../src/utils.js';
 import {
   countWitnessApprovals,
   createWitnessProof,
@@ -451,6 +454,45 @@ describe('Witness Implementation Tests', async () => {
     expect(resolved.meta.witness).toEqual({});
   });
 
+  test('a subsequent entry with a literal witness: null resolves to meta.witness === {}', async () => {
+    const key = await generateTestVerificationMethod();
+    const verifier = new TestCryptoImplementation({ verificationMethod: key });
+    const signer = createTestSigner(key);
+
+    const created = await createDID({
+      address: 'example.com',
+      signer,
+      updateKeys: [key.publicKeyMultibase!],
+      verificationMethods: asPublicVerificationMethods(key),
+      verifier,
+    });
+    const genesis = created.log[0];
+
+    // Hand-build a second entry whose parameters carry a *literal* `witness: null`.
+    // The public updateDID normalizes a null witness to `{}`, so this raw shape is
+    // only reachable from an externally authored log; resolution normalizes it to
+    // `{}` via resolveWitnessParameter, matching what updateDID reports for the
+    // same cleared-witness state.
+    const parameters = { witness: null } as unknown as DIDLogEntry['parameters'];
+    const logEntry: DIDLogEntry = {
+      versionId: genesis.versionId,
+      versionTime: nextSecond(created.log),
+      parameters,
+      state: structuredClone(genesis.state),
+    };
+    const entryHash = await deriveHash(logEntry);
+    const entry: DIDLogEntry = { ...logEntry, versionId: `2-${entryHash}` };
+    const proofTemplate = createDataIntegrityProofTemplate({
+      verificationMethod: signer.getVerificationMethodId(),
+      created: logEntry.versionTime,
+      proofPurpose: 'assertionMethod',
+    });
+    entry.proof = [await signDataIntegrityProof(entry, proofTemplate, signer)];
+
+    const resolved = await resolveDIDFromLog([genesis, entry], { verifier });
+    expect(resolved.meta.witness).toEqual({});
+  });
+
   test('Verify witness proofs from did-witness.json', async () => {
     // Create real witness proofs using the utility
     const mockWitnessFile = [
@@ -713,6 +755,40 @@ describe('Witness Implementation Tests', async () => {
         ],
       })
     ).rejects.toThrow(`Witness threshold not met for version ${updatedDid.log[1].versionId}`);
+  });
+
+  test('Resolve does not double-count duplicate proofs from the same witness DID', async () => {
+    const witnessDid1 = `did:key:${witness1.publicKeyMultibase}`;
+    const witnessDid2 = `did:key:${witness2.publicKeyMultibase}`;
+    const didWithWitness = await createDID({
+      address: 'example.com',
+      signer: createTestSigner(authKey),
+      updateKeys: [authKey.publicKeyMultibase!],
+      verificationMethods: asPublicVerificationMethods(authKey),
+      witness: {
+        threshold: 2,
+        witnesses: [{ id: witnessDid1 }, { id: witnessDid2 }],
+      },
+      verifier: testImplementation,
+    });
+
+    const versionId = didWithWitness.log[0].versionId;
+    const duplicateProofsFromSameWitness = [
+      await createWitnessProof(createWitnessSigner(witness1), versionId, witnessVerificationMethod(witness1)),
+      await createWitnessProof(createWitnessSigner(witness1), versionId, witnessVerificationMethod(witness1)),
+    ];
+
+    await expect(
+      resolveDIDFromLog(didWithWitness.log, {
+        verifier: testImplementation,
+        witnessProofs: [
+          {
+            versionId,
+            proof: duplicateProofsFromSameWitness,
+          },
+        ],
+      })
+    ).rejects.toThrow(`Witness threshold not met for version ${versionId}`);
   });
 
   test('Resolve accepts later proof for earlier required entry', async () => {
@@ -1054,6 +1130,32 @@ describe('Witness Implementation Tests', async () => {
     );
 
     expect(proof.proofValue).toBe('zInvalidButPresent');
+  });
+
+  test('Reject witness signer output with no proof', async () => {
+    await expect(
+      createWitnessProof(
+        async () => ({}) as unknown as { proof: { proofValue: string } },
+        '1-test',
+        witnessVerificationMethod(witness1)
+      )
+    ).rejects.toThrow('Witness proof is missing proofValue');
+  });
+
+  test('Reject witness signer output with a proof lacking proofValue', async () => {
+    await expect(
+      createWitnessProof(async () => ({ proof: {} }), '1-test', witnessVerificationMethod(witness1))
+    ).rejects.toThrow('Witness proof is missing proofValue');
+  });
+
+  test('Default witness proof created timestamp is trimmed to whole seconds', async () => {
+    const proof = await createWitnessProof(
+      createWitnessSigner(witness1),
+      '1-test',
+      witnessVerificationMethod(witness1)
+    );
+
+    expect(proof.created).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
   });
 
   test('Resolves DID with legacy witnesses/witnessThreshold format in incremental entry', async () => {

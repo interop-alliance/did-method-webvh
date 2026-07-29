@@ -118,17 +118,19 @@ const PROBLEM_DETAILS_BY_CODE: Record<DidResolutionError, { type: string; title:
  * @param code Resolution error code.
  * @param detail Occurrence-specific detail message.
  * @param problemType Optional registry URI overriding the code's default `problemDetails.type`.
+ * @param title Optional title overriding the code's default `problemDetails.title`.
  * @returns The error fields for a core result's `meta`.
  */
 export function toErrorMeta(
   code: DidResolutionError,
   detail: string,
-  problemType?: string
+  problemType?: string,
+  title?: string
 ): { error: DidResolutionError; problemDetails: ProblemDetails } {
-  const { type, title } = PROBLEM_DETAILS_BY_CODE[code];
+  const { type, title: defaultTitle } = PROBLEM_DETAILS_BY_CODE[code];
   return {
     error: code,
-    problemDetails: { type: problemType ?? type, title, detail },
+    problemDetails: { type: problemType ?? type, title: title ?? defaultTitle, detail },
   };
 }
 

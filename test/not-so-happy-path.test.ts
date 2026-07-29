@@ -554,6 +554,24 @@ describe('Not So Happy Path Tests', () => {
     );
   });
 
+  test('rejects versionId with non-numeric version prefix', async () => {
+    const { log } = await createDID({
+      address: 'example.com',
+      signer: createTestSigner(authKey),
+      updateKeys: [authKey.publicKeyMultibase!],
+      verificationMethods: asPublicVerificationMethods(authKey),
+      verifier: testImplementation,
+    });
+
+    const tamperedLog: DIDLog = JSON.parse(JSON.stringify(log));
+    const [, hash] = tamperedLog[0].versionId.split('-');
+    tamperedLog[0].versionId = `x-${hash}`;
+
+    await expect(resolveDIDFromLog(tamperedLog, { verifier: testImplementation })).rejects.toThrow(
+      /must have a numeric version prefix/
+    );
+  });
+
   test('Rejects unknown method value in later entry', async () => {
     const { log } = initialDID;
     const updateResult = await updateDID({

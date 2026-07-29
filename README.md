@@ -293,8 +293,13 @@ Signs did-witness proof entries for multiple target versions.
 - `prepareDataForSigning(data: any): Uint8Array`
   Prepares data for signing.
 
-- `createProof(options: SigningInput): Promise<SigningOutput>`
-  Creates a proof for a DID document.
+- `createDataIntegrityProofTemplate(options: { verificationMethod: string; created?: string; proofPurpose?: DataIntegrityProofPurpose; id?: string }): DataIntegrityProofTemplate`
+  Builds a Data Integrity proof template (type, cryptosuite, verification
+  method, created, and proof purpose) from explicit input values.
+
+- `signDataIntegrityProof(document, proofTemplate, signer): Promise<DataIntegrityProof>`
+  Signs a document against a proof template and returns a complete
+  `DataIntegrityProof`.
 
 - `AbstractCrypto`
   An abstract class for implementing custom signers.

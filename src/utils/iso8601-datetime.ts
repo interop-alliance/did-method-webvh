@@ -18,12 +18,12 @@
  * - Minute: 00–59
  * - Second: 00–59
  * - Milliseconds: optional, 1–3 digits
- * - Timezone: "Z" (UTC) or ±HH:MM (offset -12:00…+14:00)
+ * - Timezone: "Z" (UTC) or ±HH:MM (offset -12:00...+14:00)
  *
  * Leap-year logic (Gregorian calendar):
- * - Divisible by 4 → leap year
- * - Divisible by 100 → not a leap year
- * - Divisible by 400 → leap year again
+ * - Divisible by 4 to leap year
+ * - Divisible by 100 to not a leap year
+ * - Divisible by 400 to leap year again
  *
  * Format: YYYY-MM-DDTHH:mm:ss(.SSS)?(Z|±HH:MM)
  *
@@ -62,12 +62,17 @@ export const ISO8601_DATETIME_REGEX = new RegExp(
     '(?<timezone>' +
     'Z|' + // UTC
     '(?:' +
-    '\\+(?:(?:0\\d|1[0-3]):[0-5]\\d|14:00)|' + // +00:00…+13:59 or +14:00
-    '-(?:(?:0\\d|1[01]):[0-5]\\d|12:00)' + // -00:00…-11:59 or -12:00
+    '\\+(?:(?:0\\d|1[0-3]):[0-5]\\d|14:00)|' + // +00:00...+13:59 or +14:00
+    '-(?:(?:0\\d|1[01]):[0-5]\\d|12:00)' + // -00:00...-11:59 or -12:00
     ')' +
     ')' +
     '$'
 );
+
+export const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
+
+export const createDate = (created?: Date | string) =>
+  new Date(created ?? Date.now()).toISOString().replace(/\.\d{1,3}Z$/, 'Z');
 
 /**
  * Parse and validate UTC ISO8601 versionTime per did:webvh spec.

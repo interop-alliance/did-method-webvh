@@ -1,7 +1,7 @@
 import type { DIDLogEntry, Verifier, WitnessParameterResolution } from './interfaces.js';
 import { concatBuffers } from './utils/buffer.js';
 import { canonicalizeStrict } from './utils/canonicalize.js';
-import { createHash } from './utils/crypto.js';
+import { createHash, createSCID, deriveNextKeyHash } from './utils/crypto.js';
 import {
   decodeBase58Btc,
   decodeMultihash,
@@ -9,7 +9,7 @@ import {
   MultihashAlgorithm,
   multibaseDecode,
 } from './utils/multiformats.js';
-import { createSCID, deriveNextKeyHash, parseDidKeyVerificationMethod, resolveVM } from './utils.js';
+import { parseDidKeyVerificationMethod, resolveVM } from './utils.js';
 import { validateWitnessParameter } from './witness.js';
 
 const isKeyAuthorized = (verificationMethod: string, updateKeys: string[]): boolean => {
@@ -93,7 +93,7 @@ export const documentStateIsValid = async (
   return true;
 };
 
-export const hashChainValid = (derivedHash: string, logEntryHash: string) => {
+export const hashChainIsValid = (derivedHash: string, logEntryHash: string) => {
   return derivedHash === logEntryHash;
 };
 
