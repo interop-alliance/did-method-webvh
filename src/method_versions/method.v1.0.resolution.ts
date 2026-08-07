@@ -14,6 +14,7 @@ import { toErrorMeta } from '../resolver-result.js';
 import { deriveHash } from '../utils/crypto.js';
 import { MAX_FUTURE_SKEW_MS, validateUtcIso8601NotInFuture } from '../utils/iso8601-datetime.js';
 import {
+  buildVersionId,
   parseAndValidateVersionId,
   parseDidWebvhIdentifier,
   replaceValueInObject,
@@ -374,7 +375,7 @@ const processV1GenesisEntry = async ({
 
   const logEntryHash2 = await deriveHash(prelimEntry);
   const verified = await documentStateIsValid(
-    { ...prelimEntry, versionId: `1-${logEntryHash2}`, proof },
+    { ...prelimEntry, versionId: buildVersionId(1, logEntryHash2), proof },
     resolverContext.meta.updateKeys,
     resolverContext.meta.witness,
     false,

@@ -19,7 +19,7 @@ import type {
   WitnessParameterResolution,
 } from '../interfaces.js';
 import { createSCID, deriveHash } from '../utils/crypto.js';
-import { normalizeDidAddress, parseDidWebvhIdentifier, requireDidDocumentId } from '../utils.js';
+import { buildVersionId, normalizeDidAddress, parseDidWebvhIdentifier, requireDidDocumentId } from '../utils.js';
 import { validateWitnessParameter } from '../witness.js';
 
 const resolveNextDidContext = ({
@@ -102,7 +102,7 @@ const finalizeNonGenesisEntry = async ({
   verifier: CreateDIDInterface['verifier'];
 }): Promise<DIDLogEntry> => {
   const logEntryHash = await deriveHash(logEntry);
-  const entry = { ...logEntry, versionId: `${versionNumber}-${logEntryHash}` };
+  const entry = { ...logEntry, versionId: buildVersionId(versionNumber, logEntryHash) };
   entry.proof = [await signControllerEntry(entry, created, signer)];
 
   await validateProposedEntry(entry, updateKeys, witness, verifier);
@@ -170,11 +170,11 @@ export async function prepareGenesisEntry({
   });
 
   const logEntryHash = await deriveHash(entry);
-  entry.versionId = `1-${logEntryHash}`;
+  entry.versionId = buildVersionId(1, logEntryHash);
   entry.proof = [await signControllerEntry(entry, createdDate, options.signer)];
 
   await validateProposedEntry(
-    { ...entry, versionId: `1-${logEntryHash}` },
+    { ...entry, versionId: buildVersionId(1, logEntryHash) },
     params.updateKeys,
     params.witness,
     options.verifier

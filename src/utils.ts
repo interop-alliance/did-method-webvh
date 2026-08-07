@@ -113,6 +113,14 @@ export function parseAndValidateVersionId(versionId: string, expectedVersionNumb
   return { version, versionNumber, entryHash };
 }
 
+/**
+ * Builds a log-entry `versionId` from its version number and entry hash --
+ * the `<versionNumber>-<entryHash>` form `parseAndValidateVersionId` parses.
+ */
+export function buildVersionId(versionNumber: number, entryHash: string): string {
+  return `${versionNumber}-${entryHash}`;
+}
+
 export function requireDidDocumentId(id: string | undefined): string {
   if (!id) {
     throw new Error('DID document id is missing');

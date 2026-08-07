@@ -1,3 +1,4 @@
+export { hashChainIsValid, scidIsFromHash, verifyEntryProofs } from './assertions.js';
 export { DID_PLACEHOLDER, PLACEHOLDER as SCID_PLACEHOLDER } from './constants.js';
 export {
   AbstractCrypto,
@@ -19,12 +20,15 @@ export {
   validateSingleVersionSelector,
   WEBVH_ERROR_TYPES,
 } from './resolver-result.js';
-export { deriveNextKeyHash } from './utils/crypto.js';
+export { canonicalizeStrict } from './utils/canonicalize.js';
+export { deriveHash, deriveNextKeyHash } from './utils/crypto.js';
 export { MultibaseEncoding, multibaseDecode, multibaseEncode } from './utils/multiformats.js';
 export {
+  buildVersionId,
   getBaseUrl,
   getFileUrl,
   logToJsonlString,
+  parseAndValidateVersionId,
   parseDidKeyDid,
   parseDidKeyVerificationMethod,
   readLogFromString,
