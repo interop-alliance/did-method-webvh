@@ -1,3 +1,25 @@
+## 5.1.0 - TBD
+
+### Added
+
+* Exported the generic log kernel from the package root, so a non-DID
+  hash-linked log profile can consume the entry format without a fork:
+  * `verifyEntryProofs(entry, { verifier, authorize, resolveVM })` -- the
+    proof-verification core of `documentStateIsValid` with the two
+    method-specific decisions injected: the authorization rule (`authorize`,
+    throws to refuse a signing key) and verification-method resolution
+    (`resolveVM`). The fixed proof shape (`DataIntegrityProof` /
+    `assertionMethod` / `eddsa-jcs-2022`, Ed25519 multikey) stays in the
+    kernel. `documentStateIsValid` is now one caller of it, supplying the
+    webvh `updateKeys` rule and did:key/did:webvh VM lookup; its signature
+    and behavior are unchanged.
+  * `canonicalizeStrict` and `deriveHash` -- the JCS canonicalization and
+    the base58btc SHA-256-multihash entry hash.
+  * `buildVersionId(versionNumber, entryHash)` (new helper, now used
+    internally for every `versionId` construction) and its parsing
+    counterpart `parseAndValidateVersionId`.
+  * The chain assertions `hashChainIsValid` and `scidIsFromHash`.
+
 ## 5.0.0 - 2026-07-29
 
 ### Changed
