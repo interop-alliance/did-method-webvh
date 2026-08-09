@@ -1,6 +1,6 @@
 import * as crypto from '@stablelib/ed25519';
 import { METHOD, PLACEHOLDER } from '../src/constants.js';
-import { AbstractCrypto, prepareDataForSigning } from '../src/cryptography.js';
+import { AbstractCrypto, createDataIntegrityProofTemplate, prepareDataForSigning } from '../src/cryptography.js';
 import { createDIDDoc, replaceCreateDidPlaceholders } from '../src/did-document.js';
 import type {
   DIDLog,
@@ -11,9 +11,10 @@ import type {
   VerificationMethod,
   Verifier,
 } from '../src/interfaces.js';
-import { createSCID, deriveHash } from '../src/utils/crypto.js';
+import { deriveHash } from '../src/utils/crypto.js';
 import { createDate } from '../src/utils/iso8601-datetime.js';
 import { MultibaseEncoding, multibaseDecode, multibaseEncode } from '../src/utils/multiformats.js';
+import { buildVersionId } from '../src/utils.js';
 
 /** Returns the versionTime one second after the last entry in a DID log. Use in tests when chaining rapid create/update/deactivate calls. */
 export const nextSecond = (log: DIDLog): string =>
@@ -99,7 +100,7 @@ export const createFutureDIDLog = async (authKey: VerificationMethod, minutesAhe
   const signer = createTestSigner(authKey);
   const controller = `did:${METHOD}:${PLACEHOLDER}:example.com`;
 
-  const { doc } = await createDIDDoc({
+  const doc = createDIDDoc({
     did: controller,
     verificationMethods: asPublicVerificationMethods(authKey),
   });
@@ -120,20 +121,17 @@ export const createFutureDIDLog = async (authKey: VerificationMethod, minutesAhe
     state: doc,
   };
 
-  const initialLogEntryHash = await deriveHash(initialLogEntry);
-  const scid = await createSCID(initialLogEntryHash);
+  const scid = await deriveHash(initialLogEntry);
   const did = `did:${METHOD}:${scid}:example.com`;
   const prelimEntry = replaceCreateDidPlaceholders(initialLogEntry, scid, did);
-  const logEntryHash2 = await deriveHash(prelimEntry);
-  prelimEntry.versionId = `1-${logEntryHash2}`;
+  const logEntryHash = await deriveHash(prelimEntry);
+  prelimEntry.versionId = buildVersionId(1, logEntryHash);
 
-  const proofTemplate = {
-    type: 'DataIntegrityProof' as const,
-    cryptosuite: 'eddsa-jcs-2022' as const,
+  const proofTemplate = createDataIntegrityProofTemplate({
     verificationMethod: signer.getVerificationMethodId(),
     created: futureCreated,
-    proofPurpose: 'assertionMethod' as const,
-  };
+    proofPurpose: 'assertionMethod',
+  });
   const signedProof = await signer.sign({ document: prelimEntry, proof: proofTemplate });
   prelimEntry.proof = [{ ...proofTemplate, proofValue: signedProof.proofValue }];
 

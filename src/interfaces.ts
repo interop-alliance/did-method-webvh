@@ -43,6 +43,15 @@ export interface Verifier {
   verify(signature: Uint8Array, message: Uint8Array, publicKey: Uint8Array): Promise<boolean>;
 }
 
+/**
+ * Resolves a proof's `verificationMethod` id to its key material. The default
+ * implementation handles `did:key` and `did:webvh`; injectable for other
+ * schemes or for offline verification.
+ */
+export type ResolveVerificationMethod = (
+  verificationMethod: string
+) => Promise<{ publicKeyMultibase?: string } | null | undefined>;
+
 export interface SignerOptions {
   verificationMethod?: VerificationMethod | null;
   useStaticId?: boolean;
@@ -72,18 +81,16 @@ export interface DIDResolutionMeta {
   versionId: string;
   created: string;
   updated: string;
-  previousLogEntryHash?: string;
   updateKeys: string[];
   scid: string;
   prerotation: boolean;
   portable: boolean;
   nextKeyHashes: string[];
   deactivated: boolean;
-  witness?: WitnessParameterResolution;
+  witness?: WitnessParameter;
   watchers?: string[] | null;
   error?: DidResolutionError;
   problemDetails?: ProblemDetails;
-  latestVersionId?: string;
 }
 
 export interface DIDDoc {
@@ -141,11 +148,6 @@ export interface WitnessParameter {
   witnesses?: WitnessEntry[];
 }
 
-export interface WitnessParameterResolution {
-  threshold?: string | number;
-  witnesses?: WitnessEntry[];
-}
-
 export interface DataIntegrityProof {
   id?: string;
   type: DataIntegrityProofType;
@@ -182,7 +184,8 @@ export interface ServiceEndpoint {
   [key: string]: unknown;
 }
 
-export interface CreateDIDResult {
+/** Result of a successful write operation (create/update): the DID, its document, meta, and the full log. */
+export interface DIDOperationResult {
   did: string;
   doc: DIDDoc;
   meta: DIDResolutionMeta;
@@ -190,15 +193,13 @@ export interface CreateDIDResult {
   webDoc?: DIDDoc;
 }
 
-export interface UpdateDIDResult {
-  did: string;
-  doc: DIDDoc;
-  meta: DIDResolutionMeta;
-  log: DIDLog;
-  webDoc?: DIDDoc;
-}
+export type CreateDIDResult = DIDOperationResult;
+
+export type UpdateDIDResult = DIDOperationResult;
 
 export interface CreateDIDInterface {
+  /** Method spec version to create under; only `did:webvh:1.0` is supported. */
+  method?: string;
   address?: string;
   signer: Signer;
   updateKeys: string[];
@@ -224,17 +225,22 @@ export interface CreateDIDInterface {
   keyAgreement?: string[];
   capabilityDelegation?: string[];
   capabilityInvocation?: string[];
-}
-
-export interface SignDIDDocInterface {
-  document: unknown;
-  proof: DataIntegrityProofTemplate;
-  verificationMethod: VerificationMethod;
+  /**
+   * Re-verify the freshly signed entry before returning (default true). Can be
+   * disabled to halve the signing-path crypto cost when the signer is trusted.
+   */
+  selfVerify?: boolean;
 }
 
 export interface UpdateDIDInterface {
   log: DIDLog;
   signer: Signer;
+  services?: ServiceEndpoint[];
+  /** New canonical address when moving a portable DID. */
+  address?: string;
+  paths?: string[];
+  /** Append the parallel `did:web` alias and return its `webDoc`. */
+  alsoKnownAsWeb?: boolean;
   /**
    * Optional explicit timestamp for the new DID log entry.
    *
@@ -259,12 +265,26 @@ export interface UpdateDIDInterface {
   capabilityDelegation?: string[];
   capabilityInvocation?: string[];
   witnessProofs?: WitnessProofFileEntry[];
+  /** See {@link CreateDIDInterface.selfVerify}. */
+  selfVerify?: boolean;
+  /**
+   * Trusted resolution meta for the supplied log's last entry. When provided,
+   * the operation skips re-resolving (and re-verifying) the whole log and
+   * folds the new entry onto this state instead -- opt-in for callers that
+   * just resolved or created the log themselves.
+   */
+  priorMeta?: DIDResolutionMeta;
 }
 
 export interface DeactivateDIDInterface {
   log: DIDLog;
   signer: Signer;
   verifier?: Verifier;
+  updateKeys?: string[];
+  /** See {@link CreateDIDInterface.selfVerify}. */
+  selfVerify?: boolean;
+  /** See {@link UpdateDIDInterface.priorMeta}. */
+  priorMeta?: DIDResolutionMeta;
 }
 
 export interface ResolutionOptions {
@@ -273,8 +293,12 @@ export interface ResolutionOptions {
   versionTime?: Date;
   verificationMethod?: string;
   verifier?: Verifier;
+  /** Verification-method resolver for proof verification; defaults to the built-in did:key / did:webvh resolver. */
+  resolveVM?: ResolveVerificationMethod;
   scid?: string;
   requestedDid?: string;
+  /** Out-of-band witness proofs; when absent they are fetched from the DID's `did-witness.json`. */
+  witnessProofs?: WitnessProofFileEntry[];
 }
 
 export interface WitnessProofFileEntry {

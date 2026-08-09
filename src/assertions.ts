@@ -1,23 +1,17 @@
-import type { DataIntegrityProof, DIDLogEntry, Verifier, WitnessParameterResolution } from './interfaces.js';
-import { concatBuffers } from './utils/buffer.js';
-import { canonicalizeStrict } from './utils/canonicalize.js';
-import { createHash, createSCID, deriveNextKeyHash } from './utils/crypto.js';
+import { hashCanonicalDocument, prepareDataForSigning, validateWebvhProofShape } from './cryptography.js';
+import type { DataIntegrityProof, DIDLogEntry, ResolveVerificationMethod, Verifier } from './interfaces.js';
+import { deriveNextKeyHash } from './utils/crypto.js';
 import {
   decodeBase58Btc,
+  decodeEd25519Multikey,
   decodeMultihash,
-  isEd25519Multikey,
   MultihashAlgorithm,
   multibaseDecode,
 } from './utils/multiformats.js';
-import { parseDidKeyVerificationMethod, resolveVM } from './utils.js';
-import { validateWitnessParameter } from './witness.js';
+import { parseDidKeyVerificationMethod } from './utils.js';
 
 const isKeyAuthorized = (verificationMethod: string, updateKeys: string[]): boolean => {
-  const parsedVerificationMethod = parseDidKeyVerificationMethod(verificationMethod);
-
-  return updateKeys.some((updateKey) => {
-    return updateKey === parsedVerificationMethod.keyMultibase;
-  });
+  return updateKeys.includes(parseDidKeyVerificationMethod(verificationMethod).keyMultibase);
 };
 
 /**
@@ -40,7 +34,7 @@ export const verifyEntryProofs = async (
   }: {
     verifier?: Verifier;
     authorize: (proof: DataIntegrityProof) => void | Promise<void>;
-    resolveVM: (verificationMethod: string) => Promise<{ publicKeyMultibase?: string } | null | undefined>;
+    resolveVM: ResolveVerificationMethod;
   }
 ) => {
   if (!verifier) {
@@ -55,40 +49,33 @@ export const verifyEntryProofs = async (
     proofs = [proofs];
   }
 
+  let entryHash: Uint8Array | undefined;
   for (let i = 0; i < proofs.length; i++) {
     const proof = proofs[i];
 
     await authorize(proof);
 
-    if (proof.type !== 'DataIntegrityProof') {
-      throw new Error(`Unknown proof type ${proof.type}`);
-    }
-    if (proof.proofPurpose !== 'assertionMethod') {
-      throw new Error(
-        `Invalid proof purpose '${proof.proofPurpose}' for DID log entry proof. Expected 'assertionMethod'.`
-      );
-    }
-    if (proof.cryptosuite !== 'eddsa-jcs-2022') {
-      throw new Error(`Unknown cryptosuite ${proof.cryptosuite}`);
-    }
+    validateWebvhProofShape(proof, (field, value) => {
+      if (field === 'type') return `Unknown proof type ${value}`;
+      if (field === 'proofPurpose') {
+        return `Invalid proof purpose '${value}' for DID log entry proof. Expected 'assertionMethod'.`;
+      }
+      return `Unknown cryptosuite ${value}`;
+    });
 
     const vm = await resolveVM(proof.verificationMethod);
     if (!vm?.publicKeyMultibase) {
       throw new Error(`Verification Method ${proof.verificationMethod} not found`);
     }
 
-    const publicKey = multibaseDecode(vm.publicKeyMultibase).bytes;
-    if (!isEd25519Multikey(publicKey)) {
-      throw new Error(`multiKey doesn't include ed25519 header (0xed01)`);
-    }
+    const publicKey = decodeEd25519Multikey(vm.publicKeyMultibase);
 
     const { proofValue, ...restProof } = proof;
     const signature = multibaseDecode(proofValue).bytes;
-    const dataHash = await createHash(canonicalizeStrict(rest));
-    const proofHash = await createHash(canonicalizeStrict(restProof));
-    const input = concatBuffers(proofHash, dataHash);
+    entryHash ??= await hashCanonicalDocument(rest);
+    const input = await prepareDataForSigning(rest, restProof, { documentHash: entryHash });
 
-    const verified = await verifier.verify(signature, input, publicKey.slice(2));
+    const verified = await verifier.verify(signature, input, publicKey);
 
     if (!verified) {
       throw new Error(`Proof ${i} failed verification (proofValue: ${proofValue})`);
@@ -98,29 +85,19 @@ export const verifyEntryProofs = async (
 };
 
 export const documentStateIsValid = async (
-  doc: DIDLogEntry,
-  updateKeys: string[],
-  witness: WitnessParameterResolution | undefined | null,
-  skipWitnessVerification?: boolean,
-  verifier?: Verifier
+  entry: DIDLogEntry,
+  {
+    updateKeys,
+    verifier,
+    resolveVM,
+  }: {
+    updateKeys: string[];
+    verifier?: Verifier;
+    /** Injected by the method layer; the default lives in `vm-resolver.ts`. */
+    resolveVM: ResolveVerificationMethod;
+  }
 ) => {
-  // Repeated from verifyEntryProofs so the failure precedence (verifier, then
-  // proof presence, then witness-parameter validity) matches the pre-extraction
-  // behavior of this function.
-  if (!verifier) {
-    throw new Error('Verifier implementation is required');
-  }
-  if (!doc.proof) {
-    throw new Error('Missing proof in DID log entry');
-  }
-
-  if (witness?.witnesses && witness.witnesses.length > 0) {
-    if (!skipWitnessVerification) {
-      validateWitnessParameter(witness);
-    }
-  }
-
-  return verifyEntryProofs(doc, {
+  return verifyEntryProofs(entry, {
     verifier,
     authorize: (proof) => {
       if (!proof.verificationMethod.startsWith('did:key:')) {
@@ -131,7 +108,7 @@ export const documentStateIsValid = async (
         throw new Error(`Key ${proof.verificationMethod} is not authorized to update.`);
       }
     },
-    resolveVM: (verificationMethod) => resolveVM(verificationMethod),
+    resolveVM,
   });
 };
 
@@ -139,17 +116,17 @@ export const hashChainIsValid = (derivedHash: string, logEntryHash: string) => {
   return derivedHash === logEntryHash;
 };
 
-export const newKeysAreInNextKeys = async (updateKeys: string[], previousNextKeyHashes: string[]) => {
-  if (previousNextKeyHashes.length > 0) {
-    for (const key of updateKeys) {
-      const keyHash = await deriveNextKeyHash(key);
-      if (!previousNextKeyHashes.includes(keyHash)) {
-        throw new Error(`Invalid update key ${keyHash}. Not found in nextKeyHashes ${previousNextKeyHashes}`);
-      }
-    }
+export const newKeysAreInNextKeys = async (updateKeys: string[], previousNextKeyHashes: string[]): Promise<void> => {
+  if (previousNextKeyHashes.length === 0) {
+    return;
   }
 
-  return true;
+  for (const key of updateKeys) {
+    const keyHash = await deriveNextKeyHash(key);
+    if (!previousNextKeyHashes.includes(keyHash)) {
+      throw new Error(`Invalid update key ${keyHash}. Not found in nextKeyHashes ${previousNextKeyHashes}`);
+    }
+  }
 };
 
 /**
@@ -170,5 +147,5 @@ const validateScidAlgorithmIsSha256 = (scid: string): void => {
 
 export const scidIsFromHash = async (scid: string, hash: string) => {
   validateScidAlgorithmIsSha256(scid);
-  return scid === (await createSCID(hash));
+  return scid === hash;
 };

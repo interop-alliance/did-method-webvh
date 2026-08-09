@@ -1,3 +1,110 @@
+## Unreleased - TBD
+
+### Changed
+
+* **BREAKING:** `documentStateIsValid` now takes an options object
+  (`documentStateIsValid(entry, { updateKeys, verifier, resolveVM })`) and does
+  entry-proof verification only. The `witness` argument and the
+  `skipWitnessVerification` flag are gone; witness-parameter validation lives
+  with the callers that own it.
+* **BREAKING:** `countVerifiedWitnessApprovals` is now
+  `countVerifiedWitnessApprovals(witnessProofs, witness, { verifier, resolveVM,
+  threshold?, proofVerificationCache? })`; the unused log-entry argument was
+  dropped. It can stop counting at `threshold` and memoize identical
+  `(versionId, proofValue)` verifications across checks.
+* **BREAKING:** The default verification-method resolver `resolveVM` moved out
+  of `utils` into its own method-layer module and is now exported from the
+  package root (along with a `createResolveVM` factory); `documentStateIsValid`
+  and witness verification receive it via the new `resolveVM` resolution option
+  (defaulted automatically by `resolveDID`/`resolveDIDFromLog` and the write
+  operations). Repeated `did:webvh` verification-method resolutions are
+  memoized within a single resolution; nothing is cached across resolutions,
+  so key rotations are always picked up.
+* **BREAKING:** `validateWitnessParameter` no-ops on an absent or empty witness
+  parameter instead of throwing `Witness list cannot be empty`; callers no
+  longer guard it.
+* **BREAKING:** Removed the legacy `witnesses`/`witnessThreshold` entry
+  parameter wire format (a v0.5 shape; this fork only supports v1.0). A log
+  entry carrying the legacy shape is now rejected during resolution (fail
+  closed) rather than resolving with its witness requirement silently ignored.
+  Removed the `WitnessParameterResolution` type and
+  `normalizeWitnessThreshold`; `resolveWitnessParameter` normalizes
+  `threshold` to a number at the parse boundary, so
+  `DIDResolutionMeta.witness` is a plain `WitnessParameter`.
+* **BREAKING:** `updateDID` generates the parallel `did:web` document only when
+  the new `alsoKnownAsWeb: true` option is passed (it also appends the
+  `did:web` alias), instead of sniffing `did:web:` aliases in the document.
+  When the updated document carries the parallel `did:web` alias but
+  `alsoKnownAsWeb` was not passed, `updateDID` warns that no `webDoc` was
+  generated, so publishers migrating from the sniffing behavior notice instead
+  of silently serving a stale `did:web` document.
+* **BREAKING:** Removed `countWitnessApprovals` (unverified-proof counter),
+  `createSCID` (identity function), `createHashHex`, `readLogFromDisk`,
+  `encodeMultihashWithMultibase` (alias of `multibaseEncode`), the
+  `previousLogEntryHash` and `latestVersionId` resolution-meta fields, the
+  `SignDIDDocInterface` type, and the `METHOD_PARAMETER_KEYS` constant.
+* **BREAKING:** Public operations no longer write DID logs to `./test/logs/`
+  when `NODE_ENV=test`; `src/config.ts` and the `test:log` script were removed.
+* A witness threshold failure is now signaled by a typed, exported
+  `WitnessThresholdError` instead of an internal callback-set flag, and
+  resolution no longer writes fetched witness proofs back into the caller's
+  options object.
+* Resolution-selector validation is centralized in the new exported
+  `validateResolutionSelectors`, applied identically to `resolveDID` and the
+  in-memory `resolveDIDFromLog` path (`verificationMethod` + `versionTime`
+  remains a supported combined selector).
+* A genesis entry missing `scid` or `updateKeys`, and a pre-rotation entry
+  missing `updateKeys`, are now rejected with explicit validation errors
+  instead of flowing `undefined` into resolution state.
+* A genesis entry's `witness` parameter is now validated during resolution
+  (threshold bounds, did:key Ed25519 witness ids, no duplicates), the same
+  checks previously applied only to subsequent entries; a log whose first
+  entry declares an invalid witness parameter no longer resolves.
+* The write path (create/update/deactivate) and the resolver now derive
+  resolution meta through one shared reducer, so both report identical values
+  for the same log.
+* Duplicate identifier parsing, the localhost-http exception, alias appending,
+  the eddsa-jcs-2022 signing-input construction, the Ed25519 multikey decode,
+  the proof-shape check, and the prerotation predicate each collapsed to a
+  single shared implementation. The witness verify path now validates the
+  Ed25519 multikey prefix (previously only a 34-byte length check).
+* Two conflicting-selector / fragment-guard error messages changed wording:
+  `did:webvh identifier must not include query or fragment components` is now
+  `Address input must not include query or fragment components`, and
+  version-prefix messages render the numeric version.
+* `newKeysAreInNextKeys` resolves to `void` instead of `true`.
+* `UpdateDIDInterface`/`DeactivateDIDInterface`/`ResolutionOptions` now declare
+  all accepted options (`services`, `address`, `paths`, `updateKeys`,
+  `witnessProofs`, ...); `CreateDIDInterface` declares `method`.
+  `CreateDIDResult`/`UpdateDIDResult` share one `DIDOperationResult` shape.
+* `createDIDDoc` is synchronous and returns the document directly (previously
+  `Promise<{ doc }>`); `prepareGenesisEntry`/`prepareUpdateEntry`/
+  `prepareDeactivationEntry` return the entry directly.
+
+### Fixed
+
+* `updateDID` no longer ignores explicit `capabilityDelegation` /
+  `capabilityInvocation` overrides (the other three relationship overrides
+  already applied; all five now apply uniformly).
+
+### Added
+
+* `priorMeta` option on `updateDID`/`deactivateDID`: opt-in trusted prior
+  state that skips the full log re-resolution (previously O(n^2) signature
+  verifications over a DID's lifetime); full re-resolution stays the default.
+* `selfVerify: false` option on create/update/deactivate to skip the post-sign
+  self-verification (default remains on).
+* `parseDidWebvhIdentifier` is exported from the package root.
+
+### Performance
+
+* Removed redundant work throughout the hot paths: single-traversal strict
+  canonicalization, one cache-key serialization per `deriveHash`, one
+  `structuredClone` of the resolved document per resolution (previously one
+  per log entry), memoized + threshold-bounded + concurrent witness proof
+  verification, and per-resolution memoization of verification-method
+  resolutions.
+
 ## 5.1.0 - 2026-08-07
 
 ### Added

@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
-  createDate,
   createNextVersionTime,
   parseUtcIso8601VersionTime,
   validateUtcIso8601NotInFuture,
@@ -69,7 +68,7 @@ describe('createNextVersionTime', () => {
     // the previous entry must not produce an equal (colliding) timestamp.
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-25T12:00:00.400Z'));
-    const next = createNextVersionTime('2026-06-25T12:00:00Z', undefined, createDate);
+    const next = createNextVersionTime('2026-06-25T12:00:00Z', undefined);
     expect(next).toBe('2026-06-25T12:00:01Z');
     expect(new Date(next).getTime()).toBeGreaterThan(new Date('2026-06-25T12:00:00Z').getTime());
   });
@@ -77,18 +76,18 @@ describe('createNextVersionTime', () => {
   test('uses the trimmed wall-clock now when it is already past previous', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-25T12:00:05.900Z'));
-    const next = createNextVersionTime('2026-06-25T12:00:00Z', undefined, createDate);
+    const next = createNextVersionTime('2026-06-25T12:00:00Z', undefined);
     expect(next).toBe('2026-06-25T12:00:05Z');
   });
 
   test('rejects a requested time that trims down to the previous second', () => {
-    expect(() => createNextVersionTime('2026-06-25T12:00:00Z', '2026-06-25T12:00:00.500Z', createDate)).toThrow(
+    expect(() => createNextVersionTime('2026-06-25T12:00:00Z', '2026-06-25T12:00:00.500Z')).toThrow(
       'must be greater than previous versionTime'
     );
   });
 
   test('accepts a requested time strictly greater than previous', () => {
-    const next = createNextVersionTime('2026-06-25T12:00:00Z', '2026-06-25T12:00:01Z', createDate);
+    const next = createNextVersionTime('2026-06-25T12:00:00Z', '2026-06-25T12:00:01Z');
     expect(next).toBe('2026-06-25T12:00:01Z');
   });
 });

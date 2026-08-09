@@ -23,10 +23,7 @@ export enum MultibaseEncoding {
  * @returns The base64url encoded string (without the multibase prefix)
  */
 export function encodeBase64Url(bytes: Uint8Array): string {
-  const normalized = ArrayBuffer.isView(bytes)
-    ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-    : bytes;
-  return base64urlnopad.encode(normalized);
+  return base64urlnopad.encode(bytes);
 }
 
 /**
@@ -44,10 +41,7 @@ function decodeBase64Url(str: string): Uint8Array {
  * @returns The base58btc encoded string (without the multibase prefix)
  */
 export function encodeBase58Btc(bytes: Uint8Array): string {
-  const normalized = ArrayBuffer.isView(bytes)
-    ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-    : bytes;
-  return base58.encode(normalized);
+  return base58.encode(bytes);
 }
 
 /**
@@ -253,19 +247,6 @@ export function decodeMultihash(bytes: Uint8Array): {
 }
 
 /**
- * Encodes a multihash using multibase encoding
- * @param multihash - The multihash bytes
- * @param encoding - The multibase encoding to use
- * @returns The multibase encoded multihash
- */
-export function encodeMultihashWithMultibase(
-  multihash: Uint8Array,
-  encoding: MultibaseEncoding = MultibaseEncoding.BASE64URL_NO_PAD
-): string {
-  return multibaseEncode(multihash, encoding);
-}
-
-/**
  * Decodes a multibase encoded multihash
  * @param str - The multibase encoded multihash
  * @returns The decoded multihash components and the encoding used
@@ -288,4 +269,16 @@ export function decodeMultihashFromMultibase(str: string): {
 /** Multicodec prefix (`0xed 0x01`) for an Ed25519 public key multikey. */
 export function isEd25519Multikey(keyBytes: Uint8Array): boolean {
   return keyBytes.length >= 2 && keyBytes[0] === 0xed && keyBytes[1] === 0x01;
+}
+
+/**
+ * Decodes an Ed25519 multikey multibase string to the raw 32-byte public key,
+ * validating the `0xed 0x01` multicodec prefix.
+ */
+export function decodeEd25519Multikey(publicKeyMultibase: string): Uint8Array {
+  const keyBytes = multibaseDecode(publicKeyMultibase).bytes;
+  if (!isEd25519Multikey(keyBytes)) {
+    throw new Error(`multiKey doesn't include ed25519 header (0xed01)`);
+  }
+  return keyBytes.slice(2);
 }

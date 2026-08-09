@@ -5,7 +5,6 @@ import {
   decodeMultihash,
   decodeMultihashFromMultibase,
   encodeBase58Btc,
-  encodeMultihashWithMultibase,
   MultibaseEncoding,
   MultihashAlgorithm,
   multibaseDecode,
@@ -67,7 +66,7 @@ describe('multihash', () => {
   test('round-trips through multibase encoding', () => {
     const multihash = createMultihash(sha256Digest, MultihashAlgorithm.SHA2_256);
     for (const encoding of [MultibaseEncoding.BASE58_BTC, MultibaseEncoding.BASE64URL_NO_PAD]) {
-      const encoded = encodeMultihashWithMultibase(multihash, encoding);
+      const encoded = multibaseEncode(multihash, encoding);
       expect(decodeMultihashFromMultibase(encoded)).toEqual({
         algorithm: MultihashAlgorithm.SHA2_256,
         digestLength: 32,

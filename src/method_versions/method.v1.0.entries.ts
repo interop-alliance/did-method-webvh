@@ -1,7 +1,9 @@
 import { documentStateIsValid, newKeysAreInNextKeys } from '../assertions.js';
-import { METHOD_PROTOCOL_V1_0, PLACEHOLDER } from '../constants.js';
+import { METHOD_PROTOCOL_V1_0, PLACEHOLDER, VERIFICATION_RELATIONSHIPS } from '../constants.js';
 import { createDataIntegrityProofTemplate, signDataIntegrityProof } from '../cryptography.js';
 import {
+  appendAlias,
+  convertWebvhIdToWebId,
   createDIDDoc,
   enrichAlsoKnownAs,
   replaceCreateDidPlaceholders,
@@ -14,12 +16,11 @@ import type {
   DIDDoc,
   DIDLogEntry,
   DIDResolutionMeta,
-  ServiceEndpoint,
   UpdateDIDInterface,
-  WitnessParameterResolution,
 } from '../interfaces.js';
-import { createSCID, deriveHash } from '../utils/crypto.js';
-import { buildVersionId, normalizeDidAddress, parseDidWebvhIdentifier, requireDidDocumentId } from '../utils.js';
+import { deriveHash } from '../utils/crypto.js';
+import { buildVersionId, normalizeUpdateDidAddress, parseDidWebvhIdentifier, requireDidDocumentId } from '../utils.js';
+import { resolveVM } from '../vm-resolver.js';
 import { validateWitnessParameter } from '../witness.js';
 
 const resolveNextDidContext = ({
@@ -28,28 +29,21 @@ const resolveNextDidContext = ({
   parsedLastEntryDid,
   portable,
 }: {
-  options: UpdateDIDInterface & {
-    services?: ServiceEndpoint[];
-    address?: string;
-    paths?: string[];
-  };
+  options: UpdateDIDInterface;
   lastEntryDid: string;
   parsedLastEntryDid: ReturnType<typeof parseDidWebvhIdentifier>;
   portable: boolean;
-}): { controller: string } => {
+}): string => {
   const requestedAddress = options.address;
   if (!requestedAddress) {
-    return { controller: lastEntryDid };
+    return lastEntryDid;
   }
 
-  // Paths: explicit options.paths (combined with any address-embedded paths) take
-  // precedence; otherwise use address-embedded paths; otherwise inherit the prior
-  // paths so re-passing a bare domain on a pathed DID doesn't silently drop them.
-  const normalizedAddress = normalizeDidAddress({
+  const normalizedAddress = normalizeUpdateDidAddress({
     address: requestedAddress,
     scid: parsedLastEntryDid.scid,
     paths: options.paths,
-    fallbackPaths: parsedLastEntryDid.paths ?? [],
+    priorPaths: parsedLastEntryDid.paths ?? [],
     context: 'updateDID path segments',
   });
   const controller = normalizedAddress.controller;
@@ -58,7 +52,7 @@ const resolveNextDidContext = ({
     throw new Error('Cannot move DID: portability is disabled');
   }
 
-  return { controller };
+  return controller;
 };
 
 const signControllerEntry = async (entry: DIDLogEntry, created: string, signer: CreateDIDInterface['signer']) => {
@@ -74,10 +68,14 @@ const signControllerEntry = async (entry: DIDLogEntry, created: string, signer: 
 const validateProposedEntry = async (
   entry: DIDLogEntry,
   updateKeys: string[],
-  witness: WitnessParameterResolution | undefined,
-  verifier: CreateDIDInterface['verifier']
+  { verifier, selfVerify }: Pick<CreateDIDInterface, 'verifier' | 'selfVerify'>
 ) => {
-  const verified = await documentStateIsValid(entry, updateKeys, witness, true, verifier);
+  // Post-sign self-verification, on by default; opt out via selfVerify: false.
+  if (selfVerify === false) {
+    return;
+  }
+
+  const verified = await documentStateIsValid(entry, { updateKeys, verifier, resolveVM });
 
   if (!verified) {
     throw new Error(`version ${entry.versionId} is invalid.`);
@@ -90,22 +88,22 @@ const finalizeNonGenesisEntry = async ({
   created,
   signer,
   updateKeys,
-  witness,
   verifier,
+  selfVerify,
 }: {
   logEntry: DIDLogEntry;
   versionNumber: number;
   created: string;
   signer: CreateDIDInterface['signer'];
   updateKeys: string[];
-  witness: WitnessParameterResolution | undefined;
   verifier: CreateDIDInterface['verifier'];
+  selfVerify?: boolean;
 }): Promise<DIDLogEntry> => {
   const logEntryHash = await deriveHash(logEntry);
   const entry = { ...logEntry, versionId: buildVersionId(versionNumber, logEntryHash) };
   entry.proof = [await signControllerEntry(entry, created, signer)];
 
-  await validateProposedEntry(entry, updateKeys, witness, verifier);
+  await validateProposedEntry(entry, updateKeys, { verifier, selfVerify });
 
   return entry;
 };
@@ -118,7 +116,7 @@ export async function prepareGenesisEntry({
   options: CreateDIDInterface;
   controller: string;
   createdDate: string;
-}): Promise<{ entry: DIDLogEntry }> {
+}): Promise<DIDLogEntry> {
   const safeVerificationMethods = sanitizeVerificationMethods(options.verificationMethods);
 
   let doc: DIDDoc;
@@ -129,63 +127,53 @@ export async function prepareGenesisEntry({
     if (!safeVerificationMethods || safeVerificationMethods.length === 0) {
       throw new Error('verificationMethods must be provided when didDocument is not supplied');
     }
-    const didDocResult = await createDIDDoc({
+    doc = createDIDDoc({
       ...options,
       did: controller,
       verificationMethods: safeVerificationMethods,
     });
-    doc = didDocResult.doc;
   }
 
   doc = enrichAlsoKnownAs(doc, controller, {
     alsoKnownAsWeb: options.alsoKnownAsWeb,
   });
 
-  const params = {
-    scid: PLACEHOLDER,
-    updateKeys: options.updateKeys,
-    portable: options.portable ?? false,
-    nextKeyHashes: options.nextKeyHashes ?? [],
-    watchers: options.watchers ?? [],
-    witness: options.witness ?? {},
-    deactivated: false,
-  };
-
   const initialLogEntry: DIDLogEntry = {
     versionId: PLACEHOLDER,
     versionTime: createdDate,
     parameters: {
       method: METHOD_PROTOCOL_V1_0,
-      ...params,
+      scid: PLACEHOLDER,
+      updateKeys: options.updateKeys,
+      portable: options.portable ?? false,
+      nextKeyHashes: options.nextKeyHashes ?? [],
+      watchers: options.watchers ?? [],
+      witness: options.witness ?? {},
+      deactivated: false,
     },
     state: doc,
   };
 
-  const initialLogEntryHash = await deriveHash(initialLogEntry);
-  params.scid = await createSCID(initialLogEntryHash);
-  const didWithScid = controller.replaceAll(PLACEHOLDER, params.scid);
-  const entry = replaceCreateDidPlaceholders(initialLogEntry, params.scid, didWithScid);
-  entry.state = enrichAlsoKnownAs(entry.state, didWithScid, {
-    alsoKnownAsWeb: options.alsoKnownAsWeb,
-  });
+  const scid = await deriveHash(initialLogEntry);
+  const didWithScid = controller.replaceAll(PLACEHOLDER, scid);
+  // The web alias was already appended (pre-SCID-derivation, so it is part of
+  // the hashed genesis entry); placeholder substitution needs no re-enrich --
+  // `convertWebvhIdToWebId` strips the SCID segment, so both derivations are
+  // byte-identical.
+  const entry = replaceCreateDidPlaceholders(initialLogEntry, scid, didWithScid);
 
   const logEntryHash = await deriveHash(entry);
   entry.versionId = buildVersionId(1, logEntryHash);
   entry.proof = [await signControllerEntry(entry, createdDate, options.signer)];
 
-  await validateProposedEntry(
-    { ...entry, versionId: buildVersionId(1, logEntryHash) },
-    params.updateKeys,
-    params.witness,
-    options.verifier
-  );
+  await validateProposedEntry(entry, options.updateKeys, options);
 
   const didId = requireDidDocumentId(entry.state.id);
   if (didId !== didWithScid) {
     throw new Error(`Created DID document id must match expected DID '${didWithScid}', got '${didId}'`);
   }
 
-  return { entry };
+  return entry;
 }
 
 export async function prepareUpdateEntry({
@@ -195,26 +183,20 @@ export async function prepareUpdateEntry({
   versionNumber,
   createdDate,
 }: {
-  options: UpdateDIDInterface & {
-    services?: ServiceEndpoint[];
-    address?: string;
-    paths?: string[];
-  };
+  options: UpdateDIDInterface;
   lastEntry: DIDLogEntry;
   lastMeta: DIDResolutionMeta;
   versionNumber: number;
   createdDate: string;
-}): Promise<{ entry: DIDLogEntry }> {
-  const currentUpdateKeys = options.updateKeys;
+}): Promise<DIDLogEntry> {
   const lastEntryDid = requireDidDocumentId(lastEntry.state.id);
   const parsedLastEntryDid = parseDidWebvhIdentifier(lastEntryDid, 'last entry state.id');
 
   const watchersValue = options.watchers !== undefined ? options.watchers : lastMeta.watchers;
-  const witnessInput = options.witness;
-  const witness = witnessInput?.witnesses?.length
+  const witness = options.witness?.witnesses?.length
     ? {
-        witnesses: witnessInput.witnesses,
-        threshold: witnessInput.threshold ?? 0,
+        witnesses: options.witness.witnesses,
+        threshold: options.witness.threshold ?? 0,
       }
     : {};
 
@@ -234,25 +216,23 @@ export async function prepareUpdateEntry({
     watchers: watchersValue ?? [],
   };
 
-  if (params.witness?.witnesses?.length) {
-    validateWitnessParameter(params.witness);
-  }
+  validateWitnessParameter(params.witness);
 
   if (lastMeta.prerotation) {
-    await newKeysAreInNextKeys(currentUpdateKeys ?? [], lastMeta.nextKeyHashes ?? []);
+    await newKeysAreInNextKeys(options.updateKeys ?? [], lastMeta.nextKeyHashes ?? []);
   }
 
   const safeVerificationMethods = sanitizeVerificationMethods(options.verificationMethods);
 
   // Compute controller DID id; rebuild with new address if moving, keep SCID stable.
-  const { controller } = resolveNextDidContext({
+  const controller = resolveNextDidContext({
     options,
     lastEntryDid,
     parsedLastEntryDid,
     portable: lastMeta.portable,
   });
 
-  const { doc: normalizedUpdateDoc } = await createDIDDoc({
+  const normalizedUpdateDoc = createDIDDoc({
     ...options,
     did: controller,
     context: options.context || lastEntry.state['@context'],
@@ -279,16 +259,13 @@ export async function prepareUpdateEntry({
     doc.service = options.services;
   }
 
-  if (options.authentication !== undefined) {
-    doc.authentication = options.authentication;
-  }
-
-  if (options.assertionMethod !== undefined) {
-    doc.assertionMethod = options.assertionMethod;
-  }
-
-  if (options.keyAgreement !== undefined) {
-    doc.keyAgreement = options.keyAgreement;
+  // Explicit relationship options overwrite the carried-forward arrays,
+  // uniformly across all five declared relationships.
+  for (const relationship of VERIFICATION_RELATIONSHIPS) {
+    const override = options[relationship];
+    if (override !== undefined) {
+      doc[relationship] = override;
+    }
   }
 
   if (options.alsoKnownAs !== undefined) {
@@ -296,11 +273,11 @@ export async function prepareUpdateEntry({
   }
 
   if (controller !== lastEntryDid) {
-    const aliases = Array.isArray(doc.alsoKnownAs) ? [...doc.alsoKnownAs] : [];
-    if (!aliases.includes(lastEntryDid)) {
-      aliases.push(lastEntryDid);
-    }
-    doc.alsoKnownAs = aliases;
+    doc.alsoKnownAs = appendAlias(doc.alsoKnownAs, lastEntryDid);
+  }
+
+  if (options.alsoKnownAsWeb) {
+    doc.alsoKnownAs = appendAlias(doc.alsoKnownAs, convertWebvhIdToWebId(controller));
   }
 
   const logEntry: DIDLogEntry = {
@@ -310,7 +287,7 @@ export async function prepareUpdateEntry({
     state: doc,
   };
 
-  const keysToVerify = lastMeta.prerotation ? currentUpdateKeys : lastMeta.updateKeys;
+  const keysToVerify = lastMeta.prerotation ? options.updateKeys : lastMeta.updateKeys;
   if (!keysToVerify) {
     throw new Error('updateKeys could not be determined for update verification');
   }
@@ -321,11 +298,11 @@ export async function prepareUpdateEntry({
     created: createdDate,
     signer: options.signer,
     updateKeys: keysToVerify,
-    witness: lastMeta.witness,
     verifier: options.verifier,
+    selfVerify: options.selfVerify,
   });
 
-  return { entry };
+  return entry;
 }
 
 export async function prepareDeactivationEntry({
@@ -335,12 +312,12 @@ export async function prepareDeactivationEntry({
   versionNumber,
   createdDate,
 }: {
-  options: DeactivateDIDInterface & { updateKeys?: string[] };
+  options: DeactivateDIDInterface;
   lastEntry: DIDLogEntry;
   lastMeta: DIDResolutionMeta;
   versionNumber: number;
   createdDate: string;
-}): Promise<{ entry: DIDLogEntry }> {
+}): Promise<DIDLogEntry> {
   if (lastMeta.prerotation) {
     await newKeysAreInNextKeys(options.updateKeys ?? [], lastMeta.nextKeyHashes ?? []);
   }
@@ -372,9 +349,9 @@ export async function prepareDeactivationEntry({
     created: createdDate,
     signer: options.signer,
     updateKeys: keysToVerify,
-    witness: lastMeta.witness,
     verifier: options.verifier,
+    selfVerify: options.selfVerify,
   });
 
-  return { entry };
+  return entry;
 }

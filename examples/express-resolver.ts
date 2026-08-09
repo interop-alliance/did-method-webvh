@@ -1,5 +1,13 @@
 import { readFile } from 'node:fs/promises';
-import { resolveDID, resolveDIDFromLog, toResolutionResult } from '@interop/did-method-webvh';
+import {
+  MultibaseEncoding,
+  multibaseEncode,
+  parseDidWebvhIdentifier,
+  readLogFromString,
+  resolveDID,
+  resolveDIDFromLog,
+  toResolutionResult,
+} from '@interop/did-method-webvh';
 import type {
   DIDDoc,
   DIDLog,
@@ -27,6 +35,7 @@ const getActiveDIDs = (): string[] => {
     return [];
   }
 };
+const ACTIVE_DIDS = getActiveDIDs();
 
 const readLocalDIDLog = async (did: string): Promise<DIDLog> => {
   const didParts = did.split(':');
@@ -34,21 +43,23 @@ const readLocalDIDLog = async (did: string): Promise<DIDLog> => {
   const logUrl = new URL(`${fileIdentifier || '.well-known'}/did.jsonl`, ROUTES_DIR);
   const text = (await readFile(logUrl, 'utf8')).trim();
   if (!text) return [];
-  return text.split('\n').map((line) => JSON.parse(line));
+  return readLogFromString(text);
 };
 
 // Resolve a DID, serving DIDs this server controls from the local routes
 // directory instead of fetching them over HTTPS. Returns a DID Resolution
 // Result envelope, with `controlled` riding along as a non-standard extension.
 const resolveDIDLocalFirst = async (did: string, options: ResolutionOptions = {}) => {
-  const controlled = getActiveDIDs().includes(did);
+  const controlled = ACTIVE_DIDS.includes(did);
   if (!controlled) {
     const result = await resolveDID(did, options);
     return { ...result, controlled };
   }
   const log = await readLocalDIDLog(did);
-  const didParts = did.split(':');
-  const scid = didParts.length > 2 && didParts[0] === 'did' && didParts[1] === 'webvh' ? didParts[2] : undefined;
+  let scid: string | undefined;
+  try {
+    scid = parseDidWebvhIdentifier(did, 'did').scid;
+  } catch {}
   const result = await resolveDIDFromLog(log, { ...options, scid });
   return { ...toResolutionResult(result), controlled };
 };
@@ -82,7 +93,7 @@ class ExpressVerifier implements Verifier {
   }
 
   getPublicKeyMultibase(): string {
-    return `z${Buffer.from(this.publicKey).toString('base64')}`;
+    return multibaseEncode(this.publicKey, MultibaseEncoding.BASE58_BTC);
   }
 }
 

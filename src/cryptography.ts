@@ -75,11 +75,37 @@ export const signDataIntegrityProof = async <TDocument>(
  */
 export const prepareDataForSigning = async (
   document: unknown,
-  proof: DataIntegrityProofTemplate
+  proof: DataIntegrityProofTemplate,
+  precomputed?: { documentHash?: Uint8Array }
 ): Promise<Uint8Array> => {
-  const dataHash = await createHash(canonicalizeStrict(document));
-  const proofHash = await createHash(canonicalizeStrict(proof));
+  const dataHash = precomputed?.documentHash ?? (await hashCanonicalDocument(document));
+  const proofHash = await hashCanonicalDocument(proof);
   return concatBuffers(proofHash, dataHash);
+};
+
+/** SHA-256 over the JCS canonicalization of a value (the eddsa-jcs-2022 hash side). */
+export const hashCanonicalDocument = async (value: unknown): Promise<Uint8Array> => {
+  return createHash(canonicalizeStrict(value));
+};
+
+/**
+ * The webvh proof-shape rule (`DataIntegrityProof` / `assertionMethod` /
+ * `eddsa-jcs-2022`), checked in one place; `message` renders each caller's
+ * historical error wording for the failing field.
+ */
+export const validateWebvhProofShape = (
+  proof: Pick<DataIntegrityProof, 'type' | 'proofPurpose' | 'cryptosuite'>,
+  message: (field: 'type' | 'proofPurpose' | 'cryptosuite', value: string) => string
+): void => {
+  if (proof.type !== 'DataIntegrityProof') {
+    throw new Error(message('type', proof.type));
+  }
+  if (proof.proofPurpose !== 'assertionMethod') {
+    throw new Error(message('proofPurpose', proof.proofPurpose));
+  }
+  if (proof.cryptosuite !== 'eddsa-jcs-2022') {
+    throw new Error(message('cryptosuite', proof.cryptosuite));
+  }
 };
 
 /**

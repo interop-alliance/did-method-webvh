@@ -1,22 +1,25 @@
-import { createDataIntegrityProofTemplate, signDataIntegrityProof } from './cryptography.js';
+import {
+  createDataIntegrityProofTemplate,
+  prepareDataForSigning,
+  signDataIntegrityProof,
+  validateWebvhProofShape,
+} from './cryptography.js';
 import type {
   DataIntegrityProof,
   DataIntegrityProofTemplate,
   DIDLogEntry,
+  ResolveVerificationMethod,
   Signer,
   Verifier,
   WitnessEntry,
-  WitnessParameterResolution,
+  WitnessParameter,
   WitnessProofFileEntry,
   WitnessSigningOptions,
   WitnessSigningResult,
 } from './interfaces.js';
-import { concatBuffers } from './utils/buffer.js';
-import { canonicalizeStrict } from './utils/canonicalize.js';
-import { createHash } from './utils/crypto.js';
 import { createDate } from './utils/iso8601-datetime.js';
-import { isEd25519Multikey, multibaseDecode } from './utils/multiformats.js';
-import { fetchWitnessProofs, parseDidKeyDid, parseDidKeyVerificationMethod, resolveVM } from './utils.js';
+import { decodeEd25519Multikey, isEd25519Multikey, multibaseDecode } from './utils/multiformats.js';
+import { fetchWitnessProofs, parseDidKeyDid, parseDidKeyVerificationMethod } from './utils.js';
 
 /**
  * Creates a single witness DataIntegrityProof for one `versionId`.
@@ -73,8 +76,7 @@ export async function signWitnessProofEntry(options: WitnessSigningOptions): Pro
     throw new Error('versionId is required');
   }
 
-  const witnessCount = options.witnesses.length;
-  if (witnessCount === 0) {
+  if (options.witnesses.length === 0) {
     throw new Error('Witness list cannot be empty');
   }
 
@@ -137,43 +139,55 @@ export async function signWitnessProofEntries(
   );
 }
 
-export function normalizeWitnessThreshold(threshold: string | number | undefined | null): number {
-  return parseInt((threshold ?? 0).toString(), 10);
-}
-
-export function hasActiveWitnessRequirement(
-  witness?: WitnessParameterResolution | null
-): witness is WitnessParameterResolution {
+export function hasActiveWitnessRequirement(witness?: WitnessParameter | null): witness is WitnessParameter {
   if (!witness?.witnesses || witness.witnesses.length === 0) {
     return false;
   }
 
-  const threshold = normalizeWitnessThreshold(witness.threshold);
-  return threshold > 0;
+  return (witness.threshold ?? 0) > 0;
 }
 
-export function resolveWitnessParameter(parameters: DIDLogEntry['parameters']): WitnessParameterResolution | undefined {
-  if ('witness' in parameters) {
-    return parameters.witness ?? {};
+/**
+ * Normalizes an entry's `witness` parameter at the parse boundary: an absent
+ * key returns `undefined` (inherit the prior value), a cleared (`null`)
+ * witness becomes `{}`, and a wire-format string `threshold` is coerced to a
+ * number so every downstream comparison works on numbers. The legacy v0.5
+ * top-level `witnesses`/`witnessThreshold` shape is rejected outright --
+ * ignoring it would silently resolve a previously witness-enforced log with
+ * no witness requirement. The returned object never aliases the entry's
+ * parameters, so mutating resolution meta cannot corrupt the caller's log.
+ */
+export function resolveWitnessParameter(parameters: DIDLogEntry['parameters']): WitnessParameter | undefined {
+  if ('witnesses' in parameters || 'witnessThreshold' in parameters) {
+    throw new Error(
+      "Legacy 'witnesses'/'witnessThreshold' parameters are not supported; declare a 'witness' parameter"
+    );
   }
 
-  if ((parameters as { witnesses?: { id: string }[]; witnessThreshold?: string | number }).witnesses) {
-    const legacyParameters = parameters as { witnesses: { id: string }[]; witnessThreshold?: string | number };
-    return {
-      witnesses: legacyParameters.witnesses,
-      threshold: legacyParameters.witnessThreshold || legacyParameters.witnesses.length,
-    };
+  if (!('witness' in parameters)) {
+    return undefined;
   }
 
-  return undefined;
+  const witness: WitnessParameter = { ...(parameters.witness ?? {}) };
+  if (witness.witnesses) {
+    witness.witnesses = witness.witnesses.map((entry) => ({ ...entry }));
+  }
+  if (witness.threshold !== undefined) {
+    witness.threshold = parseInt(String(witness.threshold), 10);
+  }
+  return witness;
 }
 
-export function validateWitnessParameter(witness: WitnessParameterResolution): void {
-  if (!witness.witnesses || !Array.isArray(witness.witnesses) || witness.witnesses.length === 0) {
-    throw new Error('Witness list cannot be empty');
+/**
+ * Validates a non-empty witness parameter; no-ops when the parameter is
+ * absent or carries an empty witness list (an inactive requirement).
+ */
+export function validateWitnessParameter(witness: WitnessParameter | null | undefined): void {
+  if (!witness?.witnesses || !Array.isArray(witness.witnesses) || witness.witnesses.length === 0) {
+    return;
   }
 
-  const normalizedThreshold = normalizeWitnessThreshold(witness.threshold);
+  const normalizedThreshold = parseInt(String(witness.threshold ?? 0), 10);
 
   if (!witness.threshold || normalizedThreshold < 1 || normalizedThreshold > witness.witnesses.length) {
     throw new Error('Witness threshold must be between 1 and the number of witnesses');
@@ -181,13 +195,12 @@ export function validateWitnessParameter(witness: WitnessParameterResolution): v
 
   const ids = new Set<string>();
   for (const w of witness.witnesses) {
-    const parsedDid = (() => {
-      try {
-        return parseDidKeyDid(w.id);
-      } catch {
-        throw new Error('Witness DIDs must be did:key format');
-      }
-    })();
+    let parsedDid: ReturnType<typeof parseDidKeyDid>;
+    try {
+      parsedDid = parseDidKeyDid(w.id);
+    } catch {
+      throw new Error('Witness DIDs must be did:key format');
+    }
 
     // did:webvh v1.0 requires witness keys to be Ed25519 multikeys.
     const keyBytes = multibaseDecode(parsedDid.keyMultibase).bytes;
@@ -202,34 +215,71 @@ export function validateWitnessParameter(witness: WitnessParameterResolution): v
   }
 }
 
-export function countWitnessApprovals(proofs: DataIntegrityProof[], witnesses: WitnessEntry[]): number {
-  const processed = new Set<string>();
-  const witnessesByDid = new Map(
-    witnesses.map((witness) => {
-      const parsedDid = parseDidKeyDid(witness.id);
-      return [parsedDid.did, witness];
-    })
-  );
+const verifyWitnessProofSignature = async (
+  proofSet: WitnessProofFileEntry,
+  proof: DataIntegrityProof,
+  verifier: Verifier,
+  resolveVM: ResolveVerificationMethod
+): Promise<boolean> => {
+  try {
+    validateWebvhProofShape(proof, (field) => {
+      if (field === 'type') return 'Invalid witness proof type';
+      if (field === 'proofPurpose') return 'Invalid witness proof purpose';
+      return 'Invalid witness proof cryptosuite';
+    });
 
-  for (const proof of proofs) {
-    const parsedVerificationMethod = parseDidKeyVerificationMethod(proof.verificationMethod);
-    const witness = witnessesByDid.get(parsedVerificationMethod.did);
-    if (witness) {
-      if (proof.cryptosuite !== 'eddsa-jcs-2022') {
-        throw new Error('Invalid witness proof cryptosuite');
-      }
-      processed.add(witness.id);
+    const vm = await resolveVM(proof.verificationMethod);
+    if (!vm?.publicKeyMultibase) {
+      throw new Error(`Verification Method ${proof.verificationMethod} not found`);
     }
-  }
 
-  return processed.size;
-}
+    const publicKey = decodeEd25519Multikey(vm.publicKeyMultibase);
+
+    const { proofValue, ...proofWithoutValue } = proof;
+
+    // Verify against the proof entry's own versionId (what the witness signed); a
+    // later proof cumulatively approves earlier entries.
+    const input = await prepareDataForSigning({ versionId: proofSet.versionId }, proofWithoutValue);
+    const signature = multibaseDecode(proofValue).bytes;
+
+    const verified = await verifier.verify(signature, input, publicKey);
+
+    if (!verified) {
+      throw new Error('Invalid witness proof signature');
+    }
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(
+      `Ignoring invalid witness proof for version ${proofSet.versionId} ` +
+        `(verificationMethod: ${proof.verificationMethod}): ${message}`
+    );
+    return false;
+  }
+};
 
 export async function countVerifiedWitnessApprovals(
-  logEntry: DIDLogEntry,
   witnessProofs: WitnessProofFileEntry[],
-  currentWitness: WitnessParameterResolution,
-  verifier?: Verifier
+  currentWitness: WitnessParameter,
+  {
+    verifier,
+    resolveVM,
+    threshold,
+    proofVerificationCache,
+  }: {
+    verifier?: Verifier;
+    /** Injected by the method layer; the default lives in `vm-resolver.ts`. */
+    resolveVM: ResolveVerificationMethod;
+    /** When set, counting stops as soon as this many approvals are found. */
+    threshold?: number;
+    /**
+     * Memo of signature verifications keyed by
+     * `versionId|verificationMethod|proofValue`, shared across the
+     * required-witness checks of one resolution so an identical proof is
+     * verified at most once. Keyed by promise so concurrent checks dedupe too.
+     */
+    proofVerificationCache?: Map<string, Promise<boolean>>;
+  }
 ): Promise<number> {
   if (!verifier) {
     throw new Error('Verifier implementation is required');
@@ -246,60 +296,45 @@ export async function countVerifiedWitnessApprovals(
 
   for (const proofSet of witnessProofs) {
     for (const proof of proofSet.proof) {
+      let witness: WitnessEntry | undefined;
       try {
-        if (proof.type !== 'DataIntegrityProof') {
-          throw new Error('Invalid witness proof type');
-        }
-
-        if (proof.proofPurpose !== 'assertionMethod') {
-          throw new Error('Invalid witness proof purpose');
-        }
-
-        if (proof.cryptosuite !== 'eddsa-jcs-2022') {
-          throw new Error('Invalid witness proof cryptosuite');
-        }
-
         const parsedVerificationMethod = parseDidKeyVerificationMethod(proof.verificationMethod);
-        const witness = witnessesByDid.get(parsedVerificationMethod.did);
-        if (!witness || processedWitnesses.has(witness.id)) {
-          continue;
-        }
-
-        const vm = await resolveVM(proof.verificationMethod);
-        if (!vm?.publicKeyMultibase) {
-          throw new Error(`Verification Method ${proof.verificationMethod} not found`);
-        }
-
-        const publicKey = multibaseDecode(vm.publicKeyMultibase).bytes;
-        if (publicKey.length !== 34) {
-          throw new Error(`Invalid public key length ${publicKey.length} (should be 34 bytes)`);
-        }
-
-        const { proofValue, ...proofWithoutValue } = proof;
-
-        // Verify against the proof entry's own versionId (what the witness signed); a
-        // later proof cumulatively approves earlier entries.
-        const canonicalizedData = canonicalizeStrict({ versionId: proofSet.versionId });
-        const canonicalizedProof = canonicalizeStrict(proofWithoutValue);
-        const dataHash = await createHash(canonicalizedData);
-        const proofHash = await createHash(canonicalizedProof);
-        const input = concatBuffers(proofHash, dataHash);
-        const signature = multibaseDecode(proofValue).bytes;
-
-        const verified = await verifier.verify(signature, input, publicKey.slice(2));
-
-        if (!verified) {
-          throw new Error('Invalid witness proof signature');
-        }
-
-        approvals++;
-        processedWitnesses.add(witness.id);
+        witness = witnessesByDid.get(parsedVerificationMethod.did);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.warn(
           `Ignoring invalid witness proof for version ${proofSet.versionId} ` +
             `(verificationMethod: ${proof.verificationMethod}): ${message}`
         );
+        continue;
+      }
+      if (!witness || processedWitnesses.has(witness.id)) {
+        continue;
+      }
+
+      let verified: boolean;
+      if (proofVerificationCache) {
+        // The signature binds the proof options (including verificationMethod),
+        // so the key must carry it: the same proofValue under a different
+        // verificationMethod is a distinct proof that must be verified against
+        // that witness's own key, never served from the memo.
+        const cacheKey = `${proofSet.versionId}|${proof.verificationMethod}|${proof.proofValue}`;
+        let pending = proofVerificationCache.get(cacheKey);
+        if (!pending) {
+          pending = verifyWitnessProofSignature(proofSet, proof, verifier, resolveVM);
+          proofVerificationCache.set(cacheKey, pending);
+        }
+        verified = await pending;
+      } else {
+        verified = await verifyWitnessProofSignature(proofSet, proof, verifier, resolveVM);
+      }
+
+      if (verified) {
+        approvals++;
+        processedWitnesses.add(witness.id);
+        if (threshold !== undefined && approvals >= threshold) {
+          return approvals;
+        }
       }
     }
   }

@@ -1,7 +1,9 @@
 import type { VerificationRelationship } from './constants.js';
 import { BASE_CONTEXT, DID_PLACEHOLDER, PLACEHOLDER, VERIFICATION_RELATIONSHIPS } from './constants.js';
 import type { DIDDoc, ServiceEndpoint, VerificationMethod } from './interfaces.js';
-import { replaceValueInObject } from './utils/object.js';
+import { parseDidWebvhIdentifier } from './utils/did-identifier.js';
+import { replaceValueInObject, replaceValuesInObject } from './utils/object.js';
+import { requireDidDocumentId } from './utils.js';
 
 type NormalizedVerificationMethods = Required<Pick<DIDDoc, 'verificationMethod' | VerificationRelationship>>;
 
@@ -18,11 +20,30 @@ export function validateCreateDidDocument(didDocument: DIDDoc): void {
 }
 
 export function convertWebvhIdToWebId(id: string): string {
-  const parts = id.split(':');
-  if (parts.length < 4 || parts[0] !== 'did' || parts[1] !== 'webvh') {
+  let locationKey: string;
+  try {
+    ({ locationKey } = parseDidWebvhIdentifier(id, 'did:webvh id'));
+  } catch {
     throw new Error(`Invalid did:webvh id '${id}'`);
   }
-  return `did:web:${parts.slice(3).join(':')}`;
+  return `did:web:${locationKey}`;
+}
+
+/**
+ * Appends `alias` to an `alsoKnownAs` value (deduplicating), validating that
+ * the existing value -- when present -- is an array. Shared by every
+ * alias-appending path so the validation and dedup rules stay uniform.
+ */
+export function appendAlias(alsoKnownAs: string[] | undefined, alias: string): string[] {
+  if (alsoKnownAs !== undefined && !Array.isArray(alsoKnownAs)) {
+    throw new Error('alsoKnownAs is not an array');
+  }
+
+  const aliases = Array.isArray(alsoKnownAs) ? [...alsoKnownAs] : [];
+  if (!aliases.includes(alias)) {
+    aliases.push(alias);
+  }
+  return aliases;
 }
 
 export function enrichAlsoKnownAs(doc: DIDDoc, did: string, opts: { alsoKnownAsWeb?: boolean }): DIDDoc {
@@ -30,24 +51,13 @@ export function enrichAlsoKnownAs(doc: DIDDoc, did: string, opts: { alsoKnownAsW
     throw new Error('alsoKnownAs is not an array');
   }
 
-  const aliases = Array.isArray(doc.alsoKnownAs) ? [...doc.alsoKnownAs] : [];
-  const addAlias = (alias: string) => {
-    if (!aliases.includes(alias)) {
-      aliases.push(alias);
-    }
-  };
-
-  if (opts.alsoKnownAsWeb) {
-    addAlias(convertWebvhIdToWebId(did));
-  }
-
-  if (aliases.length === 0) {
+  if (!opts.alsoKnownAsWeb) {
     return doc;
   }
 
   return {
     ...doc,
-    alsoKnownAs: aliases,
+    alsoKnownAs: appendAlias(doc.alsoKnownAs, convertWebvhIdToWebId(did)),
   };
 }
 
@@ -138,54 +148,49 @@ export const normalizeVMs = (
   all.verificationMethod = materialized.map((entry) => entry.vm);
 
   // A VM's `purpose` may name a single relationship or several; an absent (or
-  // empty) purpose defaults the key into authentication.
-  const purposesOf = (purpose: VerificationMethod['purpose']): string[] =>
-    purpose == null ? [] : Array.isArray(purpose) ? purpose : [purpose];
-
-  // Then handle relationships - default to authentication if no purpose is specified
-  all.authentication = materialized
-    .filter((entry) => {
-      const purposes = purposesOf(entry.purpose);
-      return purposes.length === 0 || purposes.includes('authentication');
-    })
-    .map((entry) => entry.vm.id);
-
-  all.assertionMethod = materialized
-    .filter((entry) => purposesOf(entry.purpose).includes('assertionMethod'))
-    .map((entry) => entry.vm.id);
-
-  all.keyAgreement = materialized
-    .filter((entry) => purposesOf(entry.purpose).includes('keyAgreement'))
-    .map((entry) => entry.vm.id);
-
-  all.capabilityDelegation = materialized
-    .filter((entry) => purposesOf(entry.purpose).includes('capabilityDelegation'))
-    .map((entry) => entry.vm.id);
-
-  all.capabilityInvocation = materialized
-    .filter((entry) => purposesOf(entry.purpose).includes('capabilityInvocation'))
-    .map((entry) => entry.vm.id);
+  // empty) purpose defaults the key into authentication. One pass over the
+  // materialized VMs wires all five relationship arrays. A repeated
+  // relationship in one VM's purpose list emits its id once -- a duplicate
+  // reference would be an invalid document (and a different SCID for the same
+  // input).
+  for (const entry of materialized) {
+    const purposes = entry.purpose == null ? [] : Array.isArray(entry.purpose) ? entry.purpose : [entry.purpose];
+    const targets = purposes.length === 0 ? ['authentication' as const] : purposes;
+    for (const target of new Set(targets)) {
+      if ((VERIFICATION_RELATIONSHIPS as readonly string[]).includes(target)) {
+        all[target as VerificationRelationship].push(entry.vm.id);
+      }
+    }
+  }
 
   return all;
 };
 
+/**
+ * Predicate factory matching any object node carrying `id === vmId`. Shared by
+ * {@link findVerificationMethod} and the did-io driver's fragment dereference.
+ */
+export const hasMatchingId =
+  (vmId: string) =>
+  (item: unknown): item is VerificationMethod => {
+    if (typeof item !== 'object' || item === null) return false;
+    return (item as { id?: unknown }).id === vmId;
+  };
+
 export const findVerificationMethod = (doc: DIDDoc, vmId: string): VerificationMethod | null => {
+  const matchesId = hasMatchingId(vmId);
+
   // Check in the verificationMethod array
-  const directMatch = doc.verificationMethod?.find((vm) => vm.id === vmId);
+  const directMatch = doc.verificationMethod?.find(matchesId);
   if (directMatch) {
     return directMatch;
   }
 
   // Check in other verification method relationship arrays
-  const hasMatchingId = (item: unknown): item is VerificationMethod => {
-    if (typeof item !== 'object' || item === null) return false;
-    return (item as { id?: unknown }).id === vmId;
-  };
-
   for (const relationship of VERIFICATION_RELATIONSHIPS) {
     const relationshipValues = doc[relationship as keyof DIDDoc];
     if (Array.isArray(relationshipValues)) {
-      const match = relationshipValues.find(hasMatchingId);
+      const match = relationshipValues.find(matchesId);
       if (match) {
         return match;
       }
@@ -195,7 +200,7 @@ export const findVerificationMethod = (doc: DIDDoc, vmId: string): VerificationM
   return null;
 };
 
-export const createDIDDoc = async (options: {
+export const createDIDDoc = (options: {
   did: string;
   verificationMethods?: VerificationMethod[];
   vmIdFragment?: 'short' | 'multibase';
@@ -207,18 +212,11 @@ export const createDIDDoc = async (options: {
   capabilityInvocation?: string[];
   alsoKnownAs?: string[];
   services?: ServiceEndpoint[];
-}): Promise<{ doc: DIDDoc }> => {
+}): DIDDoc => {
   const { did } = options;
   const all = normalizeVMs(options.verificationMethods, did, options.vmIdFragment);
   const derivedProperties = ['verificationMethod', ...VERIFICATION_RELATIONSHIPS] as const;
-  const directProperties = [
-    'authentication',
-    'assertionMethod',
-    'keyAgreement',
-    'capabilityDelegation',
-    'capabilityInvocation',
-    'alsoKnownAs',
-  ] as const;
+  const directProperties = [...VERIFICATION_RELATIONSHIPS, 'alsoKnownAs'] as const;
   const assignIfPresent = <K extends keyof DIDDoc>(property: K, value: DIDDoc[K] | undefined) => {
     // Omit empty verification-relationship arrays rather than emitting `[]`.
     if (Array.isArray(value) && value.length === 0) {
@@ -253,28 +251,25 @@ export const createDIDDoc = async (options: {
     doc.service = options.services;
   }
 
-  return { doc };
+  return doc;
 };
 
 export function replaceCreateDidPlaceholders<T>(input: T, scid: string, did: string): T {
-  const withScid = replaceValueInObject(input, PLACEHOLDER, scid);
-  return replaceValueInObject(withScid, DID_PLACEHOLDER, did) as T;
+  return replaceValuesInObject(input, [
+    [PLACEHOLDER, scid],
+    [DID_PLACEHOLDER, did],
+  ]);
 }
 
 export function generateParallelDidWeb(didwebvhDid: string, didwebvhDoc: DIDDoc): DIDDoc {
-  let webDoc = structuredClone(didwebvhDoc);
+  const { scid } = parseDidWebvhIdentifier(didwebvhDid, 'did:webvh id');
+  const webDoc = replaceValueInObject(didwebvhDoc, `did:webvh:${scid}:`, 'did:web:');
 
-  const scidPrefix = didwebvhDid.replace(/^did:webvh:([^:]+):.*$/, 'did:webvh:$1:');
-  webDoc = replaceValueInObject(webDoc, scidPrefix, 'did:web:');
-
-  const webDid = webDoc.id as string;
-  const aliases = (Array.isArray(webDoc.alsoKnownAs) ? [...webDoc.alsoKnownAs] : []).filter(
-    (alias: string) => alias !== webDid
+  const webDid = requireDidDocumentId(webDoc.id);
+  const aliases = appendAlias(
+    (Array.isArray(webDoc.alsoKnownAs) ? webDoc.alsoKnownAs : []).filter((alias: string) => alias !== webDid),
+    didwebvhDid
   );
-
-  if (!aliases.includes(didwebvhDid)) {
-    aliases.push(didwebvhDid);
-  }
 
   return {
     ...webDoc,

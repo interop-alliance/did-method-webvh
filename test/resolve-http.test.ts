@@ -1,8 +1,10 @@
 import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 import type { DIDLog, VerificationMethod } from '../src/interfaces.js';
-import * as methodModule from '../src/method.js';
 import { createDID, resolveDID } from '../src/method.js';
-import { fetchLogFromIdentifier, fetchWitnessProofs, resolveVM } from '../src/utils.js';
+import * as resolutionModule from '../src/method_versions/method.v1.0.resolution.js';
+import { fetchLogFromIdentifier, fetchWitnessProofs } from '../src/utils.js';
+import { defaultWebvhLogVerifier } from '../src/verifier.js';
+import { resolveVM } from '../src/vm-resolver.js';
 import {
   asPublicVerificationMethods,
   createTestSigner,
@@ -178,7 +180,7 @@ describe('resolveVM', () => {
     const vmId = 'did:webvh:scid123:example.com#key-1';
 
     stubFetchResponse('{"versionId":"1-abc"}\n{"versionId":"2-def"}');
-    vi.spyOn(methodModule, 'resolveDIDFromLog').mockResolvedValue({
+    const resolveV1LogSpy = vi.spyOn(resolutionModule, 'resolveV1Log').mockResolvedValue({
       did: 'did:webvh:scid123:example.com',
       doc: {
         id: 'did:webvh:scid123:example.com',
@@ -191,7 +193,7 @@ describe('resolveVM', () => {
         ],
       },
       meta: {},
-    } as unknown as Awaited<ReturnType<typeof methodModule.resolveDIDFromLog>>);
+    } as unknown as Awaited<ReturnType<typeof resolutionModule.resolveV1Log>>);
 
     const resolved = await resolveVM(vmId);
 
@@ -200,13 +202,38 @@ describe('resolveVM', () => {
       type: 'Multikey',
       publicKeyMultibase: 'z6Mkk6YgL8Lh6mLeW4x8pohWXmHfL6h4WQ7x8V8NwS6jQ2mZ',
     });
+    // The nested log resolution must be able to verify entry proofs: without a
+    // verifier every did:webvh VM resolution would fail unconditionally.
+    expect(resolveV1LogSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ verificationMethod: vmId, verifier: defaultWebvhLogVerifier })
+    );
+  });
+
+  test('does not memoize did:webvh resolutions across calls, so key rotations are picked up', async () => {
+    const vmId = 'did:webvh:scid123:example.com#key-1';
+
+    const fetchMock = stubFetchResponse('{"versionId":"1-abc"}');
+    vi.spyOn(resolutionModule, 'resolveV1Log').mockResolvedValue({
+      did: 'did:webvh:scid123:example.com',
+      doc: {
+        id: 'did:webvh:scid123:example.com',
+        verificationMethod: [{ id: vmId, type: 'Multikey', publicKeyMultibase: 'zSomeKey' }],
+      },
+      meta: {},
+    } as unknown as Awaited<ReturnType<typeof resolutionModule.resolveV1Log>>);
+
+    await resolveVM(vmId);
+    await resolveVM(vmId);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   test('resolves did:webvh VM via verification relationship object fallback', async () => {
     const vmId = 'did:webvh:scid123:example.com#assertion-key';
 
     stubFetchResponse('{"versionId":"1-abc"}\n{"versionId":"2-def"}');
-    vi.spyOn(methodModule, 'resolveDIDFromLog').mockResolvedValue({
+    vi.spyOn(resolutionModule, 'resolveV1Log').mockResolvedValue({
       did: 'did:webvh:scid123:example.com',
       doc: {
         id: 'did:webvh:scid123:example.com',
@@ -221,7 +248,7 @@ describe('resolveVM', () => {
         ],
       },
       meta: {},
-    } as unknown as Awaited<ReturnType<typeof methodModule.resolveDIDFromLog>>);
+    } as unknown as Awaited<ReturnType<typeof resolutionModule.resolveV1Log>>);
 
     const resolved = await resolveVM(vmId);
 

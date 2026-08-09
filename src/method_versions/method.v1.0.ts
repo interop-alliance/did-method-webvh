@@ -1,18 +1,15 @@
 import { PLACEHOLDER } from '../constants.js';
-import { generateParallelDidWeb } from '../did-document.js';
+import { convertWebvhIdToWebId, generateParallelDidWeb } from '../did-document.js';
 import type {
   CreateDIDInterface,
   CreateDIDResult,
   DeactivateDIDInterface,
   DIDDoc,
   DIDLog,
-  DIDLogEntry,
   DIDResolutionMeta,
   ResolutionOptions,
-  ServiceEndpoint,
   UpdateDIDInterface,
   UpdateDIDResult,
-  WitnessProofFileEntry,
 } from '../interfaces.js';
 import {
   createDate,
@@ -20,62 +17,19 @@ import {
   MAX_FUTURE_SKEW_MS,
   validateUtcIso8601NotInFuture,
 } from '../utils/iso8601-datetime.js';
-import { normalizeDidAddress, parseDidWebvhIdentifier, requireDidDocumentId } from '../utils.js';
+import { normalizeCreateDidAddress, requireDidDocumentId } from '../utils.js';
+import { createResolveVM } from '../vm-resolver.js';
 import { validateWitnessParameter } from '../witness.js';
 import { prepareDeactivationEntry, prepareGenesisEntry, prepareUpdateEntry } from './method.v1.0.entries.js';
+import { applyEntryToMeta } from './method.v1.0.meta.js';
 import { resolveV1Log } from './method.v1.0.resolution.js';
-
-const buildMetaFromEntry = (entry: DIDLogEntry): DIDResolutionMeta => {
-  return {
-    versionId: entry.versionId,
-    created: entry.versionTime,
-    updated: entry.versionTime,
-    scid: entry.parameters.scid ?? '',
-    updateKeys: entry.parameters.updateKeys ?? [],
-    portable: entry.parameters.portable ?? false,
-    nextKeyHashes: entry.parameters.nextKeyHashes ?? [],
-    prerotation: (entry.parameters.nextKeyHashes?.length ?? 0) > 0,
-    witness: entry.parameters.witness,
-    watchers: entry.parameters.watchers ?? [],
-    deactivated: entry.parameters.deactivated ?? false,
-  };
-};
-
-const mergeMetaFromEntry = ({
-  previousMeta,
-  entry,
-  nextKeyHashes,
-  deactivated,
-}: {
-  previousMeta: DIDResolutionMeta;
-  entry: DIDLogEntry;
-  nextKeyHashes?: string[];
-  deactivated?: boolean;
-}): DIDResolutionMeta => {
-  const resolvedNextKeyHashes = nextKeyHashes ?? previousMeta.nextKeyHashes;
-
-  return {
-    ...previousMeta,
-    versionId: entry.versionId,
-    updated: entry.versionTime,
-    updateKeys: entry.parameters.updateKeys ?? previousMeta.updateKeys,
-    portable: entry.parameters.portable ?? previousMeta.portable,
-    nextKeyHashes: resolvedNextKeyHashes,
-    prerotation: resolvedNextKeyHashes.length > 0,
-    witness: entry.parameters.witness ?? previousMeta.witness,
-    watchers: entry.parameters.watchers ?? previousMeta.watchers,
-    deactivated: deactivated ?? entry.parameters.deactivated ?? previousMeta.deactivated,
-  };
-};
 
 export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDResult> => {
   if (!options.updateKeys) {
     throw new Error('Update keys not supplied');
   }
 
-  if (options.witness?.witnesses && options.witness.witnesses.length > 0) {
-    validateWitnessParameter(options.witness);
-  }
+  validateWitnessParameter(options.witness);
 
   // Parse address input with strict validation
   const addressInput = options.address;
@@ -83,7 +37,7 @@ export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDR
     throw new Error('Address must be provided');
   }
 
-  const normalizedAddress = normalizeDidAddress({
+  const normalizedAddress = normalizeCreateDidAddress({
     address: addressInput,
     scid: PLACEHOLDER,
     paths: options.paths,
@@ -95,7 +49,7 @@ export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDR
   }
   const createdDate = createDate(options.created);
 
-  const { entry } = await prepareGenesisEntry({
+  const entry = await prepareGenesisEntry({
     options,
     controller,
     createdDate,
@@ -107,7 +61,7 @@ export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDR
   return {
     did: didId,
     doc: entry.state,
-    meta: buildMetaFromEntry(entry),
+    meta: applyEntryToMeta(entry),
     log: [entry],
     ...(webDoc ? { webDoc } : {}),
   };
@@ -115,24 +69,19 @@ export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDR
 
 export const resolveDIDFromLog = async (
   log: DIDLog,
-  options: ResolutionOptions & { witnessProofs?: WitnessProofFileEntry[] } = {}
+  options: ResolutionOptions = {}
 ): Promise<{ did: string; doc: DIDDoc | null; meta: DIDResolutionMeta }> => {
-  return resolveV1Log(log, options);
+  // A fresh default resolver per resolution: did:webvh VM lookups memoize
+  // within this resolution but nothing is trusted across resolutions.
+  return resolveV1Log(log, { resolveVM: createResolveVM(), ...options });
 };
 
-export const updateDID = async (
-  options: UpdateDIDInterface & {
-    services?: ServiceEndpoint[];
-    address?: string;
-    paths?: string[];
-  }
-): Promise<UpdateDIDResult> => {
+export const updateDID = async (options: UpdateDIDInterface): Promise<UpdateDIDResult> => {
   const log = options.log;
   const lastEntry = log[log.length - 1];
-  // Validate the last entry's state.id up front, before resolving the log.
-  parseDidWebvhIdentifier(requireDidDocumentId(lastEntry.state.id), 'last entry state.id');
-  const lastMeta = (await resolveDIDFromLog(log, { verifier: options.verifier, witnessProofs: options.witnessProofs }))
-    .meta;
+  const lastMeta =
+    options.priorMeta ??
+    (await resolveDIDFromLog(log, { verifier: options.verifier, witnessProofs: options.witnessProofs })).meta;
   const currentUpdateKeys = options.updateKeys;
   if (lastMeta.deactivated) {
     throw new Error('Cannot update deactivated DID');
@@ -145,9 +94,9 @@ export const updateDID = async (
   if (options.updated) {
     validateUtcIso8601NotInFuture(options.updated, 'updateDID updated', MAX_FUTURE_SKEW_MS);
   }
-  const createdDate = createNextVersionTime(lastMeta.updated, options.updated, createDate);
+  const createdDate = createNextVersionTime(lastMeta.updated, options.updated);
 
-  const { entry } = await prepareUpdateEntry({
+  const entry = await prepareUpdateEntry({
     options,
     lastEntry,
     lastMeta,
@@ -155,15 +104,23 @@ export const updateDID = async (
     createdDate,
   });
 
-  const meta = mergeMetaFromEntry({
-    previousMeta: lastMeta,
-    entry,
-    nextKeyHashes: options.nextKeyHashes ?? lastMeta.nextKeyHashes ?? [],
-  });
+  const meta = applyEntryToMeta(entry, lastMeta);
 
-  const hasWebAlias = (entry.state.alsoKnownAs ?? []).some((alias: string) => alias.startsWith('did:web:'));
   const updatedDidId = requireDidDocumentId(entry.state.id);
-  const webDoc = hasWebAlias ? generateParallelDidWeb(updatedDidId, entry.state) : undefined;
+  const webDoc = options.alsoKnownAsWeb ? generateParallelDidWeb(updatedDidId, entry.state) : undefined;
+  if (
+    !options.alsoKnownAsWeb &&
+    Array.isArray(entry.state.alsoKnownAs) &&
+    entry.state.alsoKnownAs.includes(convertWebvhIdToWebId(updatedDidId))
+  ) {
+    // The document advertises the parallel did:web alias, but without
+    // alsoKnownAsWeb no webDoc is generated -- a publisher that writes webDoc
+    // on every update would otherwise silently serve a stale did:web document.
+    console.warn(
+      'updateDID: the DID document lists a parallel did:web alias but alsoKnownAsWeb was not passed, ' +
+        'so no webDoc was generated. Pass alsoKnownAsWeb: true to keep the parallel did:web document current.'
+    );
+  }
 
   return {
     did: updatedDidId,
@@ -175,11 +132,11 @@ export const updateDID = async (
 };
 
 export const deactivateDID = async (
-  options: DeactivateDIDInterface & { updateKeys?: string[] }
+  options: DeactivateDIDInterface
 ): Promise<{ did: string; doc: DIDDoc; meta: DIDResolutionMeta; log: DIDLog }> => {
   const log = options.log;
   const lastEntry = log[log.length - 1];
-  const lastMeta = (await resolveDIDFromLog(log, { verifier: options.verifier })).meta;
+  const lastMeta = options.priorMeta ?? (await resolveDIDFromLog(log, { verifier: options.verifier })).meta;
   if (lastMeta.deactivated) {
     throw new Error('DID already deactivated');
   }
@@ -187,9 +144,9 @@ export const deactivateDID = async (
     throw new Error('updateKeys must be provided while pre-rotation is active');
   }
   const versionNumber = log.length + 1;
-  const createdDate = createNextVersionTime(lastMeta.updated, undefined, createDate);
+  const createdDate = createNextVersionTime(lastMeta.updated, undefined);
 
-  const { entry } = await prepareDeactivationEntry({
+  const entry = await prepareDeactivationEntry({
     options,
     lastEntry,
     lastMeta,
@@ -197,13 +154,7 @@ export const deactivateDID = async (
     createdDate,
   });
 
-  const meta = mergeMetaFromEntry({
-    previousMeta: lastMeta,
-    entry,
-    // Deactivation closes any pending rotation, matching the entry's parameters.
-    nextKeyHashes: [],
-    deactivated: true,
-  });
+  const meta = applyEntryToMeta(entry, lastMeta);
 
   const didId = requireDidDocumentId(entry.state.id);
 

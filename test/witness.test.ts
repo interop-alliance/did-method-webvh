@@ -3,7 +3,6 @@ import { createDataIntegrityProofTemplate, signDataIntegrityProof } from '../src
 import type {
   CreateDIDResult,
   DataIntegrityProofTemplate,
-  DIDLog,
   DIDLogEntry,
   Signer,
   VerificationMethod,
@@ -12,12 +11,7 @@ import { createDID, resolveDIDFromLog, updateDID } from '../src/method.js';
 import { deriveHash } from '../src/utils/crypto.js';
 import { MultibaseEncoding, multibaseEncode } from '../src/utils/multiformats.js';
 import { parseDidKeyDid, parseDidKeyVerificationMethod } from '../src/utils.js';
-import {
-  countWitnessApprovals,
-  createWitnessProof,
-  signWitnessProofEntries,
-  signWitnessProofEntry,
-} from '../src/witness.js';
+import { createWitnessProof, signWitnessProofEntries, signWitnessProofEntry } from '../src/witness.js';
 import {
   asPublicVerificationMethods,
   createTestSigner,
@@ -688,19 +682,6 @@ describe('Witness Implementation Tests', async () => {
     expect(results[1].proof).toHaveLength(1);
   });
 
-  test('countWitnessApprovals uses exact did:key DID matching', async () => {
-    const proofs = [
-      await createWitnessProof(
-        createWitnessSigner(witness1),
-        initialDID.log[0].versionId,
-        witnessVerificationMethod(witness1)
-      ),
-    ];
-
-    expect(countWitnessApprovals(proofs, [{ id: `did:key:${witness1.publicKeyMultibase}` }])).toBe(1);
-    expect(countWitnessApprovals(proofs, [{ id: `did:key:${witness2.publicKeyMultibase}` }])).toBe(0);
-  });
-
   test('Resolve requires witness threshold for each required entry', async () => {
     const witnessDid = `did:key:${witness1.publicKeyMultibase}`;
     const didWithWitness = await createDID({
@@ -789,6 +770,95 @@ describe('Witness Implementation Tests', async () => {
         ],
       })
     ).rejects.toThrow(`Witness threshold not met for version ${versionId}`);
+  });
+
+  test('Resolve rejects a copied proofValue whose verificationMethod is swapped to another witness', async () => {
+    // One genuine proof from witness1, plus a copy of it re-attributed to
+    // witness2. The copy must be verified against witness2's own key (and
+    // fail), not satisfied from the verification memo by its proofValue.
+    const witnessDid1 = `did:key:${witness1.publicKeyMultibase}`;
+    const witnessDid2 = `did:key:${witness2.publicKeyMultibase}`;
+    const didWithWitness = await createDID({
+      address: 'example.com',
+      signer: createTestSigner(authKey),
+      updateKeys: [authKey.publicKeyMultibase!],
+      verificationMethods: asPublicVerificationMethods(authKey),
+      witness: {
+        threshold: 2,
+        witnesses: [{ id: witnessDid1 }, { id: witnessDid2 }],
+      },
+      verifier: testImplementation,
+    });
+
+    const versionId = didWithWitness.log[0].versionId;
+    const genuineProof = await createWitnessProof(
+      createWitnessSigner(witness1),
+      versionId,
+      witnessVerificationMethod(witness1)
+    );
+    const reattributedProof = { ...genuineProof, verificationMethod: witnessVerificationMethod(witness2) };
+
+    await expect(
+      resolveDIDFromLog(didWithWitness.log, {
+        verifier: testImplementation,
+        witnessProofs: [{ versionId, proof: [genuineProof, reattributedProof] }],
+      })
+    ).rejects.toThrow(`Witness threshold not met for version ${versionId}`);
+  });
+
+  test('Resolve still counts a genuine proof after an invalid copy of it was verified first', async () => {
+    // The invalid re-attributed copy is verified before the genuine proof; its
+    // failure must not poison the verification memo for the genuine one.
+    const witnessDid1 = `did:key:${witness1.publicKeyMultibase}`;
+    const witnessDid2 = `did:key:${witness2.publicKeyMultibase}`;
+    const didWithWitness = await createDID({
+      address: 'example.com',
+      signer: createTestSigner(authKey),
+      updateKeys: [authKey.publicKeyMultibase!],
+      verificationMethods: asPublicVerificationMethods(authKey),
+      witness: {
+        threshold: 1,
+        witnesses: [{ id: witnessDid1 }, { id: witnessDid2 }],
+      },
+      verifier: testImplementation,
+    });
+
+    const versionId = didWithWitness.log[0].versionId;
+    const genuineProof = await createWitnessProof(
+      createWitnessSigner(witness1),
+      versionId,
+      witnessVerificationMethod(witness1)
+    );
+    const reattributedProof = { ...genuineProof, verificationMethod: witnessVerificationMethod(witness2) };
+
+    const resolved = await resolveDIDFromLog(didWithWitness.log, {
+      verifier: testImplementation,
+      witnessProofs: [{ versionId, proof: [reattributedProof, genuineProof] }],
+    });
+
+    expect(resolved.did).toBe(didWithWitness.did);
+  });
+
+  test('Resolve rejects a log entry using the legacy witnesses/witnessThreshold parameters', async () => {
+    const created = await createDID({
+      address: 'example.com',
+      signer: createTestSigner(authKey),
+      updateKeys: [authKey.publicKeyMultibase!],
+      verificationMethods: asPublicVerificationMethods(authKey),
+      verifier: testImplementation,
+    });
+
+    // Graft the legacy v0.5 shape onto the genesis parameters; fail closed
+    // instead of resolving with the witness requirement silently ignored.
+    const tamperedLog = structuredClone(created.log);
+    (tamperedLog[0].parameters as Record<string, unknown>).witnesses = [
+      { id: `did:key:${witness1.publicKeyMultibase}` },
+    ];
+    (tamperedLog[0].parameters as Record<string, unknown>).witnessThreshold = 1;
+
+    await expect(resolveDIDFromLog(tamperedLog, { verifier: testImplementation })).rejects.toThrow(
+      "Legacy 'witnesses'/'witnessThreshold' parameters are not supported"
+    );
   });
 
   test('Resolve accepts later proof for earlier required entry', async () => {
@@ -1156,58 +1226,6 @@ describe('Witness Implementation Tests', async () => {
     );
 
     expect(proof.created).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
-  });
-
-  test('Resolves DID with legacy witnesses/witnessThreshold format in incremental entry', async () => {
-    const witnessKey = await generateTestVerificationMethod();
-    const witnessId = `did:key:${witnessKey.publicKeyMultibase}`;
-    const witnessVmId = `${witnessId}#${witnessKey.publicKeyMultibase}`;
-
-    const noWitnessDID = await createDID({
-      address: 'example.com',
-      signer: createTestSigner(authKey),
-      updateKeys: [authKey.publicKeyMultibase!],
-      verificationMethods: asPublicVerificationMethods(authKey),
-      verifier: testImplementation,
-      created: '2021-01-01T00:00:00Z',
-    });
-
-    const versionTime = '2021-01-02T00:00:00Z';
-    const baseEntry = {
-      versionId: noWitnessDID.log[0].versionId,
-      versionTime,
-      parameters: {
-        updateKeys: [authKey.publicKeyMultibase!],
-        witnesses: [{ id: witnessId }],
-        witnessThreshold: 1,
-      },
-      state: noWitnessDID.log[0].state,
-    };
-    const logEntryHash = await deriveHash(baseEntry);
-    const versionId = `2-${logEntryHash}`;
-    const signer = createTestSigner(authKey);
-    const proofTemplate: DataIntegrityProofTemplate = {
-      type: 'DataIntegrityProof',
-      cryptosuite: 'eddsa-jcs-2022',
-      verificationMethod: signer.getVerificationMethodId(),
-      created: versionTime,
-      proofPurpose: 'assertionMethod',
-    };
-    const signedProof = await signer.sign({ document: { ...baseEntry, versionId }, proof: proofTemplate });
-    const v2Entry = { ...baseEntry, versionId, proof: [{ ...proofTemplate, proofValue: signedProof.proofValue }] };
-
-    const legacyLog = [noWitnessDID.log[0], v2Entry] as DIDLog;
-    const witnessSignerFn = createWitnessSigner(witnessKey);
-    const witnessProof = await createWitnessProof(witnessSignerFn, versionId, witnessVmId);
-
-    const resolved = await resolveDIDFromLog(legacyLog, {
-      verifier: testImplementation,
-      witnessProofs: [{ versionId, proof: [witnessProof] }],
-    });
-
-    expect(resolved.meta.witness?.witnesses).toHaveLength(1);
-    expect(resolved.meta.witness?.witnesses?.[0].id).toBe(witnessId);
-    expect(resolved.meta.witness?.threshold).toBe(1);
   });
 
   const createWitnessSigner = (verificationMethod: VerificationMethod) => {

@@ -27,8 +27,6 @@ export interface WebvhDocumentMetadata extends IDIDDocumentMetadata {
   portable?: boolean;
   witness?: DIDResolutionMeta['witness'];
   watchers?: string[] | null;
-  previousLogEntryHash?: string;
-  latestVersionId?: string;
 }
 
 const CONTENT_TYPE = 'application/did+ld+json';
@@ -46,14 +44,41 @@ export function validateSingleVersionSelector(options: {
   versionTime?: Date;
   versionNumber?: number;
 }): ResolutionOptionsError | null {
-  const count =
-    (options.versionId !== undefined ? 1 : 0) +
-    (options.versionTime !== undefined ? 1 : 0) +
-    (options.versionNumber !== undefined ? 1 : 0);
+  const count = [options.versionId, options.versionTime, options.versionNumber].filter(
+    (selector) => selector !== undefined
+  ).length;
   if (count > 1) {
     return {
       code: 'invalidOptions',
       detail: 'At most one of versionId, versionTime, versionNumber may be supplied; they are mutually exclusive.',
+      problemType: WEBVH_ERROR_TYPES.conflictingResolutionOptions,
+    };
+  }
+  return null;
+}
+
+/**
+ * Validates every resolution-selector combination in one place: at most one
+ * version selector, and `verificationMethod` not combined with an exact
+ * version selector. (`verificationMethod` + `versionTime` stays allowed -- a
+ * supported combined selector: "the document containing this method around
+ * this time".) The single entry into `resolveV1Log` calls this, so the
+ * in-memory and HTTPS paths reject conflicting selectors identically.
+ */
+export function validateResolutionSelectors(options: {
+  versionId?: string;
+  versionTime?: Date;
+  versionNumber?: number;
+  verificationMethod?: string;
+}): ResolutionOptionsError | null {
+  const single = validateSingleVersionSelector(options);
+  if (single) {
+    return single;
+  }
+  if (options.verificationMethod && (options.versionId !== undefined || options.versionNumber !== undefined)) {
+    return {
+      code: 'invalidOptions',
+      detail: 'Cannot specify both verificationMethod and version number/id',
       problemType: WEBVH_ERROR_TYPES.conflictingResolutionOptions,
     };
   }

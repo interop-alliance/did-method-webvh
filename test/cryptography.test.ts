@@ -15,7 +15,7 @@ import type {
   Verifier,
 } from '../src/interfaces.js';
 import { createDID } from '../src/method.js';
-import { createHash, createHashHex, createSCID, deriveHash, deriveNextKeyHash } from '../src/utils/crypto.js';
+import { createHash, deriveHash, deriveNextKeyHash } from '../src/utils/crypto.js';
 import {
   createMultihash,
   encodeBase58Btc,
@@ -23,7 +23,7 @@ import {
   MultihashAlgorithm,
   multibaseEncode,
 } from '../src/utils/multiformats.js';
-import * as utilsModule from '../src/utils.js';
+import { resolveVM } from '../src/vm-resolver.js';
 import { countVerifiedWitnessApprovals, createWitnessProof } from '../src/witness.js';
 import {
   asPublicVerificationMethods,
@@ -166,7 +166,11 @@ describe('Injectable Cryptography Tests', () => {
       ],
     };
 
-    const result = await documentStateIsValid(signedDoc, [updateKey], null, true, mockImplementation);
+    const result = await documentStateIsValid(signedDoc, {
+      updateKeys: [updateKey],
+      verifier: mockImplementation,
+      resolveVM,
+    });
 
     expect(result).toBe(true);
   });
@@ -185,9 +189,9 @@ describe('Injectable Cryptography Tests', () => {
       ],
     };
 
-    expect(documentStateIsValid(signedDoc, [updateKey], null, true, failingMockImplementation)).rejects.toThrow(
-      'Proof 0 failed verification'
-    );
+    expect(
+      documentStateIsValid(signedDoc, { updateKeys: [updateKey], verifier: failingMockImplementation, resolveVM })
+    ).rejects.toThrow('Proof 0 failed verification');
   });
 
   test('Count verified witness approvals with successful implementation', async () => {
@@ -211,7 +215,7 @@ describe('Injectable Cryptography Tests', () => {
     ];
 
     const witness = {
-      threshold: '1',
+      threshold: 1,
       witnesses: [
         {
           id: 'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK',
@@ -219,7 +223,10 @@ describe('Injectable Cryptography Tests', () => {
       ],
     };
 
-    const approvals = await countVerifiedWitnessApprovals(logEntry, witnessProofs, witness, mockImplementation);
+    const approvals = await countVerifiedWitnessApprovals(witnessProofs, witness, {
+      verifier: mockImplementation,
+      resolveVM,
+    });
     expect(approvals).toBe(1);
   });
 
@@ -244,7 +251,7 @@ describe('Injectable Cryptography Tests', () => {
     ];
 
     const witness = {
-      threshold: '1',
+      threshold: 1,
       witnesses: [
         {
           id: 'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK',
@@ -259,12 +266,10 @@ describe('Injectable Cryptography Tests', () => {
     };
 
     try {
-      const approvals = await countVerifiedWitnessApprovals(
-        logEntry,
-        witnessProofs,
-        witness,
-        failingMockImplementation
-      );
+      const approvals = await countVerifiedWitnessApprovals(witnessProofs, witness, {
+        verifier: failingMockImplementation,
+        resolveVM,
+      });
       expect(approvals).toBe(0);
     } finally {
       console.warn = originalWarn;
@@ -287,9 +292,9 @@ describe('Injectable Cryptography Tests', () => {
       ],
     };
 
-    expect(documentStateIsValid(signedDoc, [mockImplementation.getVerificationMethodId()], null, true)).rejects.toThrow(
-      'Verifier implementation is required'
-    );
+    expect(
+      documentStateIsValid(signedDoc, { updateKeys: [mockImplementation.getVerificationMethodId()], resolveVM })
+    ).rejects.toThrow('Verifier implementation is required');
   });
 
   test('Require verifier implementation for witness proofs', async () => {
@@ -313,7 +318,7 @@ describe('Injectable Cryptography Tests', () => {
     ];
 
     const witness = {
-      threshold: '1',
+      threshold: 1,
       witnesses: [
         {
           id: 'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK',
@@ -321,7 +326,7 @@ describe('Injectable Cryptography Tests', () => {
       ],
     };
 
-    expect(countVerifiedWitnessApprovals(logEntry, witnessProofs, witness)).rejects.toThrow(
+    expect(countVerifiedWitnessApprovals(witnessProofs, witness, { resolveVM })).rejects.toThrow(
       'Verifier implementation is required'
     );
   });
@@ -360,62 +365,61 @@ describe('Assertion Guards', () => {
   );
 
   test('throws when proof is missing', async () => {
-    await expect(documentStateIsValid(makeDoc(null), [updateKey], null, true, verifier)).rejects.toThrow(
+    await expect(documentStateIsValid(makeDoc(null), { updateKeys: [updateKey], verifier, resolveVM })).rejects.toThrow(
       'Missing proof in DID log entry'
     );
   });
 
   test('normalizes non-array proof into array and verifies', async () => {
     const doc = makeDoc(baseProof);
-    await expect(documentStateIsValid(doc, [updateKey], null, true, verifier)).resolves.toBe(true);
+    await expect(documentStateIsValid(doc, { updateKeys: [updateKey], verifier, resolveVM })).resolves.toBe(true);
   });
 
   test('throws on unknown proof type', async () => {
     await expect(
-      documentStateIsValid(makeDoc({ ...baseProof, type: 'UnknownProofType' }), [updateKey], null, true, verifier)
+      documentStateIsValid(makeDoc({ ...baseProof, type: 'UnknownProofType' }), {
+        updateKeys: [updateKey],
+        verifier,
+        resolveVM,
+      })
     ).rejects.toThrow('Unknown proof type UnknownProofType');
   });
 
   test('throws on invalid proof purpose', async () => {
     await expect(
-      documentStateIsValid(makeDoc({ ...baseProof, proofPurpose: 'authentication' }), [updateKey], null, true, verifier)
+      documentStateIsValid(makeDoc({ ...baseProof, proofPurpose: 'authentication' }), {
+        updateKeys: [updateKey],
+        verifier,
+        resolveVM,
+      })
     ).rejects.toThrow("Invalid proof purpose 'authentication'");
   });
 
   test('throws on invalid cryptosuite', async () => {
     await expect(
-      documentStateIsValid(makeDoc({ ...baseProof, cryptosuite: 'wrong-suite' }), [updateKey], null, true, verifier)
+      documentStateIsValid(makeDoc({ ...baseProof, cryptosuite: 'wrong-suite' }), {
+        updateKeys: [updateKey],
+        verifier,
+        resolveVM,
+      })
     ).rejects.toThrow('Unknown cryptosuite wrong-suite');
   });
 
   test('throws when verification method cannot be resolved', async () => {
-    const resolveSpy = vi.spyOn(utilsModule, 'resolveVM').mockResolvedValue(null);
-
-    try {
-      await expect(documentStateIsValid(makeDoc(baseProof), [updateKey], null, true, verifier)).rejects.toThrow(
-        `Verification Method did:key:${updateKey} not found`
-      );
-    } finally {
-      resolveSpy.mockRestore();
-    }
+    await expect(
+      documentStateIsValid(makeDoc(baseProof), { updateKeys: [updateKey], verifier, resolveVM: async () => null })
+    ).rejects.toThrow(`Verification Method did:key:${updateKey} not found`);
   });
 
   test('throws when resolved multikey does not use ed25519 header', async () => {
     const badHeaderBytes = new Uint8Array([0x00, 0x00, 0x00, 0x00]);
-    const resolveSpy = vi.spyOn(utilsModule, 'resolveVM').mockResolvedValue({
-      id: `did:key:${updateKey}`,
-      type: 'Multikey',
+    const resolveBadHeader = async () => ({
       publicKeyMultibase: multibaseEncode(badHeaderBytes, MultibaseEncoding.BASE58_BTC),
-      controller: `did:key:${updateKey}`,
     });
 
-    try {
-      await expect(documentStateIsValid(makeDoc(baseProof), [updateKey], null, true, verifier)).rejects.toThrow(
-        "multiKey doesn't include ed25519 header (0xed01)"
-      );
-    } finally {
-      resolveSpy.mockRestore();
-    }
+    await expect(
+      documentStateIsValid(makeDoc(baseProof), { updateKeys: [updateKey], verifier, resolveVM: resolveBadHeader })
+    ).rejects.toThrow("multiKey doesn't include ed25519 header (0xed01)");
   });
 
   test('hashChainIsValid returns true and false for matching and mismatching hashes', () => {
@@ -424,7 +428,7 @@ describe('Assertion Guards', () => {
   });
 
   test('newKeysAreInNextKeys skips validation when previous next-key list is empty', async () => {
-    await expect(newKeysAreInNextKeys([updateKey], [])).resolves.toBe(true);
+    await expect(newKeysAreInNextKeys([updateKey], [])).resolves.toBeUndefined();
   });
 
   test('newKeysAreInNextKeys throws when update key hash is not pre-committed', async () => {
@@ -450,9 +454,8 @@ describe('Assertion Guards', () => {
     const digest = new Uint8Array(32);
     digest.fill(7);
     const hash = encodeBase58Btc(createMultihash(digest, MultihashAlgorithm.SHA2_256));
-    const scid = await createSCID(hash);
 
-    await expect(scidIsFromHash(scid, hash)).resolves.toBe(true);
+    await expect(scidIsFromHash(hash, hash)).resolves.toBe(true);
   });
 });
 
@@ -614,20 +617,14 @@ describe('Crypto Helpers', () => {
     expect(crypto.getVerificationMethodId()).toBe('');
   });
 
-  test('createHashHex returns stable SHA-256 hex for known input', async () => {
-    const hex = await createHashHex('abc');
-
-    expect(hex).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
-    expect(hex).toHaveLength(64);
-  });
-
-  test('createHashHex matches bytes from createHash', async () => {
-    const bytes = await createHash('hello');
-    const expectedHex = Array.from(bytes)
+  test('createHash produces the SHA-256 digest for known vectors', async () => {
+    const abc = await createHash('abc');
+    const abcHex = Array.from(abc)
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('');
 
-    await expect(createHashHex('hello')).resolves.toBe(expectedHex);
+    expect(abc).toHaveLength(32);
+    expect(abcHex).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
   });
 
   test('deriveHash rejects circular input', async () => {
