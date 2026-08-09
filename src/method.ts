@@ -6,14 +6,12 @@ import type {
   DeactivateDIDInterface,
   DIDLog,
   ResolutionOptions,
-  ServiceEndpoint,
   UpdateDIDInterface,
   UpdateDIDResult,
-  WitnessProofFileEntry,
 } from './interfaces.js';
 import * as v1 from './method_versions/method.v1.0.js';
-import { mapErrorToCode, toErrorResult, toResolutionResult, validateSingleVersionSelector } from './resolver-result.js';
-import { fetchLogFromIdentifier, maybeWriteTestLog } from './utils.js';
+import { mapErrorToCode, toErrorResult, toResolutionResult, validateResolutionSelectors } from './resolver-result.js';
+import { fetchLogFromIdentifier, parseDidWebvhIdentifier } from './utils.js';
 import { defaultWebvhLogVerifier } from './verifier.js';
 
 /**
@@ -23,14 +21,12 @@ import { defaultWebvhLogVerifier } from './verifier.js';
  * @returns The created DID, resolved document, and DID log.
  */
 export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDResult> => {
-  const method = (options as { method?: string }).method;
+  const method = options.method;
   if (method && method !== METHOD_PROTOCOL_V1_0) {
     throw new Error(`'${method}' is not a supported method version.`);
   }
   options.verifier ??= defaultWebvhLogVerifier;
-  const result = await v1.createDID(options);
-  maybeWriteTestLog(result.did, result.log);
-  return result;
+  return v1.createDID(options);
 };
 
 /**
@@ -45,23 +41,22 @@ export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDR
  * @param options Optional resolver settings.
  * @returns The DID resolution result envelope.
  */
-export const resolveDID = async (
-  did: string,
-  options: ResolutionOptions & { witnessProofs?: WitnessProofFileEntry[] } = {}
-): Promise<IDIDResolutionResult> => {
+export const resolveDID = async (did: string, options: ResolutionOptions = {}): Promise<IDIDResolutionResult> => {
   // Extract the expected SCID from the DID string so the resolver can
-  // verify the log's SCID matches what the DID claims.
-  const didParts = did.split(':');
-  const scid = didParts.length > 2 && didParts[0] === 'did' && didParts[1] === 'webvh' ? didParts[2] : undefined;
+  // verify the log's SCID matches what the DID claims. A malformed DID leaves
+  // it undefined; the fetch below then reports the parse failure.
+  let scid: string | undefined;
+  try {
+    scid = parseDidWebvhIdentifier(did, 'did').scid;
+  } catch {}
   const verifier = options.verifier ?? defaultWebvhLogVerifier;
-  const selectorError = validateSingleVersionSelector(options);
+  const selectorError = validateResolutionSelectors(options);
   if (selectorError) {
     return toErrorResult(selectorError.code, selectorError.detail, selectorError.problemType);
   }
   try {
     const log = await fetchLogFromIdentifier(did);
     const result = await v1.resolveDIDFromLog(log, { ...options, verifier, scid, requestedDid: did });
-    maybeWriteTestLog(result.did, log);
 
     return toResolutionResult(result);
   } catch (e) {
@@ -83,14 +78,9 @@ export const resolveDID = async (
  * @param options Optional resolver settings.
  * @returns The resolved DID result with resolution metadata.
  */
-export const resolveDIDFromLog = async (
-  log: DIDLog,
-  options: ResolutionOptions & { witnessProofs?: WitnessProofFileEntry[] } = {}
-) => {
+export const resolveDIDFromLog = async (log: DIDLog, options: ResolutionOptions = {}) => {
   const verifier = options.verifier ?? defaultWebvhLogVerifier;
-  const result = await v1.resolveDIDFromLog(log, { ...options, verifier });
-  maybeWriteTestLog(result.did, log);
-  return result;
+  return v1.resolveDIDFromLog(log, { ...options, verifier });
 };
 
 /**
@@ -109,17 +99,9 @@ export const resolveDIDFromLog = async (
  * @param options DID update options.
  * @returns The updated DID, resolved document, and DID log.
  */
-export const updateDID = async (
-  options: UpdateDIDInterface & {
-    services?: ServiceEndpoint[];
-    address?: string;
-    paths?: string[];
-  }
-): Promise<UpdateDIDResult> => {
+export const updateDID = async (options: UpdateDIDInterface): Promise<UpdateDIDResult> => {
   options.verifier ??= defaultWebvhLogVerifier;
-  const result = await v1.updateDID(options);
-  maybeWriteTestLog(result.did, result.log);
-  return result;
+  return v1.updateDID(options);
 };
 
 /**
@@ -128,9 +110,7 @@ export const updateDID = async (
  * @param options DID deactivation options.
  * @returns The deactivated DID result and updated DID log.
  */
-export const deactivateDID = async (options: DeactivateDIDInterface & { updateKeys?: string[] }) => {
+export const deactivateDID = async (options: DeactivateDIDInterface) => {
   options.verifier ??= defaultWebvhLogVerifier;
-  const result = await v1.deactivateDID(options);
-  maybeWriteTestLog(result.did, result.log);
-  return result;
+  return v1.deactivateDID(options);
 };

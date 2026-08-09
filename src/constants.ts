@@ -7,18 +7,6 @@ export const BASE_CONTEXT = ['https://www.w3.org/ns/did/v1', 'https://w3id.org/s
 export const METHOD_VERSION_1_0 = '1.0';
 export const METHOD_PROTOCOL_V1_0 = `did:${METHOD}:${METHOD_VERSION_1_0}`;
 
-// Method parameter keys
-export const METHOD_PARAMETER_KEYS = {
-  scid: 'scid',
-  method: 'method',
-  portable: 'portable',
-  updateKeys: 'updateKeys',
-  nextKeyHashes: 'nextKeyHashes',
-  witness: 'witness',
-  watchers: 'watchers',
-  ttl: 'ttl',
-} as const;
-
 // Verification relationships
 export const VERIFICATION_RELATIONSHIPS = [
   'authentication',

@@ -136,6 +136,19 @@ describe('resolveDIDFromLog with verificationMethod', () => {
     expect(meta.versionId.split('-')[0]).toBe('2');
   });
 
+  test('Resolution result shares no state with the caller: mutating meta or doc leaves the log intact', async () => {
+    const log = structuredClone(fullLog);
+    const pristineLog = structuredClone(fullLog);
+
+    const resolved = await resolveDIDFromLog(log, { verifier: testImplementation });
+
+    resolved.meta.updateKeys.push('z6MkInjectedKey');
+    resolved.meta.nextKeyHashes?.push('zInjectedHash');
+    resolved.doc!.verificationMethod?.push({ id: `${resolved.did}#injected`, type: 'Multikey' });
+
+    expect(log).toEqual(pristineLog);
+  });
+
   test('Throw error when both verificationMethod and versionNumber are specified', async () => {
     const vmId = `${initialDID.did}#${authKey1.publicKeyMultibase!.slice(-8)}`;
     let error: Error | null = null;
@@ -176,10 +189,10 @@ describe('Resolver URL derivation', () => {
 
   test('Rejects DID identifier containing fragment or query contamination', () => {
     expect(() => getBaseUrl('did:webvh:scid:example.com#frag')).toThrow(
-      'did:webvh identifier must not include query or fragment components'
+      'Address input must not include query or fragment components'
     );
     expect(() => getBaseUrl('did:webvh:scid:example.com?query=1')).toThrow(
-      'did:webvh identifier must not include query or fragment components'
+      'Address input must not include query or fragment components'
     );
   });
 

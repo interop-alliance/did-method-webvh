@@ -177,3 +177,76 @@ describe('R8: bounded deriveHash cache', () => {
     expect(getHashCacheSizeForTests()).toBeLessThanOrEqual(HASH_CACHE_MAX_ENTRIES);
   });
 });
+
+// WEBVH-5 -- updateDID/deactivateDID can skip full log re-resolution via
+// priorMeta, and the post-sign self-verification can be disabled.
+describe('trusted prior state and selfVerify options', () => {
+  test('updateDID with priorMeta produces the same log as full re-resolution', async () => {
+    const authKey = await generateTestVerificationMethod();
+    const created = await createDID({
+      address: 'example.com',
+      signer: createTestSigner(authKey),
+      updateKeys: [authKey.publicKeyMultibase!],
+      verificationMethods: asPublicVerificationMethods(authKey),
+    });
+
+    const updated = nextSecond(created.log);
+    const viaResolution = await updateDID({
+      log: created.log,
+      updated,
+      signer: createTestSigner(authKey),
+      alsoKnownAs: ['did:example:alias'],
+    });
+    const viaPriorMeta = await updateDID({
+      log: created.log,
+      updated,
+      signer: createTestSigner(authKey),
+      alsoKnownAs: ['did:example:alias'],
+      priorMeta: created.meta,
+    });
+
+    expect(viaPriorMeta.log).toEqual(viaResolution.log);
+    expect(viaPriorMeta.meta).toEqual(viaResolution.meta);
+  });
+
+  test('selfVerify: false still produces a resolvable log', async () => {
+    const authKey = await generateTestVerificationMethod();
+    const created = await createDID({
+      address: 'example.com',
+      signer: createTestSigner(authKey),
+      updateKeys: [authKey.publicKeyMultibase!],
+      verificationMethods: asPublicVerificationMethods(authKey),
+      selfVerify: false,
+    });
+
+    const updatedResult = await updateDID({
+      log: created.log,
+      updated: nextSecond(created.log),
+      signer: createTestSigner(authKey),
+      priorMeta: created.meta,
+      selfVerify: false,
+      alsoKnownAs: ['did:example:alias'],
+    });
+
+    const resolved = await resolveDIDFromLog(updatedResult.log);
+    expect(resolved.did).toBe(created.did);
+    expect(resolved.doc?.alsoKnownAs).toContain('did:example:alias');
+  });
+});
+
+// WEBVH-18 -- the write path and the resolver derive meta through the same
+// reducer, so both report identical values for the same log.
+describe('write/read meta parity', () => {
+  test('createDID meta matches resolveDIDFromLog meta for the same log', async () => {
+    const authKey = await generateTestVerificationMethod();
+    const created = await createDID({
+      address: 'example.com',
+      signer: createTestSigner(authKey),
+      updateKeys: [authKey.publicKeyMultibase!],
+      verificationMethods: asPublicVerificationMethods(authKey),
+    });
+
+    const resolved = await resolveDIDFromLog(created.log);
+    expect(resolved.meta).toEqual(created.meta);
+  });
+});

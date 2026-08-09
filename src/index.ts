@@ -11,12 +11,14 @@ export {
 export { convertWebvhIdToWebId, createVMID, generateParallelDidWeb } from './did-document.js';
 export * from './interfaces.js';
 export { createDID, deactivateDID, resolveDID, resolveDIDFromLog, updateDID } from './method.js';
+export { WitnessThresholdError } from './method_versions/method.v1.0.resolution.js';
 export type { ResolutionOptionsError, WebvhDocumentMetadata } from './resolver-result.js';
 export {
   mapErrorToCode,
   toErrorMeta,
   toErrorResult,
   toResolutionResult,
+  validateResolutionSelectors,
   validateSingleVersionSelector,
   WEBVH_ERROR_TYPES,
 } from './resolver-result.js';
@@ -31,9 +33,11 @@ export {
   parseAndValidateVersionId,
   parseDidKeyDid,
   parseDidKeyVerificationMethod,
+  parseDidWebvhIdentifier,
   readLogFromString,
 } from './utils.js';
 export { defaultWebvhLogVerifier } from './verifier.js';
+export { createResolveVM, resolveVM } from './vm-resolver.js';
 export {
   createWitnessProof,
   signWitnessProofEntries,

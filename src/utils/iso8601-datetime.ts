@@ -101,14 +101,9 @@ export function parseUtcIso8601VersionTime(value: string, context: string): Date
   return parsed;
 }
 
-export function validateUtcIso8601NotInFuture(
-  value: string,
-  context: string,
-  maxFutureSkewMs: number = 0,
-  now: Date = new Date()
-): Date {
+export function validateUtcIso8601NotInFuture(value: string, context: string, maxFutureSkewMs: number = 0): Date {
   const parsed = parseUtcIso8601VersionTime(value, context);
-  if (parsed.getTime() > now.getTime() + maxFutureSkewMs) {
+  if (parsed.getTime() > Date.now() + maxFutureSkewMs) {
     if (maxFutureSkewMs > 0) {
       throw new Error(`${context} must not be more than ${maxFutureSkewMs / 60000} minutes in the future`);
     }
@@ -118,11 +113,7 @@ export function validateUtcIso8601NotInFuture(
   return parsed;
 }
 
-export function createNextVersionTime(
-  previousVersionTime: string,
-  requestedVersionTime: string | undefined,
-  formatDate: (value: string | Date) => string
-): string {
+export function createNextVersionTime(previousVersionTime: string, requestedVersionTime: string | undefined): string {
   const previous = parseUtcIso8601VersionTime(previousVersionTime, 'previous versionTime');
 
   if (requestedVersionTime) {
@@ -130,7 +121,7 @@ export function createNextVersionTime(
     // Compare the formatted (whole-second-trimmed) value, since that is what is
     // written: a sub-second requested time that trims down to `previous` would
     // otherwise pass the raw comparison yet emit a colliding versionTime.
-    const formatted = formatDate(requestedVersionTime);
+    const formatted = createDate(requestedVersionTime);
     if (new Date(formatted).getTime() <= previous.getTime()) {
       throw new Error('versionTime must be greater than previous versionTime');
     }
@@ -140,10 +131,10 @@ export function createNextVersionTime(
   // versionTime is trimmed to whole seconds, so a wall-clock `now` within the
   // same second as the previous entry collides. Bump to `previous + 1s` to keep
   // versionTime strictly increasing (the resolver requires it).
-  const nowFormatted = formatDate(new Date());
+  const nowFormatted = createDate(new Date());
   const nowTrimmed = new Date(nowFormatted);
   if (nowTrimmed.getTime() <= previous.getTime()) {
-    return formatDate(new Date(previous.getTime() + 1000));
+    return createDate(new Date(previous.getTime() + 1000));
   }
 
   return nowFormatted;

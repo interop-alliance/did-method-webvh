@@ -17,6 +17,7 @@
 
 import type { IDIDResolutionResult } from '@interop/data-integrity-core';
 import { DIDResolutionError } from '@interop/data-integrity-core';
+import { hasMatchingId } from './did-document.js';
 import type { DIDDoc, Verifier } from './interfaces.js';
 import { resolveDID } from './method.js';
 import { defaultWebvhLogVerifier } from './verifier.js';
@@ -42,8 +43,7 @@ const MULTIKEY_CONTEXT = 'https://w3id.org/security/multikey/v1';
  * @returns The matched node with an `@context`.
  */
 function dereferenceFragment(doc: DIDDoc, id: string): Record<string, unknown> {
-  const hasId = (entry: unknown): entry is Record<string, unknown> =>
-    typeof entry === 'object' && entry !== null && (entry as { id?: unknown }).id === id;
+  const hasId = hasMatchingId(id);
 
   let match = (doc.verificationMethod ?? []).find(hasId) as Record<string, unknown> | undefined;
   if (!match) {
@@ -52,9 +52,9 @@ function dereferenceFragment(doc: DIDDoc, id: string): Record<string, unknown> {
         continue;
       }
       if (Array.isArray(value)) {
-        match = value.find(hasId);
+        match = value.find(hasId) as Record<string, unknown> | undefined;
       } else if (hasId(value)) {
-        match = value;
+        match = value as unknown as Record<string, unknown>;
       }
       if (match) {
         break;

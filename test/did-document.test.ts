@@ -317,7 +317,7 @@ describe('generateParallelDidWeb', () => {
     expect(webDoc.alsoKnownAs).toContain(did);
   });
 
-  test('returns webDoc on updateDID when did:web alias is present', async () => {
+  test('returns webDoc on updateDID when alsoKnownAsWeb is enabled', async () => {
     const authKey = await generateTestVerificationMethod();
     const created = await createDID({
       address: 'example.com',
@@ -336,11 +336,48 @@ describe('generateParallelDidWeb', () => {
       updateKeys: [authKey.publicKeyMultibase!],
       verificationMethods: asPublicVerificationMethods(authKey),
       alsoKnownAs: created.doc.alsoKnownAs,
+      alsoKnownAsWeb: true,
     });
 
     expect(updated.webDoc).toBeDefined();
     expect(updated.webDoc?.id).toBe('did:web:example.com');
     expect(updated.webDoc?.alsoKnownAs).toContain(updated.did);
+  });
+
+  test('warns on updateDID when the document carries the did:web alias but alsoKnownAsWeb is omitted', async () => {
+    const authKey = await generateTestVerificationMethod();
+    const created = await createDID({
+      address: 'example.com',
+      signer: createTestSigner(authKey),
+      verifier: createTestVerifier(authKey),
+      updateKeys: [authKey.publicKeyMultibase!],
+      verificationMethods: asPublicVerificationMethods(authKey),
+      alsoKnownAsWeb: true,
+    });
+
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map(String).join(' '));
+    };
+
+    try {
+      const updated = await updateDID({
+        log: created.log,
+        updated: nextSecond(created.log),
+        signer: createTestSigner(authKey),
+        verifier: createTestVerifier(authKey),
+        updateKeys: [authKey.publicKeyMultibase!],
+        verificationMethods: asPublicVerificationMethods(authKey),
+        alsoKnownAs: created.doc.alsoKnownAs,
+      });
+
+      expect(updated.webDoc).toBeUndefined();
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    expect(warnings.some((message) => message.includes('alsoKnownAsWeb was not passed'))).toBe(true);
   });
 });
 
@@ -385,6 +422,25 @@ describe('did-document helper branches', () => {
     expect(normalized.assertionMethod).toEqual([]);
   });
 
+  test('normalizeVMs emits a vm id once per relationship even when purpose repeats it', () => {
+    const did = 'did:webvh:zQmExample:example.com';
+    const normalized = normalizeVMs(
+      [
+        {
+          type: 'Multikey',
+          publicKeyMultibase: 'z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK',
+          purpose: ['authentication', 'authentication', 'assertionMethod'],
+        },
+      ],
+      did
+    );
+
+    // A duplicate relationship reference would be an invalid document and
+    // would shift the genesis hash (SCID) for the same input.
+    expect(normalized.authentication).toHaveLength(1);
+    expect(normalized.assertionMethod).toHaveLength(1);
+  });
+
   test('normalizeVMs relationship entries reuse the materialized id for a vm with no id or publicKeyMultibase', () => {
     const did = 'did:webvh:zQmExample:example.com';
     const normalized = normalizeVMs(
@@ -423,7 +479,7 @@ describe('did-document helper branches', () => {
   test('createDIDDoc propagates a populated relationship field and omits empty ones', async () => {
     const assertionVmId = 'did:webvh:zQmExample:example.com#assertion-key-1';
 
-    const { doc } = await createDIDDoc({
+    const doc = createDIDDoc({
       did: 'did:webvh:zQmExample:example.com',
       verificationMethods: [
         {
