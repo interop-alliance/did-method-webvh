@@ -165,6 +165,11 @@ delegates to the v1.0 implementation, which rejects logs declaring any other
 changes to the version-routing logic in `method.ts` map onto this fork's flat
 delegation (usually only the v1.0 branch is relevant).
 
+Upstream PR #159 (legacy-resolution support, i.e. resolving logs that begin
+under v0.5 and upgrade to v1.0) was reviewed and declined for this fork --
+it depends on the removed v0.5 module and this fork intentionally rejects
+pre-1.0 logs. Future upstream sweeps should not re-raise it.
+
 ### Controlled-mode resolution was moved to examples
 
 Upstream's `resolveDID` consults the `DID_VERIFICATION_METHODS` env var (via
