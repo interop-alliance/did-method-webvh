@@ -117,7 +117,7 @@ describe('verifyEntryProofs (parameterized log kernel)', () => {
         authorize: allowAll,
         resolveVM: async () => ({ publicKeyMultibase: x25519Key }),
       })
-    ).rejects.toThrow("multiKey doesn't include ed25519 header (0xed01)");
+    ).rejects.toThrow('Unexpected multikey codec: expected 0xed, got 0xec');
   });
 
   test('a tampered entry fails signature verification', async () => {

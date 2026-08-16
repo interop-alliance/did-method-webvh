@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   createMultihash,
   decodeBase58Btc,
+  decodeEd25519Multikey,
   decodeMultihash,
   decodeMultihashFromMultibase,
   encodeBase58Btc,
@@ -103,5 +104,32 @@ describe('multihash', () => {
     expect(() => decodeMultihash(new Uint8Array([0x12, 0x02, 0xaa, 0xbb]))).toThrow(
       'Invalid digest length for algorithm 0x12: expected 32, got 2'
     );
+  });
+});
+
+describe('decodeEd25519Multikey', () => {
+  const publicKey = new Uint8Array(32).fill(3);
+  const multikeyBytes = new Uint8Array([0xed, 0x01, ...publicKey]);
+
+  test('returns the raw public key bytes', () => {
+    const multikey = multibaseEncode(multikeyBytes, MultibaseEncoding.BASE58_BTC);
+    expect(decodeEd25519Multikey(multikey)).toEqual(publicKey);
+  });
+
+  test('rejects a non-Ed25519 multicodec', () => {
+    const x25519 = multibaseEncode(new Uint8Array([0xec, 0x01, ...publicKey]), MultibaseEncoding.BASE58_BTC);
+    expect(() => decodeEd25519Multikey(x25519)).toThrow('Unexpected multikey codec: expected 0xed, got 0xec');
+  });
+
+  test('rejects a key that is not 32 bytes', () => {
+    const short = multibaseEncode(new Uint8Array([0xed, 0x01, ...new Uint8Array(31)]), MultibaseEncoding.BASE58_BTC);
+    expect(() => decodeEd25519Multikey(short)).toThrow(
+      'Invalid key length for multikey codec 0xed: expected 32, got 31'
+    );
+  });
+
+  test('rejects base64url multibase', () => {
+    const base64url = multibaseEncode(multikeyBytes, MultibaseEncoding.BASE64URL_NO_PAD);
+    expect(() => decodeEd25519Multikey(base64url)).toThrow('Invalid multikey: expected a base58btc "z" prefix');
   });
 });

@@ -18,7 +18,7 @@ import type {
   WitnessSigningResult,
 } from './interfaces.js';
 import { createDate } from './utils/iso8601-datetime.js';
-import { decodeEd25519Multikey, isEd25519Multikey, multibaseDecode } from './utils/multiformats.js';
+import { decodeEd25519Multikey, decodeMultikey, MultikeyCodec, multibaseDecode } from './utils/multiformats.js';
 import { fetchWitnessProofs, parseDidKeyDid, parseDidKeyVerificationMethod } from './utils.js';
 
 /**
@@ -203,9 +203,10 @@ export function validateWitnessParameter(witness: WitnessParameter | null | unde
     }
 
     // did:webvh v1.0 requires witness keys to be Ed25519 multikeys.
-    const keyBytes = multibaseDecode(parsedDid.keyMultibase).bytes;
-    if (!isEd25519Multikey(keyBytes)) {
-      throw new Error(`Witness DID key type must be Ed25519 (multicodec 0xed01): ${w.id}`);
+    try {
+      decodeMultikey({ multikey: parsedDid.keyMultibase, expectedCodec: MultikeyCodec.ED25519_PUB });
+    } catch (error) {
+      throw new Error(`Witness DID key type must be Ed25519 (multicodec 0xed01): ${w.id}`, { cause: error });
     }
 
     if (ids.has(parsedDid.did)) {

@@ -1,3 +1,27 @@
+## 5.5.0 - TBD
+
+### Changed
+
+* Ed25519 multikey decoding (`decodeEd25519Multikey`, the witness DID key
+  check) now delegates to `decodeMultikey` from
+  `@interop/data-integrity-core/multihash` instead of comparing the
+  `0xed 0x01` header by hand. Two deliberate tightenings follow: the key must
+  now be exactly 32 bytes (previously unchecked), and a multikey must be
+  base58btc (`z`) multibase -- `u` base64url is no longer accepted. The
+  refusal message is now the shared codec's (`Unexpected multikey codec: ...`)
+  rather than `multiKey doesn't include ed25519 header (0xed01)`; the witness
+  check keeps its own `Witness DID key type must be Ed25519 (multicodec
+  0xed01): ...` message.
+* `decodeMultikey` and `MultikeyCodec` are re-exported from
+  `src/utils/multiformats.ts` alongside the multihash codec.
+* Bumped `@interop/data-integrity-core` to `^8.7.1`, which is where
+  `decodeMultikey` and `MultikeyCodec` ship.
+
+### Removed
+
+* The internal `isEd25519Multikey` helper; it had no callers left and was not
+  part of the package's export surface.
+
 ## 5.4.1 - 2026-08-16
 
 ### Changed

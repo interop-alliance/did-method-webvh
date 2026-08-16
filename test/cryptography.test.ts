@@ -419,7 +419,7 @@ describe('Assertion Guards', () => {
 
     await expect(
       documentStateIsValid(makeDoc(baseProof), { updateKeys: [updateKey], verifier, resolveVM: resolveBadHeader })
-    ).rejects.toThrow("multiKey doesn't include ed25519 header (0xed01)");
+    ).rejects.toThrow('Unsupported multikey codec');
   });
 
   test('hashChainIsValid returns true and false for matching and mismatching hashes', () => {

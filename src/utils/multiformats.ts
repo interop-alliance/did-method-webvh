@@ -6,7 +6,13 @@
  * Multihash codec from `@interop/data-integrity-core`.
  */
 
-import { createMultihash, decodeMultihash, MultihashAlgorithm } from '@interop/data-integrity-core/multihash';
+import {
+  createMultihash,
+  decodeMultihash,
+  decodeMultikey,
+  MultihashAlgorithm,
+  MultikeyCodec,
+} from '@interop/data-integrity-core/multihash';
 import { base58, base64urlnopad } from '@scure/base';
 
 // ===== MULTIBASE IMPLEMENTATION =====
@@ -111,10 +117,10 @@ export function multibaseDecode(str: string): { bytes: Uint8Array; encoding: Mul
 
 // ===== MULTIHASH IMPLEMENTATION =====
 
-// The multihash byte codec lives in `@interop/data-integrity-core/multihash`;
-// it is re-exported here so consumers of this module keep one import site for
-// both multiformats halves.
-export { createMultihash, decodeMultihash, MultihashAlgorithm };
+// The multihash byte codec and the sibling multikey decoder live in
+// `@interop/data-integrity-core/multihash`; they are re-exported here so
+// consumers of this module keep one import site for the multiformats halves.
+export { createMultihash, decodeMultihash, decodeMultikey, MultihashAlgorithm, MultikeyCodec };
 
 /**
  * Decodes a multibase encoded multihash
@@ -136,19 +142,14 @@ export function decodeMultihashFromMultibase(str: string): {
   };
 }
 
-/** Multicodec prefix (`0xed 0x01`) for an Ed25519 public key multikey. */
-export function isEd25519Multikey(keyBytes: Uint8Array): boolean {
-  return keyBytes.length >= 2 && keyBytes[0] === 0xed && keyBytes[1] === 0x01;
-}
-
 /**
  * Decodes an Ed25519 multikey multibase string to the raw 32-byte public key,
- * validating the `0xed 0x01` multicodec prefix.
+ * validating the base58btc multibase prefix, the `0xed` multicodec, and the
+ * key length.
  */
 export function decodeEd25519Multikey(publicKeyMultibase: string): Uint8Array {
-  const keyBytes = multibaseDecode(publicKeyMultibase).bytes;
-  if (!isEd25519Multikey(keyBytes)) {
-    throw new Error(`multiKey doesn't include ed25519 header (0xed01)`);
-  }
-  return keyBytes.slice(2);
+  return decodeMultikey({
+    multikey: publicKeyMultibase,
+    expectedCodec: MultikeyCodec.ED25519_PUB,
+  }).keyBytes;
 }
