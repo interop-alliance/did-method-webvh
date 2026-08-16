@@ -48,7 +48,7 @@
     "@noble/curves": "^2.2.0",
     "@noble/hashes": "^2.2.0",
     "@scure/base": "^2.2.0",
-    "json-canonicalize": "^2.0.0"
+    "json-canonicalize": "2.0.0"
   },
   "publishConfig": {
     "access": "public",
