@@ -1,3 +1,19 @@
+## 5.3.0 - TBD
+
+### Changed
+
+* The multihash codec (`MultihashAlgorithm`, `createMultihash`,
+  `decodeMultihash`) now comes from `@interop/data-integrity-core/multihash`
+  (`^8.6.0`) and is re-exported from `src/utils/multiformats.ts`; the local
+  implementation is gone. Byte behavior is unchanged; varint decoding is
+  stricter (overlong and oversized varints are rejected) and decoding refuses
+  trailing bytes after the digest.
+
+### Removed
+
+* `DIGEST_LENGTHS` is no longer exported (it had no consumers outside the
+  module; the shared codec keeps it internal).
+
 ## 5.2.0 - 2026-08-09
 
 ### Changed

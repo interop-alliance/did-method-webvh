@@ -84,8 +84,8 @@ describe('multihash', () => {
     expect(() => decodeMultihash(new Uint8Array([0x12]))).toThrow('too short');
   });
 
-  test('rejects truncated varints', () => {
-    expect(() => decodeMultihash(new Uint8Array([0xff, 0xff]))).toThrow('Invalid varint: buffer too short');
+  test('rejects oversized varints', () => {
+    expect(() => decodeMultihash(new Uint8Array([0xff, 0xff]))).toThrow('Invalid varint: longer than 2 bytes');
   });
 
   test('rejects truncated digests', () => {

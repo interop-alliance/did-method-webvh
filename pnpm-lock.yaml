@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@interop/data-integrity-core':
-        specifier: ^8.3.0
-        version: 8.4.0
+        specifier: ^8.6.0
+        version: 8.6.0
       '@noble/curves':
         specifier: ^2.2.0
         version: 2.2.0
@@ -291,8 +291,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@interop/data-integrity-core@8.4.0':
-    resolution: {integrity: sha512-j7Y9BthxKWdPx6d3q96jHnDJXj08BWE++JeWJ0jhqJJbdvCMPgenU2g/MUrlZqe3TtF52ULlYJFYRoWwTDVGdg==}
+  '@interop/data-integrity-core@8.6.0':
+    resolution: {integrity: sha512-Jbgis2Jyrq8MSUq4K8rWZ/x7Cn94l5ZYVvxkj8kReEAR/Gsbf3iyVorml6RfHJUBRKmgGi8IHNeJmri2WvCn2A==}
     engines: {node: '>=24.0'}
 
   '@jridgewell/resolve-uri@3.1.2':
@@ -973,7 +973,7 @@ snapshots:
   '@esbuild/win32-x64@0.28.1':
     optional: true
 
-  '@interop/data-integrity-core@8.4.0': {}
+  '@interop/data-integrity-core@8.6.0': {}
 
   '@jridgewell/resolve-uri@3.1.2': {}
 
