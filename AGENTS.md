@@ -138,6 +138,22 @@ When porting an upstream PR, translate it through the following deliberate
 divergences (newest first). Library behavior and public API are otherwise kept
 aligned with upstream.
 
+### `additionalContext` was added beside the `context` option
+
+`createDID`/`updateDID` accept an `additionalContext` option this fork added:
+an array of context entries appended (deduplicated) after `BASE_CONTEXT` on
+create, or after the prior entry's carried-forward `@context` on update.
+Upstream has only the wholesale-override `context` option, which this fork
+keeps unchanged; the two are mutually exclusive and passing both throws.
+`BASE_CONTEXT` is also exported from the package index here, which upstream
+does not do.
+
+**When porting:** an upstream change that threads the `context` option through
+a new path must thread `additionalContext` through it too (and call
+`assertContextOptions` where the options are consumed). If upstream ever mints
+an option named `additionalContext` of its own, the upstream one wins: drop
+this fork's version, or alias it to upstream's, rather than keeping two.
+
 ### The standalone CLI was removed
 
 Upstream ships a CLI (`src/cli.ts`, published as the `didwebvh` bin) wrapping the

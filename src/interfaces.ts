@@ -211,7 +211,21 @@ export interface CreateDIDInterface {
   didDocument?: DIDDoc;
   services?: ServiceEndpoint[];
   paths?: string[];
+  /**
+   * Replaces the created document's `@context` wholesale; when unset the
+   * document gets `BASE_CONTEXT`. Mutually exclusive with
+   * `additionalContext` -- passing both throws.
+   */
   context?: string | string[] | object | object[];
+  /**
+   * Context entries appended after `BASE_CONTEXT` (or, when `didDocument` is
+   * supplied, after that document's own `@context`, falling back to
+   * `BASE_CONTEXT` when it has none), deduplicated: a string entry already
+   * present is skipped, and an object entry is skipped when its JSON
+   * serialization matches an entry already present. Mutually exclusive with
+   * `context` -- passing both throws.
+   */
+  additionalContext?: (string | object)[];
   alsoKnownAs?: string[];
   alsoKnownAsWeb?: boolean;
   portable?: boolean;
@@ -252,7 +266,20 @@ export interface UpdateDIDInterface {
   verificationMethods?: VerificationMethod[];
   // See CreateDIDInterface.vmIdFragment.
   vmIdFragment?: 'short' | 'multibase';
+  /**
+   * Replaces the updated document's `@context` wholesale. When unset, the
+   * prior entry's `@context` is carried forward, falling back to
+   * `BASE_CONTEXT` only when the prior document had none. Mutually exclusive
+   * with `additionalContext` -- passing both throws.
+   */
   context?: string | string[] | object | object[];
+  /**
+   * Context entries appended after the carried-forward `@context`,
+   * deduplicated: a string entry already present is skipped, and an object
+   * entry is skipped when its JSON serialization matches an entry already
+   * present. Mutually exclusive with `context` -- passing both throws.
+   */
+  additionalContext?: (string | object)[];
   alsoKnownAs?: string[];
   portable?: boolean;
   nextKeyHashes?: string[];

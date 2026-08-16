@@ -200,11 +200,69 @@ export const findVerificationMethod = (doc: DIDDoc, vmId: string): VerificationM
   return null;
 };
 
+/**
+ * Refuses the mutually exclusive context options. `context` replaces the
+ * document's `@context` wholesale, `additionalContext` appends to it; passing
+ * both is a caller bug rather than a resolvable combination.
+ *
+ * @param options {object}
+ * @param [options.context] {string | string[] | object | object[]}
+ * @param [options.additionalContext] {(string | object)[]}
+ */
+export function assertContextOptions(options: {
+  context?: string | string[] | object | object[];
+  additionalContext?: (string | object)[];
+}): void {
+  if (options.context !== undefined && options.additionalContext !== undefined) {
+    throw new Error("Pass either 'context' (full override) or 'additionalContext' (append), not both");
+  }
+}
+
+function contextEntriesEqual(present: unknown, candidate: string | object): boolean {
+  if (typeof present === 'string' || typeof candidate === 'string') {
+    return present === candidate;
+  }
+  return JSON.stringify(present) === JSON.stringify(candidate);
+}
+
+/**
+ * Appends `additionalContext` entries onto a base `@context` value, skipping
+ * entries already present. String entries compare by value; object entries
+ * compare by their JSON serialization, so two equivalent objects written with
+ * different key order are treated as distinct.
+ *
+ * An absent base resolves to `BASE_CONTEXT`; an absent or empty
+ * `additionalContext` returns the base value unchanged (array or not).
+ *
+ * @param base {string | string[] | object | object[] | undefined}
+ * @param [additionalContext] {(string | object)[]}
+ * @returns {string | string[] | object | object[]}
+ */
+export function mergeAdditionalContext(
+  base: string | string[] | object | object[] | undefined,
+  additionalContext?: (string | object)[]
+): string | string[] | object | object[] {
+  const resolvedBase = base ?? BASE_CONTEXT;
+  if (!additionalContext || additionalContext.length === 0) {
+    return resolvedBase;
+  }
+
+  const merged: (string | object)[] = Array.isArray(resolvedBase) ? [...resolvedBase] : [resolvedBase];
+  for (const entry of additionalContext) {
+    if (!merged.some((present) => contextEntriesEqual(present, entry))) {
+      merged.push(entry);
+    }
+  }
+
+  return merged as string[] | object[];
+}
+
 export const createDIDDoc = (options: {
   did: string;
   verificationMethods?: VerificationMethod[];
   vmIdFragment?: 'short' | 'multibase';
   context?: string | string[] | object | object[];
+  additionalContext?: (string | object)[];
   authentication?: string[];
   assertionMethod?: string[];
   keyAgreement?: string[];
@@ -230,7 +288,7 @@ export const createDIDDoc = (options: {
 
   // Create the base document
   const doc: DIDDoc = {
-    '@context': options.context || BASE_CONTEXT,
+    '@context': mergeAdditionalContext(options.context || BASE_CONTEXT, options.additionalContext),
     id: did,
     controller: did,
   };

@@ -1,5 +1,5 @@
 export { hashChainIsValid, scidIsFromHash, verifyEntryProofs } from './assertions.js';
-export { DID_PLACEHOLDER, PLACEHOLDER as SCID_PLACEHOLDER } from './constants.js';
+export { BASE_CONTEXT, DID_PLACEHOLDER, PLACEHOLDER as SCID_PLACEHOLDER } from './constants.js';
 export {
   AbstractCrypto,
   createDataIntegrityProofTemplate,

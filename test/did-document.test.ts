@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { BASE_CONTEXT } from '../src/constants.js';
 import {
   createDIDDoc,
   createVMID,
@@ -501,5 +502,153 @@ describe('did-document helper branches', () => {
     expect(doc.keyAgreement).toBeUndefined();
     expect(doc.alsoKnownAs).toBeUndefined();
     expect('capabilityInvocation' in doc).toBe(false);
+  });
+});
+
+describe('@context options', () => {
+  const extraContext = 'https://w3id.org/byoe';
+
+  const createOptions = async (authKey: VerificationMethod) => ({
+    address: 'example.com',
+    signer: createTestSigner(authKey),
+    verifier: createTestVerifier(authKey),
+    updateKeys: [authKey.publicKeyMultibase!],
+    verificationMethods: asPublicVerificationMethods(authKey),
+  });
+
+  test('createDID with additionalContext appends after the base pair', async () => {
+    const authKey = await generateTestVerificationMethod();
+
+    const { doc } = await createDID({
+      ...(await createOptions(authKey)),
+      additionalContext: [extraContext],
+    });
+
+    expect(doc['@context']).toEqual([...BASE_CONTEXT, extraContext]);
+  });
+
+  test('createDID with additionalContext matches the equivalent context override byte for byte', async () => {
+    const authKey = await generateTestVerificationMethod();
+    const created = '2024-01-01T00:00:00Z';
+
+    const { doc: appended } = await createDID({
+      ...(await createOptions(authKey)),
+      created,
+      additionalContext: [extraContext],
+    });
+    const { doc: overridden } = await createDID({
+      ...(await createOptions(authKey)),
+      created,
+      context: [...BASE_CONTEXT, extraContext],
+    });
+
+    expect(JSON.stringify(appended)).toEqual(JSON.stringify(overridden));
+  });
+
+  test('createDID with a supplied didDocument appends to that document context', async () => {
+    const authKey = await generateTestVerificationMethod();
+
+    const { doc } = await createDID({
+      ...(await createOptions(authKey)),
+      didDocument: {
+        '@context': ['https://www.w3.org/ns/did/v1'],
+        id: 'did:webvh:{SCID}:example.com',
+      },
+      additionalContext: [extraContext],
+    });
+
+    expect(doc['@context']).toEqual(['https://www.w3.org/ns/did/v1', extraContext]);
+  });
+
+  test('createDID refuses context together with additionalContext', async () => {
+    const authKey = await generateTestVerificationMethod();
+
+    await expect(
+      createDID({
+        ...(await createOptions(authKey)),
+        context: [...BASE_CONTEXT],
+        additionalContext: [extraContext],
+      })
+    ).rejects.toThrow(/not both/);
+  });
+
+  test('updateDID appends additionalContext after the carried-forward context, deduplicated', async () => {
+    const authKey = await generateTestVerificationMethod();
+    const { log } = await createDID({
+      ...(await createOptions(authKey)),
+      additionalContext: [extraContext],
+    });
+
+    const { doc: updated, log: updatedLog } = await updateDID({
+      log,
+      signer: createTestSigner(authKey),
+      verifier: createTestVerifier(authKey),
+      updated: nextSecond(log),
+      additionalContext: ['https://example.com/other/v1'],
+    });
+
+    expect(updated['@context']).toEqual([...BASE_CONTEXT, extraContext, 'https://example.com/other/v1']);
+
+    // Re-adding an entry already present is a no-op.
+    const { doc: redundant } = await updateDID({
+      log: updatedLog,
+      signer: createTestSigner(authKey),
+      verifier: createTestVerifier(authKey),
+      updated: nextSecond(updatedLog),
+      additionalContext: [extraContext],
+    });
+
+    expect(redundant['@context']).toEqual([...BASE_CONTEXT, extraContext, 'https://example.com/other/v1']);
+  });
+
+  test('updateDID with context replaces the prior context wholesale', async () => {
+    const authKey = await generateTestVerificationMethod();
+    const { log } = await createDID({
+      ...(await createOptions(authKey)),
+      additionalContext: [extraContext],
+    });
+
+    const { doc } = await updateDID({
+      log,
+      signer: createTestSigner(authKey),
+      verifier: createTestVerifier(authKey),
+      updated: nextSecond(log),
+      context: ['https://www.w3.org/ns/did/v1'],
+    });
+
+    expect(doc['@context']).toEqual(['https://www.w3.org/ns/did/v1']);
+  });
+
+  test('updateDID with neither option preserves the prior context', async () => {
+    const authKey = await generateTestVerificationMethod();
+    const { log } = await createDID({
+      ...(await createOptions(authKey)),
+      additionalContext: [extraContext],
+    });
+
+    const { doc } = await updateDID({
+      log,
+      signer: createTestSigner(authKey),
+      verifier: createTestVerifier(authKey),
+      updated: nextSecond(log),
+    });
+
+    expect(doc['@context']).toEqual([...BASE_CONTEXT, extraContext]);
+  });
+
+  test('updateDID refuses context together with additionalContext', async () => {
+    const authKey = await generateTestVerificationMethod();
+    const { log } = await createDID(await createOptions(authKey));
+
+    await expect(
+      updateDID({
+        log,
+        signer: createTestSigner(authKey),
+        verifier: createTestVerifier(authKey),
+        updated: nextSecond(log),
+        context: [...BASE_CONTEXT],
+        additionalContext: [extraContext],
+      })
+    ).rejects.toThrow(/not both/);
   });
 });

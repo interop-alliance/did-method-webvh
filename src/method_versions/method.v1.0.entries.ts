@@ -3,9 +3,11 @@ import { METHOD_PROTOCOL_V1_0, PLACEHOLDER, VERIFICATION_RELATIONSHIPS } from '.
 import { createDataIntegrityProofTemplate, signDataIntegrityProof } from '../cryptography.js';
 import {
   appendAlias,
+  assertContextOptions,
   convertWebvhIdToWebId,
   createDIDDoc,
   enrichAlsoKnownAs,
+  mergeAdditionalContext,
   replaceCreateDidPlaceholders,
   sanitizeVerificationMethods,
   validateCreateDidDocument,
@@ -117,12 +119,17 @@ export async function prepareGenesisEntry({
   controller: string;
   createdDate: string;
 }): Promise<DIDLogEntry> {
+  assertContextOptions(options);
+
   const safeVerificationMethods = sanitizeVerificationMethods(options.verificationMethods);
 
   let doc: DIDDoc;
   if (options.didDocument) {
     validateCreateDidDocument(options.didDocument);
     doc = structuredClone(options.didDocument);
+    if (options.additionalContext !== undefined) {
+      doc['@context'] = mergeAdditionalContext(doc['@context'], options.additionalContext);
+    }
   } else {
     if (!safeVerificationMethods || safeVerificationMethods.length === 0) {
       throw new Error('verificationMethods must be provided when didDocument is not supplied');
@@ -189,6 +196,8 @@ export async function prepareUpdateEntry({
   versionNumber: number;
   createdDate: string;
 }): Promise<DIDLogEntry> {
+  assertContextOptions(options);
+
   const lastEntryDid = requireDidDocumentId(lastEntry.state.id);
   const parsedLastEntryDid = parseDidWebvhIdentifier(lastEntryDid, 'last entry state.id');
 

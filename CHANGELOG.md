@@ -1,3 +1,23 @@
+## 5.4.0 - TBD
+
+### Added
+
+* `BASE_CONTEXT` is now exported from the package index.
+* New additive `additionalContext` option on `createDID`/`updateDID`: an array
+  of context entries appended after `BASE_CONTEXT` on create (or after the
+  supplied `didDocument`'s own `@context`), and after the carried-forward
+  `@context` on update, deduplicated (strings by value, objects by JSON
+  serialization). It is mutually exclusive with `context`, which remains the
+  full-override escape hatch; passing both throws. No document bytes change:
+  the result matches what `context: [...BASE_CONTEXT, extra]` already produced.
+
+### Changed
+
+* Documented the `context` option's semantics on both interfaces: it replaces
+  the document's `@context` wholesale, and `updateDID` without it preserves the
+  prior entry's context, falling back to `BASE_CONTEXT` only when the document
+  never had one.
+
 ## 5.3.0 - 2026-08-15
 
 ### Changed
