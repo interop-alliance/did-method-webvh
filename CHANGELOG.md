@@ -1,3 +1,10 @@
+## 5.5.1 - TBD
+
+### Changed
+
+* `json-canonicalize` bumped from the pinned 2.0.0 to 3.0.0 (the intact
+  release after the broken 2.0.1 publish).
+
 ## 5.5.0 - 2026-08-16
 
 ### Changed

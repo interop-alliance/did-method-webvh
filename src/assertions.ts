@@ -23,7 +23,10 @@ const isKeyAuthorized = (verificationMethod: string, updateKeys: string[]): bool
  * `eddsa-jcs-2022`, Ed25519 multikey) is part of the kernel and is not
  * parameterized. Non-DID log profiles supply their own authorization rule
  * (e.g. verification against an externally verified controller document);
- * the did:webvh method is one caller, via `documentStateIsValid`.
+ * the did:webvh method is one caller, via `documentStateIsValid`. Resolves
+ * only after every proof in the array verified, in order, throwing on the
+ * first failure; callers that defer policy checks until after the call
+ * depend on this.
  */
 export const verifyEntryProofs = async (
   entry: { proof?: DataIntegrityProof | DataIntegrityProof[] },
