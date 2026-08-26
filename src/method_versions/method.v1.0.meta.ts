@@ -2,6 +2,7 @@
  * Shared parameter-derived state helpers for the v1.0 method implementation,
  * used by both the write path (create/update/deactivate) and the resolver.
  */
+import { DEFAULT_TTL_SECONDS } from '../constants.js';
 import type { DIDLogEntry, DIDResolutionMeta } from '../interfaces.js';
 import { resolveWitnessParameter } from '../witness.js';
 
@@ -56,11 +57,13 @@ export const applyEntryToMeta = (entry: DIDLogEntry, previousMeta?: DIDResolutio
     const nextKeyHashes = [...(parameters.nextKeyHashes ?? [])];
     return {
       versionId: entry.versionId,
+      versionTime: entry.versionTime,
       created: entry.versionTime,
       updated: entry.versionTime,
       scid,
       updateKeys: [...updateKeys],
       portable: parameters.portable ?? false,
+      ttl: parameters.ttl ?? DEFAULT_TTL_SECONDS,
       nextKeyHashes,
       prerotation: hasPrerotation(nextKeyHashes),
       witness: resolveWitnessParameter(parameters),
@@ -74,10 +77,12 @@ export const applyEntryToMeta = (entry: DIDLogEntry, previousMeta?: DIDResolutio
   return {
     ...previousMeta,
     versionId: entry.versionId,
+    versionTime: entry.versionTime,
     updated: entry.versionTime,
     updateKeys: 'updateKeys' in parameters ? [...(parameters.updateKeys ?? [])] : previousMeta.updateKeys,
     // portable can only be locked off after the first entry, never (re)enabled.
     portable: parameters.portable === false ? false : previousMeta.portable,
+    ttl: 'ttl' in parameters ? (parameters.ttl ?? DEFAULT_TTL_SECONDS) : previousMeta.ttl,
     nextKeyHashes,
     prerotation: hasPrerotation(nextKeyHashes),
     witness: resolveWitnessParameter(parameters) ?? previousMeta.witness,

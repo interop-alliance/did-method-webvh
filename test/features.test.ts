@@ -530,3 +530,153 @@ test('Resolution does not inject implicit #files / #whois services', async () =>
   const whoisServices = services.filter((s: ServiceEndpoint) => (s.id || '').endsWith('#whois'));
   expect(whoisServices.length).toBe(0);
 });
+
+test('Resolution meta defaults ttl to 3600 when the log never sets it', async () => {
+  const authKey = await generateTestVerificationMethod();
+  const verifier = new TestCryptoImplementation({ verificationMethod: authKey });
+
+  const created = await createDID({
+    address: 'example.com',
+    signer: createTestSigner(authKey),
+    updateKeys: [authKey.publicKeyMultibase!],
+    verificationMethods: asPublicVerificationMethods(authKey),
+    verifier,
+  });
+
+  expect(created.meta.ttl).toBe(3600);
+
+  const resolved = await resolveDIDFromLog(created.log, { verifier });
+  expect(resolved.meta.ttl).toBe(3600);
+  expect(resolved.meta.versionTime).toBe(created.log[0].versionTime);
+});
+
+test('Resolution meta reports the configured ttl when a log entry sets it', async () => {
+  const authKey = await generateTestVerificationMethod();
+  const verifier = new TestCryptoImplementation({ verificationMethod: authKey });
+  const signer = createTestSigner(authKey);
+
+  const created = await createDID({
+    address: 'example.com',
+    signer,
+    updateKeys: [authKey.publicKeyMultibase!],
+    verificationMethods: asPublicVerificationMethods(authKey),
+    verifier,
+    created: '2024-01-01T00:00:00Z',
+  });
+
+  const previousEntry = created.log[0];
+  const entryWithoutProof: DIDLogEntry = {
+    versionId: previousEntry.versionId,
+    versionTime: '2024-01-01T00:00:01Z',
+    parameters: { ttl: 7200 },
+    state: previousEntry.state,
+  };
+  const entryHash = await deriveHash(entryWithoutProof);
+  const entryToSign: DIDLogEntry = { ...entryWithoutProof, versionId: `2-${entryHash}` };
+  const proofTemplate = {
+    type: 'DataIntegrityProof' as const,
+    cryptosuite: 'eddsa-jcs-2022' as const,
+    verificationMethod: signer.getVerificationMethodId(),
+    created: '2024-01-01T00:00:01Z',
+    proofPurpose: 'assertionMethod' as const,
+  };
+  const signedProof = await signer.sign({ document: entryToSign, proof: proofTemplate });
+
+  const logWithTtl: DIDLog = [
+    ...created.log,
+    { ...entryToSign, proof: [{ ...proofTemplate, proofValue: signedProof.proofValue }] },
+  ];
+  const resolved = await resolveDIDFromLog(logWithTtl, { verifier });
+
+  expect(resolved.doc).not.toBeNull();
+  expect(resolved.meta.ttl).toBe(7200);
+});
+
+test('Log entry with ttl: null resolves and normalizes ttl to the default', async () => {
+  const authKey = await generateTestVerificationMethod();
+  const verifier = new TestCryptoImplementation({ verificationMethod: authKey });
+  const signer = createTestSigner(authKey);
+
+  const created = await createDID({
+    address: 'example.com',
+    signer,
+    updateKeys: [authKey.publicKeyMultibase!],
+    verificationMethods: asPublicVerificationMethods(authKey),
+    verifier,
+    created: '2024-01-01T00:00:00Z',
+  });
+
+  const previousEntry = created.log[0];
+  const entryWithoutProof: DIDLogEntry = {
+    versionId: previousEntry.versionId,
+    versionTime: '2024-01-01T00:00:01Z',
+    parameters: { ttl: null },
+    state: previousEntry.state,
+  };
+  const entryHash = await deriveHash(entryWithoutProof);
+  const entryToSign: DIDLogEntry = { ...entryWithoutProof, versionId: `2-${entryHash}` };
+  const proofTemplate = {
+    type: 'DataIntegrityProof' as const,
+    cryptosuite: 'eddsa-jcs-2022' as const,
+    verificationMethod: signer.getVerificationMethodId(),
+    created: '2024-01-01T00:00:01Z',
+    proofPurpose: 'assertionMethod' as const,
+  };
+  const signedProof = await signer.sign({ document: entryToSign, proof: proofTemplate });
+
+  const logWithNullTtl: DIDLog = [
+    ...created.log,
+    { ...entryToSign, proof: [{ ...proofTemplate, proofValue: signedProof.proofValue }] },
+  ];
+  expect(logWithNullTtl[1].parameters.ttl).toBeNull();
+
+  const resolved = await resolveDIDFromLog(logWithNullTtl, { verifier });
+
+  expect(resolved.doc).not.toBeNull();
+  expect(resolved.meta.ttl).toBe(3600);
+});
+
+test('Historical versionId on a deactivated log keeps historical document and reports deactivated=true', async () => {
+  const authKey = await generateTestVerificationMethod();
+  const verifier = new TestCryptoImplementation({ verificationMethod: authKey });
+
+  const created = await createDID({
+    address: 'example.com',
+    signer: createTestSigner(authKey),
+    updateKeys: [authKey.publicKeyMultibase!],
+    verificationMethods: asPublicVerificationMethods(authKey),
+    verifier,
+  });
+
+  const updated1 = await updateDID({
+    log: created.log,
+    signer: createTestSigner(authKey),
+    updateKeys: [authKey.publicKeyMultibase!],
+    verificationMethods: asPublicVerificationMethods(authKey),
+    verifier,
+  });
+
+  const updated2 = await updateDID({
+    log: updated1.log,
+    signer: createTestSigner(authKey),
+    updateKeys: [authKey.publicKeyMultibase!],
+    verificationMethods: asPublicVerificationMethods(authKey),
+    verifier,
+  });
+
+  const deactivated = await deactivateDID({
+    log: updated2.log,
+    signer: createTestSigner(authKey),
+    verifier,
+  });
+
+  const historical = await resolveDIDFromLog(deactivated.log, {
+    versionId: updated1.meta.versionId,
+    verifier,
+  });
+
+  expect(historical.doc).not.toBeNull();
+  expect(historical.meta.versionId).toBe(updated1.meta.versionId);
+  expect(historical.meta.versionTime).toBe(updated1.meta.versionTime);
+  expect(historical.meta.deactivated).toBe(true);
+});

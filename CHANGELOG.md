@@ -1,3 +1,22 @@
+## 5.6.0 - TBD
+
+### Added
+
+* Resolution meta now includes `versionTime` (the resolved entry's timestamp)
+  and `ttl` (the spec's cache-lifetime parameter). `ttl` is typed on
+  `DIDLogEntry.parameters`, carried forward across entries like `watchers`,
+  and reported as a number of seconds; when the log never sets it (or sets it
+  to `null`), the spec default of 3600 is reported. Ports upstream `79d37f1`
+  (plus its tests `7392e53`, `751d647`), with the type corrected from
+  upstream's string coercion to the spec's unsigned integer.
+
+### Fixed
+
+* Resolving a deactivated DID with a historical selector (`versionId`,
+  `versionTime`, or `versionNumber`) now returns the historical document with
+  `deactivated: true` in the meta. Deactivation is DID-global state, so it
+  previously read `false` at historical versions. Ports upstream `708e67f`.
+
 ## 5.5.1 - 2026-08-22
 
 ### Changed

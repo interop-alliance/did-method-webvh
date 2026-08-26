@@ -1,5 +1,5 @@
 import { documentStateIsValid, newKeysAreInNextKeys, scidIsFromHash } from '../assertions.js';
-import { METHOD_PROTOCOL_V1_0, PLACEHOLDER } from '../constants.js';
+import { DEFAULT_TTL_SECONDS, METHOD_PROTOCOL_V1_0, PLACEHOLDER } from '../constants.js';
 import { findVerificationMethod } from '../did-document.js';
 import type {
   DIDDoc,
@@ -159,7 +159,16 @@ export const resolveV1Log = async (
     throw new Error('DID resolution failed: No valid identifier found');
   }
 
-  if (resolvedSnapshot.meta.deactivated && !hasExplicitHistoricalSelector) {
+  // Deactivation is DID-global state. A historical selector keeps the
+  // historical document while still reporting deactivated: true when the
+  // log's final state is deactivated; non-historical resolution nulls the
+  // document as before.
+  if (hasExplicitHistoricalSelector) {
+    if (resolverContext.meta.deactivated) {
+      resolvedSnapshot = markResolvedSnapshotDeactivated({ resolvedSnapshot, resolverContext });
+    }
+  } else if (resolvedSnapshot.meta.deactivated) {
+    resolvedSnapshot = markResolvedSnapshotDeactivated({ resolvedSnapshot, resolverContext });
     return {
       did: resolvedSnapshot.did,
       doc: null,
@@ -178,6 +187,24 @@ export const resolveV1Log = async (
     doc: structuredClone(resolvedSnapshot.doc),
     meta: resolvedSnapshot.meta,
   };
+};
+
+const markResolvedSnapshotDeactivated = ({
+  resolvedSnapshot,
+  resolverContext,
+}: {
+  resolvedSnapshot: ResolutionSnapshot;
+  resolverContext: ResolverContext;
+}): ResolutionSnapshot => {
+  const nextSnapshot: ResolutionSnapshot = {
+    ...resolvedSnapshot,
+    meta: {
+      ...resolvedSnapshot.meta,
+      deactivated: true,
+    },
+  };
+  resolverContext.resolvedSnapshot = nextSnapshot;
+  return nextSnapshot;
 };
 
 const processResolvedLogEntries = async ({
@@ -204,6 +231,7 @@ const processResolvedLogEntries = async ({
     const previousWitness = resolverContext.meta.witness;
     resolverContext.meta.versionId = versionId;
     resolverContext.previousVersionTime = entryContext.currentVersionTime;
+    resolverContext.meta.versionTime = versionTime;
     resolverContext.meta.updated = versionTime;
 
     const resolvedEntryDoc =
@@ -279,10 +307,12 @@ const createInitialResolverContext = (): ResolverContext => {
   return {
     meta: {
       versionId: '',
+      versionTime: '',
       created: '',
       updated: '',
       deactivated: false,
       portable: false,
+      ttl: DEFAULT_TTL_SECONDS,
       scid: '',
       updateKeys: [],
       nextKeyHashes: [],

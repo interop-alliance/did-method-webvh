@@ -20,7 +20,10 @@ export const WEBVH_ERROR_TYPES = {
 
 /** Document metadata for a did:webvh resolution result: the standard fields plus this method's extensions. */
 export interface WebvhDocumentMetadata extends IDIDDocumentMetadata {
+  versionTime?: string;
   scid?: string;
+  /** Cache lifetime in seconds; the spec default (3600) when the log never sets `ttl`. */
+  ttl?: number;
   updateKeys?: string[];
   nextKeyHashes?: string[];
   prerotation?: boolean;
