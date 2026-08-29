@@ -1,6 +1,15 @@
 import { canonicalizeEx } from 'json-canonicalize';
 
-const sanitizeForCanonicalization = (value: unknown, seen: WeakMap<object, unknown>): unknown => {
+/**
+ * `ancestors` holds the objects on the CURRENT recursion path, not every
+ * object visited: an input that reaches the same object or array from two
+ * places -- one instance referenced twice, not two equal copies -- is an
+ * ordinary acyclic graph (a signed zcap whose proof carries the same
+ * `@context` array instance as the document is one), and canonicalizes to the
+ * same bytes as its JSON round trip. Only a value containing itself is
+ * circular, so each object leaves the set as its subtree finishes.
+ */
+const sanitizeForCanonicalization = (value: unknown, ancestors: WeakSet<object>): unknown => {
   if (value === null) return null;
 
   const type = typeof value;
@@ -16,32 +25,33 @@ const sanitizeForCanonicalization = (value: unknown, seen: WeakMap<object, unkno
   if (type !== 'object') return value;
 
   const obj = value as Record<string, unknown>;
-  if (seen.has(obj)) {
+  if (ancestors.has(obj)) {
     throw new Error('Canonicalization input contains circular references');
   }
+  ancestors.add(obj);
 
   if (Array.isArray(obj)) {
     const sanitizedArray: unknown[] = [];
-    seen.set(obj, sanitizedArray);
     for (const item of obj) {
-      sanitizedArray.push(sanitizeForCanonicalization(item, seen));
+      sanitizedArray.push(sanitizeForCanonicalization(item, ancestors));
     }
+    ancestors.delete(obj);
     return sanitizedArray;
   }
 
   const sanitizedObject: Record<string, unknown> = {};
-  seen.set(obj, sanitizedObject);
   for (const [key, entry] of Object.entries(obj)) {
     if (typeof entry === 'undefined') {
       continue;
     }
-    sanitizedObject[key] = sanitizeForCanonicalization(entry, seen);
+    sanitizedObject[key] = sanitizeForCanonicalization(entry, ancestors);
   }
+  ancestors.delete(obj);
   return sanitizedObject;
 };
 
 export const canonicalizeStrict = (value: unknown): string => {
-  const sanitized = sanitizeForCanonicalization(value, new WeakMap<object, unknown>());
+  const sanitized = sanitizeForCanonicalization(value, new WeakSet<object>());
   return canonicalizeEx(sanitized, {
     allowCircular: false,
     filterUndefined: true,

@@ -634,6 +634,26 @@ describe('Crypto Helpers', () => {
     await expect(deriveHash(circular)).rejects.toThrow();
   });
 
+  test('deriveHash accepts a shared reference reached from two places', async () => {
+    // An acyclic graph, not a cycle: a signed zcap whose proof carries the
+    // same `@context` array instance as the document has this shape, and it
+    // must hash as its JSON round trip does.
+    const context = ['https://w3id.org/zcap/v1'];
+    const shared = { '@context': context, proof: { '@context': context } };
+
+    const sharedHash = await deriveHash(shared);
+    const roundTripped = await deriveHash(JSON.parse(JSON.stringify(shared)));
+
+    expect(sharedHash).toBe(roundTripped);
+  });
+
+  test('deriveHash rejects a cycle reached through an array', async () => {
+    const branch: unknown[] = [];
+    branch.push({ branch });
+
+    await expect(deriveHash({ branch })).rejects.toThrow(/circular/);
+  });
+
   test('deriveHash succeeds when cache-key stringify fails once (defensive branch)', async () => {
     const originalStringify = JSON.stringify;
     let firstCall = true;

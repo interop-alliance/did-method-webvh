@@ -1,3 +1,17 @@
+## 5.6.1 - TBD
+
+### Fixed
+
+* `canonicalizeStrict` (and so entry hashing) no longer rejects an input that
+  reaches the same object or array from two places -- one instance referenced
+  twice, not two equal copies. The circular-reference check tracked every
+  value ever visited rather than the current recursion path, so an ordinary
+  acyclic graph -- a signed zcap whose proof carries the same `@context` array
+  instance as the document, embedded in a log entry -- threw
+  `Canonicalization input contains circular references`. Such an input now
+  hashes as its JSON round trip does; a value that genuinely contains itself
+  still throws.
+
 ## 5.6.0 - 2026-08-26
 
 ### Added
