@@ -327,7 +327,6 @@ export interface ResolutionOptions {
   /** Verification-method resolver for proof verification; defaults to the built-in did:key / did:webvh resolver. */
   resolveVM?: ResolveVerificationMethod;
   scid?: string;
-  requestedDid?: string;
   /** Out-of-band witness proofs; when absent they are fetched from the DID's `did-witness.json`. */
   witnessProofs?: WitnessProofFileEntry[];
 }

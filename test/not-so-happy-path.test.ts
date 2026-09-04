@@ -402,7 +402,7 @@ describe('Not So Happy Path Tests', () => {
   });
 
   test('requestedDid matching the actual DID resolves successfully', async () => {
-    const result = await resolveDIDFromLog(initialDID.log, {
+    const result = await resolveDIDFromLogV1(initialDID.log, {
       requestedDid: initialDID.did,
       verifier: testImplementation,
     });
@@ -471,9 +471,9 @@ describe('Not So Happy Path Tests', () => {
     const scid = originalDid.split(':')[2];
     const mismatchedDid = `did:webvh:${scid}:different-domain.example`;
 
-    await expect(resolveDIDFromLog(log, { requestedDid: mismatchedDid, verifier: testImplementation })).rejects.toThrow(
-      /does not match state\.id/
-    );
+    await expect(
+      resolveDIDFromLogV1(log, { requestedDid: mismatchedDid, verifier: testImplementation })
+    ).rejects.toThrow(/does not match state\.id/);
   });
 
   test('Requested DID not present in log is rejected', async () => {
@@ -489,7 +489,7 @@ describe('Not So Happy Path Tests', () => {
     const requestedDidNotInLog = 'did:webvh:zQmXkYw8uM9QW9sW11Qx2Jq4JfY5o7jBq3nK7f4R2m1NpQ:not-in-log.example';
 
     await expect(
-      resolveDIDFromLog(log, { requestedDid: requestedDidNotInLog, verifier: testImplementation })
+      resolveDIDFromLogV1(log, { requestedDid: requestedDidNotInLog, verifier: testImplementation })
     ).rejects.toThrow(/does not match state\.id/);
   });
 

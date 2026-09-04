@@ -7,7 +7,6 @@ import type {
   DIDDoc,
   DIDLog,
   DIDResolutionMeta,
-  ResolutionOptions,
   UpdateDIDInterface,
   UpdateDIDResult,
 } from '../interfaces.js';
@@ -22,7 +21,7 @@ import { createResolveVM } from '../vm-resolver.js';
 import { validateWitnessParameter } from '../witness.js';
 import { prepareDeactivationEntry, prepareGenesisEntry, prepareUpdateEntry } from './method.v1.0.entries.js';
 import { applyEntryToMeta } from './method.v1.0.meta.js';
-import { resolveV1Log } from './method.v1.0.resolution.js';
+import { type InternalResolutionOptions, resolveV1Log } from './method.v1.0.resolution.js';
 
 export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDResult> => {
   if (!options.updateKeys) {
@@ -69,7 +68,7 @@ export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDR
 
 export const resolveDIDFromLog = async (
   log: DIDLog,
-  options: ResolutionOptions = {}
+  options: InternalResolutionOptions = {}
 ): Promise<{ did: string; doc: DIDDoc | null; meta: DIDResolutionMeta }> => {
   // A fresh default resolver per resolution: did:webvh VM lookups memoize
   // within this resolution but nothing is trusted across resolutions.

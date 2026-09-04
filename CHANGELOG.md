@@ -1,3 +1,10 @@
+## 5.7.0 - TBD
+
+### Changed
+
+* `requestedDid` is no longer part of the public `ResolutionOptions`; it is
+  set internally by `resolveDID`. Ported from upstream 7533576 (PR #170).
+
 ## 5.6.1 - 2026-08-29
 
 ### Fixed

@@ -74,9 +74,12 @@ interface ParsedResolutionEntryContext {
   parsedStateDid: ReturnType<typeof parseDidWebvhIdentifier>;
 }
 
+/** Public resolution options plus the requested-DID hint `resolveDID` sets for itself. */
+export type InternalResolutionOptions = ResolutionOptions & { requestedDid?: string };
+
 export const resolveV1Log = async (
   log: DIDLog,
-  options: ResolutionOptions & { witnessProofs?: WitnessProofFileEntry[] } = {}
+  options: InternalResolutionOptions = {}
 ): Promise<{ did: string; doc: DIDDoc | null; meta: DIDResolutionMeta }> => {
   // Stage 1: initialize resolution input and context.
   const selectorError = validateResolutionSelectors(options);
@@ -214,7 +217,7 @@ const processResolvedLogEntries = async ({
 }: {
   resolverContext: ResolverContext;
   logEntries: DIDLog;
-  options: ResolutionOptions & { witnessProofs?: WitnessProofFileEntry[] };
+  options: InternalResolutionOptions;
 }): Promise<void> => {
   // Process each log entry in order and update resolution context.
   for (let entryIndex = 0; entryIndex < logEntries.length; entryIndex++) {
@@ -375,7 +378,7 @@ const processV1GenesisEntry = async ({
 }: {
   resolverContext: ResolverContext;
   entryContext: ParsedResolutionEntryContext;
-  options: ResolutionOptions & { witnessProofs?: WitnessProofFileEntry[] };
+  options: InternalResolutionOptions;
 }): Promise<DIDDoc> => {
   const { entry: sourceEntry, parsedStateDid } = entryContext;
   const { parameters, proof } = sourceEntry;
@@ -438,7 +441,7 @@ const processV1SubsequentEntry = async ({
   entryContext: ParsedResolutionEntryContext;
   logEntries: DIDLog;
   entryIndex: number;
-  options: ResolutionOptions & { witnessProofs?: WitnessProofFileEntry[] };
+  options: InternalResolutionOptions;
 }): Promise<DIDDoc> => {
   const {
     entry: sourceEntry,
@@ -550,7 +553,7 @@ const enforceRequiredWitnessChecks = async ({
   logEntries,
 }: {
   requiredWitnessChecks: RequiredWitnessCheck[];
-  options: ResolutionOptions & { witnessProofs?: WitnessProofFileEntry[] };
+  options: InternalResolutionOptions;
   did: string;
   logEntries: DIDLog;
 }): Promise<void> => {
