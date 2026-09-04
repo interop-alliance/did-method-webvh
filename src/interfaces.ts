@@ -329,6 +329,11 @@ export interface ResolutionOptions {
   scid?: string;
   /** Out-of-band witness proofs; when absent they are fetched from the DID's `did-witness.json`. */
   witnessProofs?: WitnessProofFileEntry[];
+  /**
+   * Supplies the log for a DID this resolver controls, so `resolveDID` skips the
+   * HTTPS fetch. Return `undefined` to fall back to fetching over the network.
+   */
+  resolveControlledDid?: (did: string) => Promise<DIDLog | undefined>;
 }
 
 export interface WitnessProofFileEntry {

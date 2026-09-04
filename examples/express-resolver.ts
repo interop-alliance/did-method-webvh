@@ -1,13 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import {
-  MultibaseEncoding,
-  multibaseEncode,
-  parseDidWebvhIdentifier,
-  readLogFromString,
-  resolveDID,
-  resolveDIDFromLog,
-  toResolutionResult,
-} from '@interop/did-method-webvh';
+import { MultibaseEncoding, multibaseEncode, readLogFromString, resolveDID } from '@interop/did-method-webvh';
 import type {
   DIDDoc,
   DIDLog,
@@ -51,17 +43,11 @@ const readLocalDIDLog = async (did: string): Promise<DIDLog> => {
 // Result envelope, with `controlled` riding along as a non-standard extension.
 const resolveDIDLocalFirst = async (did: string, options: ResolutionOptions = {}) => {
   const controlled = ACTIVE_DIDS.includes(did);
-  if (!controlled) {
-    const result = await resolveDID(did, options);
-    return { ...result, controlled };
-  }
-  const log = await readLocalDIDLog(did);
-  let scid: string | undefined;
-  try {
-    scid = parseDidWebvhIdentifier(did, 'did').scid;
-  } catch {}
-  const result = await resolveDIDFromLog(log, { ...options, scid });
-  return { ...toResolutionResult(result), controlled };
+  const result = await resolveDID(did, {
+    ...options,
+    resolveControlledDid: async (requested) => (controlled ? readLocalDIDLog(requested) : undefined),
+  });
+  return { ...result, controlled };
 };
 
 class ExpressVerifier implements Verifier {

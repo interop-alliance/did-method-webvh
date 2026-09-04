@@ -1,5 +1,12 @@
 ## 5.7.0 - 2026-09-04
 
+### Added
+
+* `resolveDID` accepts a `resolveControlledDid` option: an async callback that
+  supplies the log for a DID the resolver controls, skipping the HTTPS fetch.
+  Returning `undefined` falls back to fetching. Ported from upstream 7a482c8
+  and 82719f7; the accompanying `getFileUrl` rename was not adopted.
+
 ### Changed
 
 * `requestedDid` is no longer part of the public `ResolutionOptions`; it is

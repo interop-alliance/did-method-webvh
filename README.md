@@ -215,16 +215,18 @@ fails verification.
 ### Core Functions
 
 -
-`resolveDID(did: string, options?: ResolutionOptions): Promise<{did: string, doc: any, meta: DIDResolutionMeta, controlled: boolean}>`
-Resolves a DID to its DID document.
-For `v1.0`, `options.fastResolve` is an opt-in mode defaulting to `false` for
-full log parsing.
+`resolveDID(did: string, options?: ResolutionOptions): Promise<DIDResolutionResult>`
+Resolves a DID by fetching its log over HTTPS and returns a DID Resolution
+Result envelope.
+Pass `options.resolveControlledDid` (an async `(did) => DIDLog | undefined`)
+to serve logs the resolver controls itself, such as from local storage. When it
+returns a log, the fetch is skipped; when it returns `undefined`, the library
+fetches over HTTPS as usual. Either way the log goes through the same SCID and
+requested-DID checks.
 
 -
-`resolveDIDFromLog(log: DIDLog, options?: ResolutionOptions & { witnessProofs?: WitnessProofFileEntry[] }): Promise<{did: string, doc: any, meta: DIDResolutionMeta}>`
+`resolveDIDFromLog(log: DIDLog, options?: ResolutionOptions): Promise<{did: string, doc: any, meta: DIDResolutionMeta}>`
 Resolves directly from an in-memory DID log.
-For `v1.0`, `options.fastResolve` is an opt-in mode defaulting to `false` for
-full log parsing.
 
 -
 `createDID(options: CreateDIDInterface): Promise<{did: string, doc: any, meta: DIDResolutionMeta, log: DIDLog, webDoc?: DIDDoc}>`

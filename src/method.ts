@@ -55,7 +55,7 @@ export const resolveDID = async (did: string, options: ResolutionOptions = {}): 
     return toErrorResult(selectorError.code, selectorError.detail, selectorError.problemType);
   }
   try {
-    const log = await fetchLogFromIdentifier(did);
+    const log = (await options.resolveControlledDid?.(did)) ?? (await fetchLogFromIdentifier(did));
     const result = await v1.resolveDIDFromLog(log, { ...options, verifier, scid, requestedDid: did });
 
     return toResolutionResult(result);
