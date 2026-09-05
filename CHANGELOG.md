@@ -1,3 +1,9 @@
+## 5.8.0 - TBD
+
+### Changed
+
+- Port upstream #170 and controlled-DID hook.
+
 ## 5.7.0 - 2026-09-04
 
 ### Added
