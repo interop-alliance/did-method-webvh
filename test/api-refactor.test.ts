@@ -1,6 +1,6 @@
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { describe, expect, test } from 'vitest';
-import { signerFromExternalKey } from '../src/cryptography.js';
+import { signerFromDidKeySigner, signerFromExternalKey } from '../src/cryptography.js';
 import { convertWebvhIdToWebId } from '../src/did-document.js';
 import { createDID, resolveDIDFromLog, updateDID } from '../src/method.js';
 import { deriveNextKeyHash, getHashCacheSizeForTests, HASH_CACHE_MAX_ENTRIES } from '../src/utils/crypto.js';
@@ -99,6 +99,42 @@ describe('R4: signerFromExternalKey', () => {
     const resolved = await resolveDIDFromLog(log);
     expect(resolved.did).toBe(did);
     expect(resolved.meta.error).toBeUndefined();
+  });
+});
+
+describe('signerFromDidKeySigner', () => {
+  const secretKey = ed25519.utils.randomSecretKey();
+  const publicKey = ed25519.getPublicKey(secretKey);
+  const publicKeyMultibase = multibaseEncode(new Uint8Array([0xed, 0x01, ...publicKey]), MultibaseEncoding.BASE58_BTC);
+  const rawSigner = {
+    id: `did:key:${publicKeyMultibase}#${publicKeyMultibase}`,
+    async sign({ data }: { data: Uint8Array }) {
+      // a Node Buffer view, as a key library's signer may return
+      return Buffer.from(ed25519.sign(data, secretKey));
+    },
+  };
+
+  test('takes the signer id verbatim and drives createDID', async () => {
+    const signer = signerFromDidKeySigner(rawSigner);
+    expect(signer.getVerificationMethodId()).toBe(rawSigner.id);
+    const { did, log } = await createDID({
+      address: 'example.com',
+      signer,
+      updateKeys: [publicKeyMultibase],
+      verificationMethods: [{ type: 'Multikey', publicKeyMultibase, purpose: 'authentication' }],
+    });
+    const resolved = await resolveDIDFromLog(log);
+    expect(resolved.did).toBe(did);
+    expect(resolved.meta.error).toBeUndefined();
+  });
+
+  test('refuses a signer not named under its own did:key', () => {
+    expect(() => signerFromDidKeySigner({ ...rawSigner, id: `did:example:1234#${publicKeyMultibase}` })).toThrow(
+      'must be of the form did:key:'
+    );
+    expect(() => signerFromDidKeySigner({ ...rawSigner, id: `did:key:${publicKeyMultibase}` })).toThrow(
+      'must be of the form did:key:'
+    );
   });
 });
 

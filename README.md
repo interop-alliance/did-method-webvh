@@ -292,6 +292,12 @@ Signs did-witness proof entries for multiple target versions.
   `did:key:<publicKeyMultibase>#<publicKeyMultibase>` verification-method id the
   resolver requires.
 
+- `signerFromDidKeySigner(signer: ISigner): Signer`
+  Builds a `Signer` around a raw-bytes `ISigner` that already carries its own
+  `did:key:<publicKeyMultibase>#<publicKeyMultibase>` id (what
+  `Ed25519VerificationKey`'s `didKeySigner()` returns). The id is used
+  verbatim as the verification-method id; any other id shape is refused.
+
 - `prepareDataForSigning(data: any): Uint8Array`
   Prepares data for signing.
 

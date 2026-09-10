@@ -1,3 +1,4 @@
+import type { ISigner } from '@interop/data-integrity-core';
 import type {
   DataIntegrityProof,
   DataIntegrityProofPurpose,
@@ -178,13 +179,56 @@ export function signerFromExternalKey({
   publicKeyMultibase: string;
   sign(input: { data: Uint8Array }): Promise<Uint8Array>;
 }): Signer {
-  const verificationMethodId = `did:key:${publicKeyMultibase}#${publicKeyMultibase}`;
+  return signerOverRawSign({
+    verificationMethodId: `did:key:${publicKeyMultibase}#${publicKeyMultibase}`,
+    sign,
+  });
+}
+
+/**
+ * Builds a {@link Signer} around a raw-bytes `ISigner` (the shape
+ * `@interop/ed25519-verification-key`'s `signer()` and `didKeySigner()`
+ * return, and `@interop/capability-agent`'s `getSigner()`): the signer's `id`
+ * is taken verbatim as the proof's verification-method id, and its
+ * `sign({ data })` signs the prepared bytes. The id must already be in the
+ * `did:key:<publicKeyMultibase>#<publicKeyMultibase>` form the resolver
+ * matches against the log's `updateKeys`; a signer named under any other DID
+ * is refused here rather than at verification time.
+ *
+ * @param signer A raw-bytes signer carrying its own `did:key` id.
+ * @returns A `Signer` usable directly by `createDID` / `updateDID`.
+ */
+export function signerFromDidKeySigner(signer: ISigner): Signer {
+  if (!DID_KEY_VERIFICATION_METHOD_ID.test(signer.id)) {
+    throw new Error(
+      `Signer id must be of the form did:key:<publicKeyMultibase>#<publicKeyMultibase>; got "${signer.id}".`
+    );
+  }
+  return signerOverRawSign({
+    verificationMethodId: signer.id,
+    sign: (input) => signer.sign(input),
+  });
+}
+
+const DID_KEY_VERIFICATION_METHOD_ID = /^did:key:(z[1-9A-HJ-NP-Za-km-z]+)#\1$/;
+
+function signerOverRawSign({
+  verificationMethodId,
+  sign,
+}: {
+  verificationMethodId: string;
+  sign(input: { data: Uint8Array }): Promise<Uint8Array>;
+}): Signer {
   return {
     async sign({ document, proof }) {
       const data = await prepareDataForSigning(document, proof);
       const signature = await sign({ data });
+      // Re-wrap as a plain Uint8Array: a raw signer may hand back a Node
+      // Buffer or a cross-realm view, which the multibase encoder's strict
+      // byte check rejects.
+      const bytes = new Uint8Array(signature.buffer, signature.byteOffset, signature.byteLength);
       return {
-        proofValue: multibaseEncode(signature, MultibaseEncoding.BASE58_BTC),
+        proofValue: multibaseEncode(bytes, MultibaseEncoding.BASE58_BTC),
       };
     },
     getVerificationMethodId() {

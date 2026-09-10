@@ -1,3 +1,18 @@
+## 5.9.0 - TBD
+
+### Added
+
+- `signerFromDidKeySigner(signer)`: builds a `Signer` from a raw-bytes
+  `ISigner` whose `id` is already the `did:key:<mb>#<mb>` verification-method
+  id, using that id verbatim; refuses any other id shape.
+
+### Changed
+
+- `signerFromExternalKey` and `signerFromDidKeySigner` re-wrap the raw
+  signature as a plain `Uint8Array` before multibase-encoding it, so a signer
+  returning a Node `Buffer` or a cross-realm view no longer trips the encoder's
+  byte check.
+
 ## 5.8.0 - 2026-09-05
 
 ### Changed

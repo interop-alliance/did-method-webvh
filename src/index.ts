@@ -6,6 +6,7 @@ export {
   createDocumentSigner,
   prepareDataForSigning,
   signDataIntegrityProof,
+  signerFromDidKeySigner,
   signerFromExternalKey,
 } from './cryptography.js';
 export { convertWebvhIdToWebId, createVMID, generateParallelDidWeb } from './did-document.js';
