@@ -108,7 +108,12 @@ export function createDidWebvhDriver({ verifier = defaultWebvhLogVerifier }: { v
       // The envelope's IDIDDocument is structurally stricter than this
       // package's DIDDoc; narrow back at this single boundary.
       const doc = didDocument as unknown as DIDDoc | null;
-      if (!doc) {
+      // Any resolution error is a failure here, even when the envelope also
+      // carries a document (the resolver preserves a historical snapshot next
+      // to a witness failure when an explicit version selector is given). A
+      // loader consumer asking for "the" document must not receive one whose
+      // resolution the resolver flagged as invalid.
+      if (!doc || didResolutionMetadata.error) {
         const { error, problemDetails } = didResolutionMetadata;
         const detail = problemDetails?.detail ?? `Could not resolve "${didAuthority}".`;
         throw new DIDResolutionError(detail, {

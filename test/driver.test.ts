@@ -1,8 +1,46 @@
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { createDidWebvhDriver, defaultWebvhLogVerifier } from '../src/driver.js';
+import type { DIDLog } from '../src/interfaces.js';
+import { createDID } from '../src/method.js';
+import { logToJsonlString } from '../src/utils.js';
+import {
+  asPublicVerificationMethods,
+  createTestSigner,
+  generateTestVerificationMethod,
+  TestCryptoImplementation,
+} from './utils.js';
+
+// Serve a DID log from the well-known URL and answer every other request (the
+// witness file) with 404, so the resolver sees zero witness proofs.
+const stubFetchLog = (log: DIDLog) => {
+  const jsonl = logToJsonlString(log);
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) =>
+      url.endsWith('did.jsonl')
+        ? {
+            ok: true,
+            status: 200,
+            text: async () => jsonl,
+            json: async () => null,
+          }
+        : {
+            ok: false,
+            status: 404,
+            text: async () => '',
+            json: async () => null,
+          }
+    )
+  );
+};
 
 describe('createDidWebvhDriver', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
   test('exposes the did:webvh method', () => {
     expect(createDidWebvhDriver().method).toBe('webvh');
   });
@@ -25,6 +63,50 @@ describe('createDidWebvhDriver', () => {
     await expect(driver.get({ did: 'did:webvh:QmExample:invalid.example' })).rejects.toThrow();
     expect(typeof driver.get).toBe('function');
     void used;
+  });
+
+  test('get() resolves a clean log', async () => {
+    const authKey = await generateTestVerificationMethod();
+    const verifier = new TestCryptoImplementation({
+      verificationMethod: authKey,
+    });
+    const { did, log } = await createDID({
+      address: 'example.com',
+      signer: createTestSigner(authKey),
+      updateKeys: [authKey.publicKeyMultibase!],
+      verificationMethods: asPublicVerificationMethods(authKey),
+      verifier,
+    });
+    stubFetchLog(log);
+
+    const doc = await createDidWebvhDriver({ verifier }).get({ did });
+    expect(doc.id).toBe(did);
+  });
+
+  test('get() rejects with invalidDid when the witness threshold is not met', async () => {
+    const authKey = await generateTestVerificationMethod();
+    const witness = await generateTestVerificationMethod();
+    const verifier = new TestCryptoImplementation({
+      verificationMethod: authKey,
+    });
+    const { did, log } = await createDID({
+      address: 'example.com',
+      signer: createTestSigner(authKey),
+      updateKeys: [authKey.publicKeyMultibase!],
+      verificationMethods: asPublicVerificationMethods(authKey),
+      witness: {
+        threshold: 1,
+        witnesses: [{ id: `did:key:${witness.publicKeyMultibase}` }],
+      },
+      verifier,
+    });
+    stubFetchLog(log);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(createDidWebvhDriver({ verifier }).get({ did })).rejects.toMatchObject({
+      code: 'invalidDid',
+      message: expect.stringContaining('Witness threshold not met'),
+    });
   });
 });
 

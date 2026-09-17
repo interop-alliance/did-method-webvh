@@ -1,6 +1,6 @@
 import type { DIDLog, ParsedDidKeyVerificationMethod, WitnessProofFileEntry } from './interfaces.js';
 import { getFileUrl } from './utils/did-identifier.js';
-import { multibaseDecode } from './utils/multiformats.js';
+import { decodeEd25519Multikey, multibaseDecode } from './utils/multiformats.js';
 
 const DID_KEY_PREFIX = 'did:key:';
 
@@ -66,6 +66,46 @@ export function parseDidKeyVerificationMethod(input: string): ParsedDidKeyVerifi
     fragment,
     keyMultibase: parsedDid.keyMultibase,
   };
+}
+
+/**
+ * Normalizes caller-supplied update keys before an entry is hashed or signed.
+ *
+ * Accepts a bare Ed25519 multikey, a `did:key:` DID, or a `did:key:`
+ * verification method id, and returns bare multikeys. Throws when an entry is
+ * malformed or does not carry the Ed25519 multicodec header (0xed01).
+ *
+ * @param updateKeys {string[]} Caller-supplied update keys.
+ * @returns {string[]} The same keys as bare multibase multikeys, in order.
+ */
+export function normalizeUpdateKeys(updateKeys: string[]): string[] {
+  return updateKeys.map((key, index) => {
+    try {
+      const { keyMultibase } = key.startsWith(DID_KEY_PREFIX)
+        ? parseDidKeyVerificationMethod(key)
+        : parseDidKeyDid(`${DID_KEY_PREFIX}${key}`);
+      decodeEd25519Multikey(keyMultibase);
+      return keyMultibase;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`Invalid updateKeys[${index}]: ${message}`);
+    }
+  });
+}
+
+/**
+ * Applies {@link normalizeUpdateKeys} to an options object, leaving one that
+ * carries no `updateKeys` untouched. Returns a copy, so the caller's options
+ * object is not mutated.
+ *
+ * @param options {object} Options that may carry `updateKeys`.
+ * @returns {object} The options, with any `updateKeys` normalized.
+ */
+export function withNormalizedUpdateKeys<T extends { updateKeys?: string[] }>(options: T): T {
+  if (options.updateKeys === undefined) {
+    return options;
+  }
+  return { ...options, updateKeys: normalizeUpdateKeys(options.updateKeys) };
 }
 
 export function parseAndValidateVersionId(versionId: string, expectedVersionNumber: number) {

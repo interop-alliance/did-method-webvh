@@ -239,19 +239,34 @@ parallel `did:web` DID document to publish as `did.json`.
 The `vmIdFragment` option controls verification-method id fragments: `'short'`
 (default) uses the last 8 chars of `publicKeyMultibase`; `'multibase'` uses the
 full multibase for a self-describing `#<publicKeyMultibase>` fragment.
+Pass `didDocument` to author the whole document yourself, writing `{SCID}` or
+`{DID}` where the not-yet-derived identifier goes. It cannot be combined with
+`verificationMethods`, `services`, `alsoKnownAs`, `context`, or the individual
+relationship options; `additionalContext` and `alsoKnownAsWeb` do compose with
+it.
 
 -
 `updateDID(options: UpdateDIDInterface): Promise<{did: string, doc: any, meta: DIDResolutionMeta, log: DIDLog, webDoc?: DIDDoc}>`
 Updates an existing DID.
 Returns `webDoc` when the updated DID document carries a `did:web:` alias in
 `alsoKnownAs`.
-**Overlay semantics:** the prior entry's DID document is carried forward and
-only the fields you supply are overwritten. `@context`, `id`, and `controller`
-are always re-derived; verification-method fields are preserved unless
-`verificationMethods` is passed, and `service` / `alsoKnownAs` / the individual
-relationship arrays overwrite only when explicitly supplied. A key-only update
-(`updateKeys` + `nextKeyHashes`, no document directives) preserves the prior
-document verbatim -- the contract every rotation ceremony relies on.
+**Authored mode:** pass `didDocument` to supply the complete next DID
+document. It replaces the prior state outright -- nothing is merged, so
+anything omitted is dropped. Every verification method must carry an explicit
+`id` and `controller`, and the document `id` must name either the DID being
+updated or, on a portable move, the DID being moved from. It cannot be combined
+with `verificationMethods`, `services`, `alsoKnownAs`, `context`, or the
+individual relationship options; `additionalContext` and `alsoKnownAsWeb` do
+compose with it.
+
+**Overlay semantics:** otherwise the prior entry's DID document is carried
+forward and only the fields you supply are overwritten. `@context` and `id` are
+re-derived and the document `controller` is carried forward untouched;
+verification-method fields are preserved unless `verificationMethods` is
+passed, and `service` / `alsoKnownAs` / the individual relationship arrays
+overwrite only when explicitly supplied. A key-only update (`updateKeys` +
+`nextKeyHashes`, no document directives) preserves the prior document
+verbatim -- the contract every rotation ceremony relies on.
 
 The `verifier` option on `createDID` / `updateDID` / `resolveDID` /
 `resolveDIDFromLog` / `deactivateDID` defaults to `defaultWebvhLogVerifier`

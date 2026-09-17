@@ -212,6 +212,16 @@ export interface CreateDIDInterface {
   // 'short' (default) uses the last 8 chars; 'multibase' uses the full
   // multibase for a self-describing `#<publicKeyMultibase>` fragment.
   vmIdFragment?: 'short' | 'multibase';
+  /**
+   * The complete DID document to create, written with a `{SCID}` or `{DID}`
+   * placeholder for the not-yet-derived identifier. Every verification method
+   * must carry an explicit `id` and `controller`. Mutually exclusive with the
+   * options that replace part of a document (`verificationMethods`,
+   * `services`, the verification relationships, `alsoKnownAs`, `context`);
+   * passing both throws. The append-style options `additionalContext` and
+   * `alsoKnownAsWeb` are the exceptions -- they compose with an authored
+   * document.
+   */
   didDocument?: DIDDoc;
   services?: ServiceEndpoint[];
   paths?: string[];
@@ -253,6 +263,19 @@ export interface CreateDIDInterface {
 export interface UpdateDIDInterface {
   log: DIDLog;
   signer: Signer;
+  /**
+   * The complete proposed next DID document. When supplied it replaces the
+   * prior state outright -- nothing is merged, so anything omitted here is
+   * dropped from the updated document. Every verification method must carry
+   * an explicit `id` and `controller`, and `id` must name either the DID being
+   * updated or, on a portable move, the DID being moved from. Mutually
+   * exclusive with the options that replace part of a document
+   * (`verificationMethods`, `services`, the verification relationships,
+   * `alsoKnownAs`, `context`); passing both throws. The append-style options
+   * `additionalContext` and `alsoKnownAsWeb` are the exceptions -- they
+   * compose with an authored document.
+   */
+  didDocument?: DIDDoc;
   services?: ServiceEndpoint[];
   /** New canonical address when moving a portable DID. */
   address?: string;
@@ -278,10 +301,12 @@ export interface UpdateDIDInterface {
    */
   context?: string | string[] | object | object[];
   /**
-   * Context entries appended after the carried-forward `@context`,
-   * deduplicated: a string entry already present is skipped, and an object
-   * entry is skipped when its JSON serialization matches an entry already
-   * present. Mutually exclusive with `context` -- passing both throws.
+   * Context entries appended after the carried-forward `@context` (or, when
+   * `didDocument` is supplied, after that document's own `@context`, falling
+   * back to `BASE_CONTEXT` when it has none), deduplicated: a string entry
+   * already present is skipped, and an object entry is skipped when its JSON
+   * serialization matches an entry already present. Mutually exclusive with
+   * `context` -- passing both throws.
    */
   additionalContext?: (string | object)[];
   alsoKnownAs?: string[];
@@ -312,6 +337,7 @@ export interface DeactivateDIDInterface {
   signer: Signer;
   verifier?: Verifier;
   updateKeys?: string[];
+  witnessProofs?: WitnessProofFileEntry[];
   /** See {@link CreateDIDInterface.selfVerify}. */
   selfVerify?: boolean;
   /** See {@link UpdateDIDInterface.priorMeta}. */

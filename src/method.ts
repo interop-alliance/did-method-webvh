@@ -17,6 +17,10 @@ import { defaultWebvhLogVerifier } from './verifier.js';
 /**
  * Creates a new did:webvh DID and initial DID log.
  *
+ * `updateKeys` accepts Ed25519 multikeys or did:key identifiers (with an
+ * optional matching fragment); entries and metadata always contain bare
+ * multikeys.
+ *
  * @param options DID creation options.
  * @returns The created DID, resolved document, and DID log.
  */
@@ -86,15 +90,27 @@ export const resolveDIDFromLog = async (log: DIDLog, options: ResolutionOptions 
 /**
  * Updates an existing DID log with a new entry.
  *
- * Overlay semantics: the prior entry's DID document is carried forward and only
- * the fields this call supplies are overwritten. `@context`, `id`, and
- * `controller` are always re-derived. Verification-method fields
- * (`verificationMethod` and the relationship arrays) are preserved unless
- * `verificationMethods` is supplied; `service`, `alsoKnownAs`, and the
- * individual relationship options overwrite only when explicitly passed. A
- * key-only update (`updateKeys` + `nextKeyHashes`, no document directives) thus
- * preserves the prior document verbatim -- the load-bearing contract for
- * rotation ceremonies.
+ * The options supplied select one of three modes:
+ *
+ * - Authored: `didDocument` is the complete next document and replaces the
+ *   prior state outright. Nothing is merged onto it, so anything omitted is
+ *   dropped. It cannot be combined with the overlay options.
+ * - Overlay: the prior entry's DID document is carried forward and only the
+ *   fields this call supplies are overwritten. `@context` and `id` are
+ *   re-derived; the document `controller` is carried forward untouched.
+ *   Verification-method fields (`verificationMethod` and the relationship
+ *   arrays) are preserved unless `verificationMethods` is supplied; `service`,
+ *   `alsoKnownAs`, and the individual relationship options overwrite only when
+ *   explicitly passed.
+ * - Parameters-only: a key-only update (`updateKeys` + `nextKeyHashes`, no
+ *   document directives) preserves the prior document verbatim -- the
+ *   load-bearing contract for rotation ceremonies.
+ *
+ * A portable move (`address`) applies in every mode: the document is relocated
+ * to the new DID and its references to its own former identifier follow it.
+ *
+ * Supplied `updateKeys` are normalized to bare multikeys before preparation,
+ * including pre-rotation hash checks.
  *
  * @param options DID update options.
  * @returns The updated DID, resolved document, and DID log.
@@ -106,6 +122,11 @@ export const updateDID = async (options: UpdateDIDInterface): Promise<UpdateDIDR
 
 /**
  * Deactivates an existing DID by appending a deactivation entry.
+ *
+ * Supplied `updateKeys` are normalized to bare multikeys before preparation,
+ * including pre-rotation hash checks. `witnessProofs` is threaded into the
+ * resolution of the prior log, so omitting it falls back to the network fetch
+ * and passing `[]` disables that fetch.
  *
  * @param options DID deactivation options.
  * @returns The deactivated DID result and updated DID log.

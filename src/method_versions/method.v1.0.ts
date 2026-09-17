@@ -16,17 +16,23 @@ import {
   MAX_FUTURE_SKEW_MS,
   validateUtcIso8601NotInFuture,
 } from '../utils/iso8601-datetime.js';
-import { normalizeCreateDidAddress, requireDidDocumentId } from '../utils.js';
+import { normalizeCreateDidAddress, requireDidDocumentId, withNormalizedUpdateKeys } from '../utils.js';
 import { createResolveVM } from '../vm-resolver.js';
 import { validateWitnessParameter } from '../witness.js';
 import { prepareDeactivationEntry, prepareGenesisEntry, prepareUpdateEntry } from './method.v1.0.entries.js';
 import { applyEntryToMeta } from './method.v1.0.meta.js';
 import { type InternalResolutionOptions, resolveV1Log } from './method.v1.0.resolution.js';
 
+/**
+ * `updateKeys` accepts Ed25519 multikeys or did:key identifiers (with an
+ * optional matching fragment); entries and metadata always contain bare
+ * multikeys.
+ */
 export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDResult> => {
   if (!options.updateKeys) {
     throw new Error('Update keys not supplied');
   }
+  options = withNormalizedUpdateKeys(options);
 
   validateWitnessParameter(options.witness);
 
@@ -75,7 +81,13 @@ export const resolveDIDFromLog = async (
   return resolveV1Log(log, { resolveVM: createResolveVM(), ...options });
 };
 
+/**
+ * Supplied `updateKeys` are normalized from Ed25519 multikeys or did:key
+ * identifiers to bare multikeys before preparation, including pre-rotation
+ * hash checks.
+ */
 export const updateDID = async (options: UpdateDIDInterface): Promise<UpdateDIDResult> => {
+  options = withNormalizedUpdateKeys(options);
   const log = options.log;
   const lastEntry = log[log.length - 1];
   const lastMeta =
@@ -130,12 +142,20 @@ export const updateDID = async (options: UpdateDIDInterface): Promise<UpdateDIDR
   };
 };
 
+/**
+ * Supplied `updateKeys` are normalized from Ed25519 multikeys or did:key
+ * identifiers to bare multikeys before preparation, including pre-rotation
+ * hash checks.
+ */
 export const deactivateDID = async (
   options: DeactivateDIDInterface
 ): Promise<{ did: string; doc: DIDDoc; meta: DIDResolutionMeta; log: DIDLog }> => {
+  options = withNormalizedUpdateKeys(options);
   const log = options.log;
   const lastEntry = log[log.length - 1];
-  const lastMeta = options.priorMeta ?? (await resolveDIDFromLog(log, { verifier: options.verifier })).meta;
+  const lastMeta =
+    options.priorMeta ??
+    (await resolveDIDFromLog(log, { verifier: options.verifier, witnessProofs: options.witnessProofs })).meta;
   if (lastMeta.deactivated) {
     throw new Error('DID already deactivated');
   }

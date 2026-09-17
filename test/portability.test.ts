@@ -258,3 +258,109 @@ describe('Portability', () => {
     ).rejects.toThrow('updateDID path segments must not contain decoded slash within a single path segment');
   });
 });
+
+describe('Portable move self-reference rewriting', () => {
+  const externalDid = 'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK';
+
+  test('rewrites self-referential controller and VM ids, leaving external controllers alone', async () => {
+    const authKey = await generateTestVerificationMethod();
+    const signer = createTestSigner(authKey);
+
+    const created = await createDID({
+      address: 'example.com',
+      signer,
+      updateKeys: [authKey.publicKeyMultibase!],
+      portable: true,
+      didDocument: {
+        '@context': ['https://www.w3.org/ns/did/v1'],
+        id: '{DID}',
+        controller: '{DID}',
+        verificationMethod: [
+          {
+            id: '{DID}#key-1',
+            type: 'Multikey',
+            controller: '{DID}',
+            publicKeyMultibase: authKey.publicKeyMultibase,
+          },
+          {
+            id: `${externalDid}#z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK`,
+            type: 'Multikey',
+            controller: externalDid,
+            publicKeyMultibase: 'z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK',
+          },
+        ],
+        authentication: ['{DID}#key-1'],
+      },
+    });
+
+    const oldDid = created.did;
+
+    // A move with no document options at all: the carried-forward document is
+    // the only thing that can be rewritten.
+    const updated = await updateDID({
+      log: created.log,
+      signer,
+      updated: nextSecond(created.log),
+      address: 'new-domain.com',
+    });
+
+    const newDid = updated.did;
+    expect(newDid).toContain('new-domain.com');
+    expect(updated.doc.id).toBe(newDid);
+    expect(updated.doc.controller).toBe(newDid);
+    expect(updated.doc.verificationMethod?.[0].id).toBe(`${newDid}#key-1`);
+    expect(updated.doc.verificationMethod?.[0].controller).toBe(newDid);
+    expect(updated.doc.authentication).toEqual([`${newDid}#key-1`]);
+
+    // The externally-controlled verification method is untouched.
+    expect(updated.doc.verificationMethod?.[1].id).toBe(
+      `${externalDid}#z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK`
+    );
+    expect(updated.doc.verificationMethod?.[1].controller).toBe(externalDid);
+
+    // The predecessor is retained as an alias.
+    expect(updated.doc.alsoKnownAs).toContain(oldDid);
+  });
+
+  test('rewrites service ids and self-referential service endpoints', async () => {
+    const authKey = await generateTestVerificationMethod();
+    const signer = createTestSigner(authKey);
+
+    const created = await createDID({
+      address: 'example.com',
+      signer,
+      updateKeys: [authKey.publicKeyMultibase!],
+      portable: true,
+      verificationMethods: asPublicVerificationMethods(authKey),
+      services: [
+        {
+          id: '{DID}#files',
+          type: 'relativeRef',
+          serviceEndpoint: 'https://example.com/files',
+        },
+        {
+          id: '{DID}#delegate',
+          type: 'Delegation',
+          serviceEndpoint: { self: '{DID}/inbox', other: `${externalDid}#key-1` },
+        },
+      ],
+    });
+
+    const updated = await updateDID({
+      log: created.log,
+      signer,
+      updated: nextSecond(created.log),
+      address: 'new-domain.com',
+    });
+
+    const newDid = updated.did;
+    expect(updated.doc.service?.[0].id).toBe(`${newDid}#files`);
+    // An endpoint that is not a DID URL of the moved DID is left alone.
+    expect(updated.doc.service?.[0].serviceEndpoint).toBe('https://example.com/files');
+
+    expect(updated.doc.service?.[1].id).toBe(`${newDid}#delegate`);
+    const endpoint = updated.doc.service?.[1].serviceEndpoint as { self: string; other: string };
+    expect(endpoint.self).toBe(`${newDid}/inbox`);
+    expect(endpoint.other).toBe(`${externalDid}#key-1`);
+  });
+});

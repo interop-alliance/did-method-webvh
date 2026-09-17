@@ -511,7 +511,6 @@ test('Resolution does not inject implicit #files / #whois services', async () =>
     address: 'example.com',
     signer: createTestSigner(authKey1),
     updateKeys: [authKey1.publicKeyMultibase!],
-    verificationMethods: asPublicVerificationMethods(authKey1),
     didDocument: customDidDocument,
     verifier: testImplementation,
   });

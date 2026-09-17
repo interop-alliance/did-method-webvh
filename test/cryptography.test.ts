@@ -189,7 +189,7 @@ describe('Injectable Cryptography Tests', () => {
       ],
     };
 
-    expect(
+    await expect(
       documentStateIsValid(signedDoc, { updateKeys: [updateKey], verifier: failingMockImplementation, resolveVM })
     ).rejects.toThrow('Proof 0 failed verification');
   });
@@ -292,7 +292,7 @@ describe('Injectable Cryptography Tests', () => {
       ],
     };
 
-    expect(
+    await expect(
       documentStateIsValid(signedDoc, { updateKeys: [mockImplementation.getVerificationMethodId()], resolveVM })
     ).rejects.toThrow('Verifier implementation is required');
   });
@@ -326,7 +326,7 @@ describe('Injectable Cryptography Tests', () => {
       ],
     };
 
-    expect(countVerifiedWitnessApprovals(witnessProofs, witness, { resolveVM })).rejects.toThrow(
+    await expect(countVerifiedWitnessApprovals(witnessProofs, witness, { resolveVM })).rejects.toThrow(
       'Verifier implementation is required'
     );
   });

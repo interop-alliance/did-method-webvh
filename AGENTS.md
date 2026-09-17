@@ -78,8 +78,11 @@ npm run lint
   `signDataIntegrityProof` for proof construction; data preparation for
   signing. Consumers implement `sign()` and `verify()`.
 - **[src/witness.ts](src/witness.ts)** -- Witness proof creation and
-  validation: `verifyWitnessProofs`, `validateWitnessParameter`,
+  validation: `countVerifiedWitnessApprovals`, `validateWitnessParameter`,
   `resolveWitnessParameter`, `createWitnessProof`, `signWitnessProofEntries`.
+  Witness thresholds are enforced inside resolution; there is no separate
+  public witness-introspection API (upstream's `getWitnessRequirements` /
+  `verifyWitnessProofs` were not adopted).
 - **[src/did-document.ts](src/did-document.ts)** -- DID document construction
   and queries: `createDIDDoc`, `findVerificationMethod`,
   `generateParallelDidWeb`, placeholder replacement.
@@ -137,6 +140,35 @@ of [decentralized-identity/didwebvh-ts](https://github.com/decentralized-identit
 When porting an upstream PR, translate it through the following deliberate
 divergences (newest first). Library behavior and public API are otherwise kept
 aligned with upstream.
+
+### Authored `didDocument` mode is stricter than upstream
+
+Upstream's `prepareUpdateEntry` selects its authored-document branch whenever
+`didDocument` is set and silently ignores any overlay option passed alongside
+it, and its "any overlay supplied" test lists only some of them (it omits
+`capabilityDelegation`, `capabilityInvocation`, and this fork's
+`additionalContext`). This fork keeps two derived lists in
+`method.v1.0.entries.ts`:
+
+- `DOC_REPLACEMENT_OPTIONS` -- the options that replace part of a document the
+  caller has already authored in full (`verificationMethods`, `services`,
+  `alsoKnownAs`, `context`, and all five verification relationships).
+  `assertNoAuthoredDocumentOverlay` throws when any of them is combined with
+  `didDocument`, in `createDID` as well as `updateDID`.
+- `DOC_OVERLAY_OPTIONS` -- that list plus `additionalContext`, used only for
+  `updateDID`'s branch test (any of them selects overlay mode).
+
+The two append-style options are deliberately outside the exclusion list:
+`additionalContext` appends to whatever `@context` an authored document
+carries, and `alsoKnownAsWeb` appends the parallel `did:web` alias, so both
+compose with `didDocument` in both operations. This fork also validates the
+authored document's `id` on update: it must be present, and must name either
+the DID being updated or, on a portable move, the DID being moved from.
+
+**When porting:** keep both lists and the throw. An upstream change that adds a
+new document-shaping option to `updateDID` must add it to
+`DOC_REPLACEMENT_OPTIONS` (if it replaces) or `DOC_OVERLAY_OPTIONS` (if it
+appends), or it will silently be ignored in authored mode.
 
 ### `additionalContext` was added beside the `context` option
 
@@ -259,6 +291,20 @@ in `src/` and `test/` carries a `.js` extension (`from './utils.js'`). Upstream
 uses extensionless imports (`from './utils'`). **When porting:** add `.js` to
 relative import specifiers in any copied code, then run `npm run lint:fix` (
 Biome's import ordering can shift once extensions are added).
+
+### DID document types are in-house, not `did-resolver`
+
+Upstream (`c5d82f7`, `f0149d0`) replaced its local `DIDDoc`,
+`VerificationMethod`, and `ServiceEndpoint` types with the ones from the
+`did-resolver` package. This fork keeps its own looser `DIDDoc` in
+[src/interfaces.ts](src/interfaces.ts) and uses `@interop/data-integrity-core`'s
+`IDIDDocument` / `IDIDResolutionResult` for the spec envelope, with the single
+cast at that boundary in [src/resolver-result.ts](src/resolver-result.ts).
+Adding `did-resolver` would duplicate an in-house type package.
+
+**When porting:** skip upstream changes whose only effect is to swap in
+`did-resolver` types. Port any behavior change riding along with them onto the
+fork's own types.
 
 ### Dependency divergences
 

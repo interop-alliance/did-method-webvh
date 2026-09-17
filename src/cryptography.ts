@@ -141,6 +141,9 @@ export abstract class AbstractCrypto implements Signer, Verifier {
 
   /**
    * Get the verification method ID
+   * The default did:key ID can be supplied in updateKeys to createDID, updateDID,
+   * or deactivateDID; those APIs store its bare multikey in the log. Derive
+   * nextKeyHashes from the bare publicKeyMultibase, not this ID.
    * @returns The verification method ID
    */
   getVerificationMethodId(): string {

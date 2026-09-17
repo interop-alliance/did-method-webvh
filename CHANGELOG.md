@@ -1,3 +1,69 @@
+## 5.10.0 - TBD
+
+### Added
+
+- `deactivateDID` accepts `witnessProofs`, threading them into the resolution
+  of the prior log as `updateDID` already did. Omitting the option keeps the
+  network fetch of `did-witness.json`; passing `[]` disables it.
+- `updateDID` accepts `didDocument`: the complete proposed next DID document,
+  which replaces the prior state outright with no merging. Anything omitted is
+  dropped. It cannot be combined with the options that replace part of a
+  document (`verificationMethods`, `services`, the verification relationships,
+  `alsoKnownAs`, `context`); passing both throws. `additionalContext` and
+  `alsoKnownAsWeb` compose with it, appending to the authored document's
+  `@context` and `alsoKnownAs`. Ports upstream commit `6971e0a`.
+- `createDID` applies the same rule: combining `didDocument` with
+  `verificationMethods`, `services`, `alsoKnownAs`, `context`, or a
+  verification relationship now throws instead of silently ignoring the
+  option, which previously produced a DID whose keys were not the ones passed.
+- An authored `didDocument` passed to `updateDID` must carry an `id`, and that
+  `id` must name either the DID being updated or, on a portable move, the DID
+  being moved from. A document naming a third DID was previously hashed,
+  signed, and then silently rewritten.
+- Authored DID documents passed to `createDID` or `updateDID` must give every
+  verification method a non-empty `id` and an explicit `controller`. An
+  authored document bypasses fragment synthesis, so neither can be inferred.
+  Ports upstream commit `6971e0a`.
+
+### Fixed
+
+- `createDID`, `updateDID`, and `deactivateDID` normalize `updateKeys` given
+  as a `did:key:` DID or verification-method id to bare multikeys before the
+  entry is prepared. Those forms were previously written verbatim and made
+  later resolution fail with "is not authorized to update". Malformed or
+  non-Ed25519 keys are rejected before signing.
+- Verification methods or a caller-supplied `didDocument` carrying
+  `secretKeyMultibase` are rejected instead of warned about and silently
+  stripped. Both paths now walk nested material, so a key buried in a
+  `ConditionalProof2022` `conditionOr` list no longer reaches the signed
+  genesis entry.
+- A DID created with the `{DID}` placeholder anywhere in its document was
+  unresolvable. `{DID}` was substituted after SCID derivation, so the genesis
+  entry was hashed with the literal `{DID}` in it, while resolution rebuilds
+  that preimage substituting only `{SCID}`. The two hashes never matched.
+  `{DID}` is now substituted before derivation, for an authored `didDocument`
+  and for a `services` or `alsoKnownAs` entry alike.
+- A portable move left the moved DID document pointing at its former
+  identifier. The document `controller`, the `id`/`controller` of every
+  verification method, and every string in the `service` array are now
+  rewritten to the new DID, covering a service `id` or a `serviceEndpoint`
+  that is a DID URL. A self reference is the bare DID or the DID followed by a
+  fragment, path, or query; references to any other DID are left alone. Ports
+  upstream commit `6971e0a`.
+- A parameters-only `updateDID` no longer overwrites the document `controller`
+  with the subject DID, which discarded a caller-authored external controller
+  on every update.
+- Five `expect(...).rejects` assertions in the cryptography and witness tests
+  were never awaited and could not fail.
+
+### Changed
+
+- The `did:webvh` driver's `get()` now throws a `DIDResolutionError` whenever
+  the resolution metadata carries an error, even if the envelope also holds a
+  preserved document. Plain resolution already rejected on an unmet witness
+  threshold; this makes the loader-facing contract unconditional. Regression
+  tests cover both the clean and unmet-threshold paths.
+
 ## 5.9.0 - 2026-09-10
 
 ### Added

@@ -169,6 +169,27 @@ describe('resolveDIDFromLog with verificationMethod', () => {
 });
 
 describe('Resolver URL derivation', () => {
+  // The http exception applies to the bare host `localhost` only. A host that
+  // merely contains "localhost", or a path segment named localhost, stays on
+  // https. Regression table adapted from upstream dd0805f.
+  test.each([
+    ['localhost', 'http://localhost', '/.well-known'],
+    ['localhost%3A8000', 'http://localhost:8000', '/.well-known'],
+    ['localhost.example.com', 'https://localhost.example.com', '/.well-known'],
+    ['my-localhost.example.com', 'https://my-localhost.example.com', '/.well-known'],
+    ['cdn-localhost.example', 'https://cdn-localhost.example', '/.well-known'],
+    ['localhost.example.com%3A8443', 'https://localhost.example.com:8443', '/.well-known'],
+    ['example.com:localhost', 'https://example.com/localhost', ''],
+    ['example.com:api:localhost:issuer', 'https://example.com/api/localhost/issuer', ''],
+    ['example.com%3A8443:localhost', 'https://example.com:8443/localhost', ''],
+    ['%6Cocalhost.example.com', 'https://localhost.example.com', '/.well-known'],
+  ])('Picks the scheme for %s by exact host match', (address, location, logDirectory) => {
+    const did = `did:webvh:scid:${address}`;
+
+    expect(getBaseUrl(did)).toBe(location);
+    expect(getFileUrl(did)).toBe(`${location}${logDirectory}/did.jsonl`);
+  });
+
   test('Uses http for localhost DID host', () => {
     const did = 'did:webvh:scid:localhost%3A8000:test:path';
     expect(getBaseUrl(did)).toBe('http://localhost:8000/test/path');
