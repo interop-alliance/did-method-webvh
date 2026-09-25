@@ -1,9 +1,12 @@
 import * as crypto from '@stablelib/ed25519';
+import { vi } from 'vitest';
 import { METHOD, PLACEHOLDER } from '../src/constants.js';
 import { AbstractCrypto, createDataIntegrityProofTemplate, prepareDataForSigning } from '../src/cryptography.js';
 import { createDIDDoc, replaceCreateDidPlaceholders } from '../src/did-document.js';
 import type {
+  DataIntegrityProofTemplate,
   DIDLog,
+  FetchLike,
   Signer,
   SignerOptions,
   SigningInput,
@@ -84,6 +87,46 @@ export function createTestSigner(verificationMethod: VerificationMethod): Signer
 export function createTestVerifier(verificationMethod: VerificationMethod): Verifier {
   return new TestCryptoImplementation({ verificationMethod });
 }
+
+/** The did:key verification method id of a witness's key. */
+export const witnessVerificationMethod = (vm: VerificationMethod) =>
+  `did:key:${vm.publicKeyMultibase}#${vm.publicKeyMultibase}`;
+
+/** A witness signing function (the shape `createWitnessProof` takes) backed by a test verification method. */
+export const createWitnessSigner = (verificationMethod: VerificationMethod) => {
+  const signer = createTestSigner(verificationMethod);
+  return async (data: { versionId: string }, proofTemplate?: DataIntegrityProofTemplate) => {
+    const proof: DataIntegrityProofTemplate = {
+      type: 'DataIntegrityProof',
+      cryptosuite: 'eddsa-jcs-2022',
+      verificationMethod: signer.getVerificationMethodId(),
+      created: new Date().toISOString(),
+      proofPurpose: 'authentication',
+      ...proofTemplate,
+    };
+    const { proofValue } = await signer.sign({ document: data, proof });
+    return { proof: { verificationMethod: signer.getVerificationMethodId(), proofValue } };
+  };
+};
+
+// Stub the global fetch to throw, so a test can prove a custom fetch override
+// was used instead.
+export const stubGlobalFetchUnused = () => {
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('global fetch should not be called')));
+};
+
+// A fetch mock that serves a body per URL suffix (`did.jsonl`,
+// `did-witness.json`) and answers 404 for anything else.
+export const createRoutedFetchMock = (routes: Record<string, string>) =>
+  vi.fn(async (url: string) => {
+    const match = Object.entries(routes).find(([suffix]) => url.endsWith(suffix));
+    return {
+      ok: match !== undefined,
+      status: match ? 200 : 404,
+      text: async () => match?.[1] ?? '',
+      json: async () => (match ? JSON.parse(match[1]) : null),
+    };
+  }) as unknown as ReturnType<typeof vi.fn> & FetchLike;
 
 // Helper to produce DID document-safe verification methods by stripping secret key material
 export function asPublicVerificationMethods(...verificationMethods: VerificationMethod[]): VerificationMethod[] {

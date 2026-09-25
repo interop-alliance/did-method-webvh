@@ -43,6 +43,9 @@ export interface Verifier {
   verify(signature: Uint8Array, message: Uint8Array, publicKey: Uint8Array): Promise<boolean>;
 }
 
+/** A fetch-compatible function used by the resolver for HTTP retrieval. */
+export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+
 /**
  * Resolves a proof's `verificationMethod` id to its key material. The default
  * implementation handles `did:key` and `did:webvh`; injectable for other
@@ -321,6 +324,11 @@ export interface UpdateDIDInterface {
   capabilityDelegation?: string[];
   capabilityInvocation?: string[];
   witnessProofs?: WitnessProofFileEntry[];
+  /**
+   * Fetch override used when the prior log is resolved and `did-witness.json`
+   * must be retrieved. See {@link ResolutionOptions.fetch}.
+   */
+  fetch?: FetchLike;
   /** See {@link CreateDIDInterface.selfVerify}. */
   selfVerify?: boolean;
   /**
@@ -338,6 +346,8 @@ export interface DeactivateDIDInterface {
   verifier?: Verifier;
   updateKeys?: string[];
   witnessProofs?: WitnessProofFileEntry[];
+  /** See {@link UpdateDIDInterface.fetch}. */
+  fetch?: FetchLike;
   /** See {@link CreateDIDInterface.selfVerify}. */
   selfVerify?: boolean;
   /** See {@link UpdateDIDInterface.priorMeta}. */
@@ -360,7 +370,12 @@ export interface ResolutionOptions {
    * HTTPS fetch. Return `undefined` to fall back to fetching over the network.
    */
   resolveControlledDid?: (did: string) => Promise<DIDLog | undefined>;
+  /** Fetch override used to retrieve the DID log and `did-witness.json`; defaults to the global `fetch`. */
+  fetch?: FetchLike;
 }
+
+/** The options that decide where a DID log comes from: a controlled-DID callback first, then fetch. */
+export type LogSourceOptions = Pick<ResolutionOptions, 'fetch' | 'resolveControlledDid'>;
 
 export interface WitnessProofFileEntry {
   versionId: string;

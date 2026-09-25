@@ -18,8 +18,9 @@
 import type { IDIDResolutionResult } from '@interop/data-integrity-core';
 import { DIDResolutionError } from '@interop/data-integrity-core';
 import { hasMatchingId } from './did-document.js';
-import type { DIDDoc, Verifier } from './interfaces.js';
+import type { DIDDoc, FetchLike, Verifier } from './interfaces.js';
 import { resolveDID } from './method.js';
+import { toErrorResult } from './resolver-result.js';
 import { defaultWebvhLogVerifier } from './verifier.js';
 
 /**
@@ -86,9 +87,18 @@ function dereferenceFragment(doc: DIDDoc, id: string): Record<string, unknown> {
  * @param options Driver options.
  * @param [options.verifier] Verifier for the DID's history-log proofs. Defaults
  *   to {@link defaultWebvhLogVerifier}.
+ * @param [options.fetch] Fetch override for retrieving the DID log and
+ *   `did-witness.json`. Defaults to the global `fetch`. A did-io caller can
+ *   override it per resolution via `resolveDID({ did, fetch })`.
  * @returns A `{ method, get, resolveDID }` driver.
  */
-export function createDidWebvhDriver({ verifier = defaultWebvhLogVerifier }: { verifier?: Verifier } = {}): {
+export function createDidWebvhDriver({
+  verifier = defaultWebvhLogVerifier,
+  fetch: fetchFn,
+}: {
+  verifier?: Verifier;
+  fetch?: FetchLike;
+} = {}): {
   method: string;
   get(options: { did?: string; url?: string }): Promise<DIDDoc | Record<string, unknown>>;
   resolveDID(options: { did: string; [key: string]: unknown }): Promise<IDIDResolutionResult>;
@@ -104,7 +114,7 @@ export function createDidWebvhDriver({ verifier = defaultWebvhLogVerifier }: { v
       const [didAuthority = ''] = didOrUrl.split(/[#?]/);
       const fragment = didOrUrl.includes('#') ? didOrUrl.slice(didOrUrl.indexOf('#') + 1) : undefined;
 
-      const { didDocument, didResolutionMetadata } = await resolveDID(didAuthority, { verifier });
+      const { didDocument, didResolutionMetadata } = await resolveDID(didAuthority, { verifier, fetch: fetchFn });
       // The envelope's IDIDDocument is structurally stricter than this
       // package's DIDDoc; narrow back at this single boundary.
       const doc = didDocument as unknown as DIDDoc | null;
@@ -128,14 +138,25 @@ export function createDidWebvhDriver({ verifier = defaultWebvhLogVerifier }: { v
     },
     async resolveDID({ did, ...options }: { did: string; [key: string]: unknown }): Promise<IDIDResolutionResult> {
       // The did-io driver contract passes resolution options untyped
-      // (spec-extensible); narrow the version selectors this method supports.
-      const { versionId, versionNumber, versionTime } = options as {
+      // (spec-extensible); narrow the version selectors this method supports
+      // and the per-resolution fetch override.
+      const {
+        versionId,
+        versionNumber,
+        versionTime,
+        fetch: perCallFetch,
+      } = options as {
         versionId?: string;
         versionNumber?: number;
         versionTime?: Date | string;
+        fetch?: unknown;
       };
+      if (perCallFetch !== undefined && typeof perCallFetch !== 'function') {
+        return toErrorResult('invalidOptions', 'Invalid fetch option: expected function.');
+      }
       return resolveDID(did, {
         verifier,
+        fetch: (perCallFetch as FetchLike | undefined) ?? fetchFn,
         versionId,
         versionNumber,
         versionTime: typeof versionTime === 'string' ? new Date(versionTime) : versionTime,

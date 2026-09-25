@@ -11,7 +11,7 @@ import type {
 } from './interfaces.js';
 import * as v1 from './method_versions/method.v1.0.js';
 import { mapErrorToCode, toErrorResult, toResolutionResult, validateResolutionSelectors } from './resolver-result.js';
-import { fetchLogFromIdentifier, parseDidWebvhIdentifier } from './utils.js';
+import { loadDIDLog, parseDidWebvhIdentifier } from './utils.js';
 import { defaultWebvhLogVerifier } from './verifier.js';
 
 /**
@@ -59,7 +59,7 @@ export const resolveDID = async (did: string, options: ResolutionOptions = {}): 
     return toErrorResult(selectorError.code, selectorError.detail, selectorError.problemType);
   }
   try {
-    const log = (await options.resolveControlledDid?.(did)) ?? (await fetchLogFromIdentifier(did));
+    const log = await loadDIDLog(did, options);
     const result = await v1.resolveDIDFromLog(log, { ...options, verifier, scid, requestedDid: did });
 
     return toResolutionResult(result);
@@ -126,7 +126,8 @@ export const updateDID = async (options: UpdateDIDInterface): Promise<UpdateDIDR
  * Supplied `updateKeys` are normalized to bare multikeys before preparation,
  * including pre-rotation hash checks. `witnessProofs` is threaded into the
  * resolution of the prior log, so omitting it falls back to the network fetch
- * and passing `[]` disables that fetch.
+ * and passing `[]` disables that fetch. `fetch` overrides the function used
+ * for that network fetch.
  *
  * @param options DID deactivation options.
  * @returns The deactivated DID result and updated DID log.

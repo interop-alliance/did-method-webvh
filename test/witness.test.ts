@@ -15,9 +15,11 @@ import { createWitnessProof, signWitnessProofEntries, signWitnessProofEntry } fr
 import {
   asPublicVerificationMethods,
   createTestSigner,
+  createWitnessSigner,
   generateTestVerificationMethod,
   nextSecond,
   TestCryptoImplementation,
+  witnessVerificationMethod,
 } from './utils.js';
 
 describe('Witness Implementation Tests', async () => {
@@ -33,9 +35,6 @@ describe('Witness Implementation Tests', async () => {
     witness3 = await generateTestVerificationMethod();
     testImplementation = new TestCryptoImplementation({ verificationMethod: authKey });
   });
-
-  const witnessVerificationMethod = (vm: VerificationMethod) =>
-    `did:key:${vm.publicKeyMultibase}#${vm.publicKeyMultibase}`;
 
   test('Create DID with witness threshold', async () => {
     initialDID = await createDID({
@@ -1474,25 +1473,4 @@ describe('Witness Implementation Tests', async () => {
       fetchSpy.mockRestore();
     }
   });
-
-  const createWitnessSigner = (verificationMethod: VerificationMethod) => {
-    const signer = createTestSigner(verificationMethod);
-    return async (data: { versionId: string }, proofTemplate?: DataIntegrityProofTemplate) => {
-      const proof: DataIntegrityProofTemplate = {
-        type: 'DataIntegrityProof',
-        cryptosuite: 'eddsa-jcs-2022',
-        verificationMethod: signer.getVerificationMethodId(),
-        created: new Date().toISOString(),
-        proofPurpose: 'authentication',
-        ...proofTemplate,
-      };
-      const signResult = await signer.sign({ document: data, proof });
-      return {
-        proof: {
-          verificationMethod: signer.getVerificationMethodId(),
-          proofValue: signResult.proofValue,
-        },
-      };
-    };
-  };
 });

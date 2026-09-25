@@ -78,8 +78,19 @@ export const resolveDIDFromLog = async (
 ): Promise<{ did: string; doc: DIDDoc | null; meta: DIDResolutionMeta }> => {
   // A fresh default resolver per resolution: did:webvh VM lookups memoize
   // within this resolution but nothing is trusted across resolutions.
-  return resolveV1Log(log, { resolveVM: createResolveVM(), ...options });
+  return resolveV1Log(log, { resolveVM: createResolveVM(options), ...options });
 };
+
+/**
+ * Resolves the metadata of the log an update or deactivation extends, unless
+ * the caller supplied it as `priorMeta`. The options that affect resolution
+ * (`verifier`, `witnessProofs`, `fetch`) are picked here, in one place, so a
+ * new pass-through option cannot reach one operation and not the other.
+ */
+const resolvePriorMeta = async (
+  log: DIDLog,
+  { priorMeta, ...resolutionOptions }: Pick<UpdateDIDInterface, 'priorMeta' | 'verifier' | 'witnessProofs' | 'fetch'>
+): Promise<DIDResolutionMeta> => priorMeta ?? (await resolveDIDFromLog(log, resolutionOptions)).meta;
 
 /**
  * Supplied `updateKeys` are normalized from Ed25519 multikeys or did:key
@@ -90,9 +101,7 @@ export const updateDID = async (options: UpdateDIDInterface): Promise<UpdateDIDR
   options = withNormalizedUpdateKeys(options);
   const log = options.log;
   const lastEntry = log[log.length - 1];
-  const lastMeta =
-    options.priorMeta ??
-    (await resolveDIDFromLog(log, { verifier: options.verifier, witnessProofs: options.witnessProofs })).meta;
+  const lastMeta = await resolvePriorMeta(log, options);
   const currentUpdateKeys = options.updateKeys;
   if (lastMeta.deactivated) {
     throw new Error('Cannot update deactivated DID');
@@ -153,9 +162,7 @@ export const deactivateDID = async (
   options = withNormalizedUpdateKeys(options);
   const log = options.log;
   const lastEntry = log[log.length - 1];
-  const lastMeta =
-    options.priorMeta ??
-    (await resolveDIDFromLog(log, { verifier: options.verifier, witnessProofs: options.witnessProofs })).meta;
+  const lastMeta = await resolvePriorMeta(log, options);
   if (lastMeta.deactivated) {
     throw new Error('DID already deactivated');
   }

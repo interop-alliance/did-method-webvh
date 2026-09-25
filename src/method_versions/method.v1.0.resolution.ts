@@ -557,7 +557,7 @@ const enforceRequiredWitnessChecks = async ({
   did: string;
   logEntries: DIDLog;
 }): Promise<void> => {
-  const witnessProofs = options.witnessProofs ?? (await fetchWitnessProofs(did));
+  const witnessProofs = options.witnessProofs ?? (await fetchWitnessProofs(did, options.fetch));
 
   const publishedVersionNumbers = new Map(logEntries.map((entry, index) => [entry.versionId, index + 1]));
 

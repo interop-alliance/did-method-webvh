@@ -1,41 +1,42 @@
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 import { createDidWebvhDriver, defaultWebvhLogVerifier } from '../src/driver.js';
-import type { DIDLog } from '../src/interfaces.js';
+import type { DIDLog, FetchLike, VerificationMethod } from '../src/interfaces.js';
 import { createDID } from '../src/method.js';
 import { logToJsonlString } from '../src/utils.js';
 import {
   asPublicVerificationMethods,
+  createRoutedFetchMock,
   createTestSigner,
   generateTestVerificationMethod,
+  stubGlobalFetchUnused,
   TestCryptoImplementation,
 } from './utils.js';
 
-// Serve a DID log from the well-known URL and answer every other request (the
-// witness file) with 404, so the resolver sees zero witness proofs.
-const stubFetchLog = (log: DIDLog) => {
-  const jsonl = logToJsonlString(log);
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async (url: string) =>
-      url.endsWith('did.jsonl')
-        ? {
-            ok: true,
-            status: 200,
-            text: async () => jsonl,
-            json: async () => null,
-          }
-        : {
-            ok: false,
-            status: 404,
-            text: async () => '',
-            json: async () => null,
-          }
-    )
-  );
-};
+// A fetch that serves a DID log from the well-known URL and answers every
+// other request (the witness file) with 404, so the resolver sees zero
+// witness proofs.
+const logFetchMock = (log: DIDLog) => createRoutedFetchMock({ 'did.jsonl': logToJsonlString(log) });
 
 describe('createDidWebvhDriver', () => {
+  // One unwitnessed DID shared by the tests that only need a clean log.
+  let authKey: VerificationMethod;
+  let verifier: TestCryptoImplementation;
+  let did: string;
+  let log: DIDLog;
+
+  beforeAll(async () => {
+    authKey = await generateTestVerificationMethod();
+    verifier = new TestCryptoImplementation({ verificationMethod: authKey });
+    ({ did, log } = await createDID({
+      address: 'example.com',
+      signer: createTestSigner(authKey),
+      updateKeys: [authKey.publicKeyMultibase!],
+      verificationMethods: asPublicVerificationMethods(authKey),
+      verifier,
+    }));
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -65,30 +66,51 @@ describe('createDidWebvhDriver', () => {
     void used;
   });
 
+  test('passes a supplied fetch through to resolution', async () => {
+    stubGlobalFetchUnused();
+    const customFetch = logFetchMock(log);
+    const driver = createDidWebvhDriver({ verifier, fetch: customFetch });
+
+    const doc = await driver.get({ did });
+    expect(doc.id).toBe(did);
+    const result = await driver.resolveDID({ did });
+    expect(result.didDocument?.id).toBe(did);
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  test('resolveDID() honors a per-call fetch over the driver-level one', async () => {
+    stubGlobalFetchUnused();
+    const driverFetch = vi.fn().mockRejectedValue(new Error('driver fetch should not be called'));
+    const perCallFetch = logFetchMock(log);
+    const driver = createDidWebvhDriver({ verifier, fetch: driverFetch as unknown as FetchLike });
+
+    const result = await driver.resolveDID({ did, fetch: perCallFetch });
+
+    expect(result.didDocument?.id).toBe(did);
+    expect(perCallFetch).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl');
+    expect(driverFetch).not.toHaveBeenCalled();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  test('resolveDID() rejects a non-function per-call fetch as invalidOptions', async () => {
+    const driver = createDidWebvhDriver();
+
+    const result = await driver.resolveDID({ did: 'did:webvh:QmExample:example.com', fetch: 'nope' });
+
+    expect(result.didDocument).toBeNull();
+    expect(result.didResolutionMetadata.error).toBe('invalidOptions');
+  });
+
   test('get() resolves a clean log', async () => {
-    const authKey = await generateTestVerificationMethod();
-    const verifier = new TestCryptoImplementation({
-      verificationMethod: authKey,
-    });
-    const { did, log } = await createDID({
-      address: 'example.com',
-      signer: createTestSigner(authKey),
-      updateKeys: [authKey.publicKeyMultibase!],
-      verificationMethods: asPublicVerificationMethods(authKey),
-      verifier,
-    });
-    stubFetchLog(log);
+    vi.stubGlobal('fetch', logFetchMock(log));
 
     const doc = await createDidWebvhDriver({ verifier }).get({ did });
     expect(doc.id).toBe(did);
   });
 
   test('get() rejects with invalidDid when the witness threshold is not met', async () => {
-    const authKey = await generateTestVerificationMethod();
     const witness = await generateTestVerificationMethod();
-    const verifier = new TestCryptoImplementation({
-      verificationMethod: authKey,
-    });
     const { did, log } = await createDID({
       address: 'example.com',
       signer: createTestSigner(authKey),
@@ -100,7 +122,7 @@ describe('createDidWebvhDriver', () => {
       },
       verifier,
     });
-    stubFetchLog(log);
+    vi.stubGlobal('fetch', logFetchMock(log));
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
     await expect(createDidWebvhDriver({ verifier }).get({ did })).rejects.toMatchObject({

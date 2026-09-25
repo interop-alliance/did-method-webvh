@@ -8,17 +8,22 @@
  * the shared bottom modules importing the top of the stack.
  */
 import { findVerificationMethod } from './did-document.js';
-import type { ResolveVerificationMethod, VerificationMethod } from './interfaces.js';
+import type { LogSourceOptions, ResolveVerificationMethod, VerificationMethod } from './interfaces.js';
 import { resolveV1Log } from './method_versions/method.v1.0.resolution.js';
-import { fetchLogFromIdentifier, parseDidKeyVerificationMethod } from './utils.js';
+import { loadDIDLog, parseDidKeyVerificationMethod } from './utils.js';
 import { defaultWebvhLogVerifier } from './verifier.js';
 
-const resolveWebvhVM = async (vm: string, resolveVM: ResolveVerificationMethod): Promise<VerificationMethod | null> => {
-  const logEntries = await fetchLogFromIdentifier(vm.split('#')[0]);
+const resolveWebvhVM = async (
+  vm: string,
+  resolveVM: ResolveVerificationMethod,
+  options: LogSourceOptions
+): Promise<VerificationMethod | null> => {
+  const logEntries = await loadDIDLog(vm.split('#')[0], options);
   const { doc } = await resolveV1Log(logEntries, {
     verificationMethod: vm,
     verifier: defaultWebvhLogVerifier,
     resolveVM,
+    fetch: options.fetch,
   });
   if (!doc) {
     throw new Error(`Verification method ${vm} not found`);
@@ -34,8 +39,14 @@ const resolveWebvhVM = async (vm: string, resolveVM: ResolveVerificationMethod):
  * nothing is trusted across resolutions, so a rotated or revoked key is
  * picked up by the next resolution. `did:key` lookups are pure parsing and
  * need no memo.
+ *
+ * @param [options.fetch] Fetch override used to retrieve a `did:webvh` VM's
+ *   DID log and `did-witness.json`. Defaults to the global `fetch`.
+ * @param [options.resolveControlledDid] Consulted first for a `did:webvh` VM's
+ *   DID log; an `undefined` result falls back to fetching. See
+ *   {@link ResolutionOptions.resolveControlledDid}.
  */
-export const createResolveVM = (): ResolveVerificationMethod => {
+export const createResolveVM = (options: LogSourceOptions = {}): ResolveVerificationMethod => {
   // Keyed by promise so concurrent lookups of the same VM dedupe; a rejected
   // lookup is evicted so a transient fetch failure is not memoized.
   const memo = new Map<string, Promise<VerificationMethod | null>>();
@@ -48,7 +59,7 @@ export const createResolveVM = (): ResolveVerificationMethod => {
       } else if (vm.startsWith('did:webvh:')) {
         let pending = memo.get(vm);
         if (!pending) {
-          pending = resolveWebvhVM(vm, resolve);
+          pending = resolveWebvhVM(vm, resolve, options);
           memo.set(vm, pending);
           pending.catch(() => memo.delete(vm));
         }

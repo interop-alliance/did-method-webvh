@@ -1,3 +1,25 @@
+## 5.11.0 - TBD
+
+### Added
+
+- `resolveDID` accepts a `fetch` option (type `FetchLike`) that replaces the
+  global `fetch` when retrieving the DID log and `did-witness.json`, for
+  environments that cannot patch the global (React Native, proxied or
+  custom-TLS setups, test harnesses). `fetchLogFromIdentifier` and
+  `fetchWitnessProofs` take the same function as an optional second argument.
+  Ports upstream PR #195 (commits `d928f40`, `22639b3`).
+- `updateDID` and `deactivateDID` accept the same `fetch` option, threaded
+  into the resolution of the prior log alongside `witnessProofs`. This is a
+  fork extension; upstream exposes the override on resolution only.
+- `createDidWebvhDriver` accepts a `fetch` option, forwarded to every
+  resolution the did-io driver performs. A did-io caller can override it per
+  resolution with `resolveDID({ did, fetch })`; a non-function value is
+  reported as `invalidOptions`.
+- `createResolveVM` accepts `fetch` and `resolveControlledDid` options, used
+  to retrieve a `did:webvh` verification method's DID log (and, for `fetch`,
+  its `did-witness.json`). `resolveDID` threads both of its options into the
+  default VM resolver. The pair is exported as the `LogSourceOptions` type.
+
 ## 5.10.0 - 2026-09-16
 
 ### Added

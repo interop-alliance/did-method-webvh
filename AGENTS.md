@@ -170,6 +170,14 @@ new document-shaping option to `updateDID` must add it to
 `DOC_REPLACEMENT_OPTIONS` (if it replaces) or `DOC_OVERLAY_OPTIONS` (if it
 appends), or it will silently be ignored in authored mode.
 
+Upstream's v3.0 line (`059f5a5`, "remove deprecated interfaces and methods")
+makes `didDocument` mandatory and deletes the overlay options, `createDIDDoc`,
+`normalizeVMs`, and `createVMID`. Declined: this fork keeps both modes, and
+`did-cli-typescript` and `examples/signer.ts` depend on the overlay options.
+Its follow-ups (`38d556b`, `85ee316`, `0f69892`, the v3.0 docs) and its
+acceptance of `{SCID}`/`{DID}` placeholders in an authored update document are
+declined with it. Future sweeps should not re-raise them.
+
 ### `additionalContext` was added beside the `context` option
 
 `createDID`/`updateDID` accept an `additionalContext` option this fork added:

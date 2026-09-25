@@ -1,19 +1,14 @@
 import { beforeAll, describe, expect, test } from 'vitest';
-import type {
-  CreateDIDResult,
-  DataIntegrityProofTemplate,
-  DIDDoc,
-  DIDLog,
-  VerificationMethod,
-  WitnessProofFileEntry,
-} from '../src/interfaces.js';
+import type { CreateDIDResult, DIDDoc, DIDLog, VerificationMethod, WitnessProofFileEntry } from '../src/interfaces.js';
 import { createDID, deactivateDID, resolveDIDFromLog, updateDID } from '../src/method.js';
 import { createWitnessProof } from '../src/witness.js';
 import {
   asPublicVerificationMethods,
   createTestSigner,
+  createWitnessSigner,
   generateTestVerificationMethod,
   TestCryptoImplementation,
+  witnessVerificationMethod,
 } from './utils.js';
 
 describe('did:webvh normative tests', async () => {
@@ -97,30 +92,6 @@ describe('did:webvh normative witness tests', async () => {
   let witnessImpl1: TestCryptoImplementation,
     witnessImpl2: TestCryptoImplementation,
     witnessImpl3: TestCryptoImplementation;
-
-  const witnessVerificationMethod = (vm: VerificationMethod) =>
-    `did:key:${vm.publicKeyMultibase}#${vm.publicKeyMultibase}`;
-
-  const createWitnessSigner = (verificationMethod: VerificationMethod) => {
-    const signer = createTestSigner(verificationMethod);
-    return async (data: { versionId: string }, proofTemplate?: DataIntegrityProofTemplate) => {
-      const proof: DataIntegrityProofTemplate = {
-        type: 'DataIntegrityProof',
-        cryptosuite: 'eddsa-jcs-2022',
-        verificationMethod: signer.getVerificationMethodId(),
-        created: new Date().toISOString(),
-        proofPurpose: 'authentication',
-        ...proofTemplate,
-      };
-      const signResult = await signer.sign({ document: data, proof });
-      return {
-        proof: {
-          verificationMethod: signer.getVerificationMethodId(),
-          proofValue: signResult.proofValue,
-        },
-      };
-    };
-  };
 
   beforeAll(async () => {
     authKey1 = await generateTestVerificationMethod();

@@ -1,4 +1,10 @@
-import type { DIDLog, ParsedDidKeyVerificationMethod, WitnessProofFileEntry } from './interfaces.js';
+import type {
+  DIDLog,
+  FetchLike,
+  LogSourceOptions,
+  ParsedDidKeyVerificationMethod,
+  WitnessProofFileEntry,
+} from './interfaces.js';
 import { getFileUrl } from './utils/did-identifier.js';
 import { decodeEd25519Multikey, multibaseDecode } from './utils/multiformats.js';
 
@@ -211,10 +217,10 @@ export const writeLogToDisk = async (path: string, log: DIDLog) => {
   }
 };
 
-export async function fetchLogFromIdentifier(identifier: string): Promise<DIDLog> {
+export async function fetchLogFromIdentifier(identifier: string, fetchFn: FetchLike = fetch): Promise<DIDLog> {
   try {
     const url = getFileUrl(identifier);
-    const response = await fetch(url);
+    const response = await fetchFn(url);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -230,11 +236,20 @@ export async function fetchLogFromIdentifier(identifier: string): Promise<DIDLog
   }
 }
 
-export async function fetchWitnessProofs(did: string): Promise<WitnessProofFileEntry[]> {
+/**
+ * Loads a DID's log: the `resolveControlledDid` callback is consulted first,
+ * and an `undefined` result falls back to fetching over HTTPS (through the
+ * `fetch` override when one is given).
+ */
+export async function loadDIDLog(did: string, { resolveControlledDid, fetch }: LogSourceOptions): Promise<DIDLog> {
+  return (await resolveControlledDid?.(did)) ?? (await fetchLogFromIdentifier(did, fetch));
+}
+
+export async function fetchWitnessProofs(did: string, fetchFn: FetchLike = fetch): Promise<WitnessProofFileEntry[]> {
   try {
     const url = getFileUrl(did).replace('did.jsonl', 'did-witness.json');
 
-    const response = await fetch(url);
+    const response = await fetchFn(url);
     if (!response.ok) {
       return [];
     }

@@ -1,28 +1,37 @@
 import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
-import type { DIDLog, VerificationMethod } from '../src/interfaces.js';
-import { createDID, resolveDID } from '../src/method.js';
+import type { DIDLog, FetchLike, VerificationMethod } from '../src/interfaces.js';
+import { createDID, deactivateDID, resolveDID, updateDID } from '../src/method.js';
 import * as resolutionModule from '../src/method_versions/method.v1.0.resolution.js';
 import { fetchLogFromIdentifier, fetchWitnessProofs } from '../src/utils.js';
 import { defaultWebvhLogVerifier } from '../src/verifier.js';
-import { resolveVM } from '../src/vm-resolver.js';
+import { createResolveVM, resolveVM } from '../src/vm-resolver.js';
+import { createWitnessProof } from '../src/witness.js';
 import {
   asPublicVerificationMethods,
+  createRoutedFetchMock,
   createTestSigner,
+  createWitnessSigner,
   generateTestVerificationMethod,
+  nextSecond,
+  stubGlobalFetchUnused,
   TestCryptoImplementation,
+  witnessVerificationMethod,
 } from './utils.js';
 
 const toJsonl = (log: DIDLog) => log.map((entry) => JSON.stringify(entry)).join('\n');
 
-// Stub the global fetch with a single canned response, returning the mock so
-// tests can assert on the requested URL.
-const stubFetchResponse = (body: string, init: { ok?: boolean; status?: number } = {}) => {
-  const fetchMock = vi.fn().mockResolvedValue({
+const createFetchMock = (body: string, init: { ok?: boolean; status?: number } = {}) =>
+  vi.fn().mockResolvedValue({
     ok: init.ok ?? true,
     status: init.status ?? 200,
     text: async () => body,
     json: async () => JSON.parse(body),
-  });
+  }) as unknown as ReturnType<typeof vi.fn> & FetchLike;
+
+// Stub the global fetch with a single canned response, returning the mock so
+// tests can assert on the requested URL.
+const stubFetchResponse = (body: string, init: { ok?: boolean; status?: number } = {}) => {
+  const fetchMock = createFetchMock(body, init);
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
 };
@@ -64,6 +73,18 @@ describe('resolveDID over HTTPS', () => {
     expect(result.didDocument!.id).toBe(did);
     expect(result.didResolutionMetadata.error).toBeUndefined();
     expect(result.didResolutionMetadata.contentType).toBe('application/did+ld+json');
+  });
+
+  test('uses a custom fetch override when resolving a DID by identifier', async () => {
+    stubGlobalFetchUnused();
+    const customFetch = createFetchMock(toJsonl(log));
+
+    const result = await resolveDID(did, { verifier, fetch: customFetch });
+
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(result.didDocument?.id).toBe(did);
+    expect(result.didResolutionMetadata.error).toBeUndefined();
   });
 
   test('resolves from a caller-supplied controlled DID log without fetching', async () => {
@@ -194,6 +215,18 @@ describe('fetchLogFromIdentifier', () => {
     expect(fetchMock).toHaveBeenCalledWith('https://example.com/dids/issuer/did.jsonl');
     expect(fetched).toEqual(entries);
   });
+
+  test('uses a custom fetch override for DID log retrieval', async () => {
+    const entries = [{ versionId: '1-abc' }, { versionId: '2-def' }];
+    stubGlobalFetchUnused();
+    const customFetch = createFetchMock(entries.map((entry) => JSON.stringify(entry)).join('\n'));
+
+    const fetched = await fetchLogFromIdentifier('did:webvh:scid123:example.com:dids:issuer', customFetch);
+
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/dids/issuer/did.jsonl');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(fetched).toEqual(entries);
+  });
 });
 
 describe('fetchWitnessProofs', () => {
@@ -209,6 +242,18 @@ describe('fetchWitnessProofs', () => {
     const result = await fetchWitnessProofs('did:webvh:scid123:example.com');
 
     expect(fetchMock).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json');
+    expect(result).toEqual(proofs);
+  });
+
+  test('uses a custom fetch override for witness proof retrieval', async () => {
+    const proofs = [{ versionId: '1-abc', proof: [] }];
+    stubGlobalFetchUnused();
+    const customFetch = createFetchMock(JSON.stringify(proofs));
+
+    const result = await fetchWitnessProofs('did:webvh:scid123:example.com', customFetch);
+
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
     expect(result).toEqual(proofs);
   });
 
@@ -319,5 +364,131 @@ describe('resolveVM', () => {
     await expect(resolveVM('did:web:example.com#key-1')).rejects.toThrow(
       'Error resolving VM did:web:example.com#key-1'
     );
+  });
+});
+
+describe('fetch override threading', () => {
+  let authKey: VerificationMethod;
+  let witnessKey: VerificationMethod;
+  let verifier: TestCryptoImplementation;
+  let did: string;
+  let log: DIDLog;
+  let witnessFile: string;
+
+  beforeAll(async () => {
+    authKey = await generateTestVerificationMethod();
+    witnessKey = await generateTestVerificationMethod();
+    verifier = new TestCryptoImplementation({ verificationMethod: authKey });
+    ({ did, log } = await createDID({
+      address: 'example.com',
+      signer: createTestSigner(authKey),
+      updateKeys: [authKey.publicKeyMultibase!],
+      verificationMethods: asPublicVerificationMethods(authKey),
+      witness: { threshold: 1, witnesses: [{ id: `did:key:${witnessKey.publicKeyMultibase}` }] },
+      verifier,
+    }));
+    const proof = await createWitnessProof(
+      createWitnessSigner(witnessKey),
+      log[0].versionId,
+      witnessVerificationMethod(witnessKey)
+    );
+    witnessFile = JSON.stringify([{ versionId: log[0].versionId, proof: [proof] }]);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  test('resolveDID retrieves did-witness.json through the fetch override', async () => {
+    stubGlobalFetchUnused();
+    const customFetch = createRoutedFetchMock({ 'did.jsonl': toJsonl(log), 'did-witness.json': witnessFile });
+
+    const result = await resolveDID(did, { verifier, fetch: customFetch });
+
+    expect(result.didResolutionMetadata.error).toBeUndefined();
+    expect(result.didDocument?.id).toBe(did);
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl');
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  test('updateDID resolves the prior log with the fetch override', async () => {
+    stubGlobalFetchUnused();
+    const customFetch = createRoutedFetchMock({ 'did-witness.json': witnessFile });
+
+    const updated = await updateDID({
+      log,
+      updated: nextSecond(log),
+      signer: createTestSigner(authKey),
+      updateKeys: [authKey.publicKeyMultibase!],
+      verificationMethods: asPublicVerificationMethods(authKey),
+      verifier,
+      fetch: customFetch,
+    });
+
+    expect(updated.log).toHaveLength(2);
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  test('deactivateDID resolves the prior log with the fetch override', async () => {
+    stubGlobalFetchUnused();
+    const customFetch = createRoutedFetchMock({ 'did-witness.json': witnessFile });
+
+    const deactivated = await deactivateDID({
+      log,
+      signer: createTestSigner(authKey),
+      updateKeys: [authKey.publicKeyMultibase!],
+      verifier,
+      fetch: customFetch,
+    });
+
+    expect(deactivated.meta.deactivated).toBe(true);
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  test('createResolveVM retrieves a did:webvh VM log through the fetch override', async () => {
+    stubGlobalFetchUnused();
+    const customFetch = createRoutedFetchMock({ 'did.jsonl': toJsonl(log), 'did-witness.json': witnessFile });
+    const vmId = log[0].state.verificationMethod![0].id!;
+    expect(vmId.startsWith(`${did}#`)).toBe(true);
+
+    const resolved = await createResolveVM({ fetch: customFetch })(vmId);
+
+    expect(resolved?.publicKeyMultibase).toBe(authKey.publicKeyMultibase);
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl');
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  test('createResolveVM consults resolveControlledDid before fetching the VM log', async () => {
+    stubGlobalFetchUnused();
+    const customFetch = createRoutedFetchMock({ 'did-witness.json': witnessFile });
+    const resolveControlledDid = vi.fn(async (requested: string) => (requested === did ? log : undefined));
+    const vmId = log[0].state.verificationMethod![0].id!;
+
+    const resolved = await createResolveVM({ fetch: customFetch, resolveControlledDid })(vmId);
+
+    expect(resolved?.publicKeyMultibase).toBe(authKey.publicKeyMultibase);
+    expect(resolveControlledDid).toHaveBeenCalledWith(did);
+    expect(customFetch).not.toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl');
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  test('createResolveVM falls back to fetching when resolveControlledDid returns undefined', async () => {
+    stubGlobalFetchUnused();
+    const customFetch = createRoutedFetchMock({ 'did.jsonl': toJsonl(log), 'did-witness.json': witnessFile });
+    const resolveControlledDid = vi.fn(async () => undefined);
+    const vmId = log[0].state.verificationMethod![0].id!;
+
+    const resolved = await createResolveVM({ fetch: customFetch, resolveControlledDid })(vmId);
+
+    expect(resolved?.publicKeyMultibase).toBe(authKey.publicKeyMultibase);
+    expect(resolveControlledDid).toHaveBeenCalledWith(did);
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 });

@@ -222,7 +222,14 @@ Pass `options.resolveControlledDid` (an async `(did) => DIDLog | undefined`)
 to serve logs the resolver controls itself, such as from local storage. When it
 returns a log, the fetch is skipped; when it returns `undefined`, the library
 fetches over HTTPS as usual. Either way the log goes through the same SCID and
-requested-DID checks.
+requested-DID checks. The same callback is consulted when a `did:webvh`
+verification method's log is needed during proof verification.
+Pass `options.fetch` (a `FetchLike` function) to replace the global `fetch`
+used to retrieve the DID log, `did-witness.json`, and any `did:webvh`
+verification method's log. This suits environments that cannot patch the
+global, such as React Native, proxied or custom-TLS setups, and test
+harnesses. `updateDID`, `deactivateDID`, and `createDidWebvhDriver` accept
+the same option.
 
 -
 `resolveDIDFromLog(log: DIDLog, options?: ResolutionOptions): Promise<{did: string, doc: any, meta: DIDResolutionMeta}>`
