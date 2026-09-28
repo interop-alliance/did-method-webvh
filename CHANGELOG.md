@@ -1,3 +1,12 @@
+## 5.11.1 - TBD
+
+### Changed
+
+- `FetchLike` returns `Pick<Response, 'ok' | 'status' | 'text' | 'json'>`
+  instead of a full `Response`: the members the resolver reads. An adapter
+  over another HTTP client no longer needs a cast. The global `fetch` still
+  satisfies the type.
+
 ## 5.11.0 - 2026-09-25
 
 ### Added

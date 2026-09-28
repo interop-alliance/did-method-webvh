@@ -43,8 +43,16 @@ export interface Verifier {
   verify(signature: Uint8Array, message: Uint8Array, publicKey: Uint8Array): Promise<boolean>;
 }
 
-/** A fetch-compatible function used by the resolver for HTTP retrieval. */
-export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+/**
+ * A fetch-compatible function used by the resolver for HTTP retrieval. The
+ * resolver reads only `ok`, `status`, `text()` and `json()` from the
+ * response, so an adapter over another HTTP client need not build a full
+ * `Response`. The global `fetch` still satisfies this type.
+ */
+export type FetchLike = (
+  input: string,
+  init?: RequestInit
+) => Promise<Pick<Response, 'ok' | 'status' | 'text' | 'json'>>;
 
 /**
  * Resolves a proof's `verificationMethod` id to its key material. The default

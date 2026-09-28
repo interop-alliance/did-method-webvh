@@ -229,7 +229,9 @@ used to retrieve the DID log, `did-witness.json`, and any `did:webvh`
 verification method's log. This suits environments that cannot patch the
 global, such as React Native, proxied or custom-TLS setups, and test
 harnesses. `updateDID`, `deactivateDID`, and `createDidWebvhDriver` accept
-the same option.
+the same option. The resolver reads only `ok`, `status`, `text()` and
+`json()` from the response, so an adapter over another HTTP client can return
+a plain object with those members.
 
 -
 `resolveDIDFromLog(log: DIDLog, options?: ResolutionOptions): Promise<{did: string, doc: any, meta: DIDResolutionMeta}>`
