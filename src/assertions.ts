@@ -132,6 +132,53 @@ export const newKeysAreInNextKeys = async (updateKeys: string[], previousNextKey
   }
 };
 
+const isEd25519Multikey = (value: string): boolean => {
+  try {
+    decodeEd25519Multikey(value);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Validates a `nextKeyHashes` list: every entry must be a bare base58btc
+ * SHA-256 multihash, as produced by `deriveNextKeyHash`. Rejects a `did:key`
+ * or multikey passed in place of its hash, which would otherwise yield a log
+ * that can no longer rotate keys. Returns a fresh copy of the list.
+ */
+export const assertValidNextKeyHashes = (nextKeyHashes: unknown, context = 'nextKeyHashes'): string[] => {
+  if (!Array.isArray(nextKeyHashes)) {
+    throw new Error(`${context} must be an array of derived pre-rotation key hashes`);
+  }
+
+  return nextKeyHashes.map((nextKeyHash, index) => {
+    const label = `${context}[${index}]`;
+    if (typeof nextKeyHash !== 'string' || nextKeyHash.length === 0) {
+      throw new Error(`${label} must be a non-empty derived pre-rotation key hash`);
+    }
+
+    if (nextKeyHash.startsWith('did:key:')) {
+      throw new Error(
+        `${label} must be a derived pre-rotation key hash, not a did:key. Use deriveNextKeyHash() first.`
+      );
+    }
+
+    try {
+      decodeMultihash(decodeBase58Btc(nextKeyHash), MultihashAlgorithm.SHA2_256);
+    } catch (hashError) {
+      if (isEd25519Multikey(nextKeyHash)) {
+        throw new Error(
+          `${label} must be a derived pre-rotation key hash, not an Ed25519 multikey. Use deriveNextKeyHash() first.`
+        );
+      }
+      const message = hashError instanceof Error ? hashError.message : String(hashError);
+      throw new Error(`${label} must be a base58btc-encoded SHA-256 multihash: ${message}`);
+    }
+    return nextKeyHash;
+  });
+};
+
 /**
  * Validate that SCID uses SHA-256 (0x12) multihash algorithm.
  * Per spec: "SHA-256 [[spec:rfc6234]] (multihash code `0x12`) **only**"

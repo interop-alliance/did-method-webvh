@@ -1,6 +1,7 @@
 /// <reference lib="dom" />
 import { sha256 } from '@noble/hashes/sha2.js';
 import { canonicalizeStrict } from './canonicalize.js';
+import { normalizeEd25519Multikey } from './did-key.js';
 import { createMultihash, encodeBase58Btc, MultihashAlgorithm } from './multiformats.js';
 
 const encoder = new TextEncoder();
@@ -58,12 +59,22 @@ export async function deriveHash(input: unknown): Promise<string> {
 }
 
 /**
- * Derives a `nextKeyHashes` entry from an update key (its `did:key`
- * multibase). Returns the spec's bare base58btc multihash, NOT `z`-prefixed
- * multibase -- did:webvh 1.0 mandates `nextKeyHashes` entries be multihash
- * base58btc. Do NOT multibase-encode the result; the asymmetry with every
- * other `z`-prefixed value in this API is intentional and spec-required.
+ * Derives a `nextKeyHashes` entry from an update key. Accepts a bare Ed25519
+ * multikey, a `did:key:` DID, or a `did:key:` verification method id; all
+ * three hash the bare multikey, so they yield the same entry. Throws when the
+ * input is not a 32-byte Ed25519 multikey. Returns the spec's bare base58btc
+ * multihash, NOT `z`-prefixed multibase -- did:webvh 1.0 mandates
+ * `nextKeyHashes` entries be multihash base58btc. Do NOT multibase-encode the
+ * result; the asymmetry with every other `z`-prefixed value in this API is
+ * intentional and spec-required.
  */
 export const deriveNextKeyHash = async (input: string): Promise<string> => {
-  return toBase58Multihash(await createHash(input));
+  let keyMultibase: string;
+  try {
+    keyMultibase = normalizeEd25519Multikey(input);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`Invalid next key: ${message}`);
+  }
+  return toBase58Multihash(await createHash(keyMultibase));
 };

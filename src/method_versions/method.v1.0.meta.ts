@@ -2,6 +2,7 @@
  * Shared parameter-derived state helpers for the v1.0 method implementation,
  * used by both the write path (create/update/deactivate) and the resolver.
  */
+import { assertValidNextKeyHashes } from '../assertions.js';
 import { DEFAULT_TTL_SECONDS } from '../constants.js';
 import type { DIDLogEntry, DIDResolutionMeta } from '../interfaces.js';
 import { resolveWitnessParameter } from '../witness.js';
@@ -43,9 +44,11 @@ export const parseGenesisParameters = (parameters: DIDLogEntry['parameters']): G
  * entry (no `previousMeta`) seeds every field, enforcing the
  * {@link parseGenesisParameters} invariant; subsequent entries inherit absent
  * parameters from the previous meta. All other validation (portability,
- * pre-rotation, witness rules) stays with the resolver. Parameter arrays and
- * the witness object are copied so meta never aliases the entry: mutating one
- * cannot corrupt the other.
+ * pre-rotation, witness rules) stays with the resolver, except the format of
+ * `nextKeyHashes` entries, which is checked here so the write path and the
+ * resolver reject the same logs. Parameter arrays and the witness object are
+ * copied so meta never aliases the entry: mutating one cannot corrupt the
+ * other.
  */
 export const applyEntryToMeta = (entry: DIDLogEntry, previousMeta?: DIDResolutionMeta): DIDResolutionMeta => {
   const { parameters } = entry;
@@ -54,7 +57,7 @@ export const applyEntryToMeta = (entry: DIDLogEntry, previousMeta?: DIDResolutio
 
   if (!previousMeta) {
     const { scid, updateKeys } = parseGenesisParameters(parameters);
-    const nextKeyHashes = [...(parameters.nextKeyHashes ?? [])];
+    const nextKeyHashes = assertValidNextKeyHashes(parameters.nextKeyHashes ?? []);
     return {
       versionId: entry.versionId,
       versionTime: entry.versionTime,
@@ -73,7 +76,9 @@ export const applyEntryToMeta = (entry: DIDLogEntry, previousMeta?: DIDResolutio
   }
 
   const nextKeyHashes =
-    'nextKeyHashes' in parameters ? [...(parameters.nextKeyHashes ?? [])] : previousMeta.nextKeyHashes;
+    'nextKeyHashes' in parameters
+      ? assertValidNextKeyHashes(parameters.nextKeyHashes ?? [])
+      : previousMeta.nextKeyHashes;
   return {
     ...previousMeta,
     versionId: entry.versionId,

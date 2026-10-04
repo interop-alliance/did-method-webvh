@@ -1,4 +1,4 @@
-import { documentStateIsValid, newKeysAreInNextKeys } from '../assertions.js';
+import { assertValidNextKeyHashes, documentStateIsValid, newKeysAreInNextKeys } from '../assertions.js';
 import { DID_PLACEHOLDER, METHOD_PROTOCOL_V1_0, PLACEHOLDER, VERIFICATION_RELATIONSHIPS } from '../constants.js';
 import { createDataIntegrityProofTemplate, signDataIntegrityProof } from '../cryptography.js';
 import {
@@ -205,7 +205,7 @@ export async function prepareGenesisEntry({
       scid: PLACEHOLDER,
       updateKeys: options.updateKeys,
       portable: options.portable ?? false,
-      nextKeyHashes: options.nextKeyHashes ?? [],
+      nextKeyHashes: assertValidNextKeyHashes(options.nextKeyHashes ?? []),
       watchers: options.watchers ?? [],
       witness: options.witness ?? {},
       deactivated: false,
@@ -271,7 +271,7 @@ export async function prepareUpdateEntry({
     ...(options.updateKeys !== undefined || lastMeta.prerotation
       ? { updateKeys: options.updateKeys ?? lastMeta.updateKeys }
       : {}),
-    ...(options.nextKeyHashes !== undefined ? { nextKeyHashes: options.nextKeyHashes } : {}),
+    ...(options.nextKeyHashes !== undefined ? { nextKeyHashes: assertValidNextKeyHashes(options.nextKeyHashes) } : {}),
     ...(options.portable === false ? { portable: false } : {}),
     witness,
     watchers: watchersValue ?? [],

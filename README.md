@@ -354,9 +354,14 @@ Signs did-witness proof entries for multiple target versions.
   Converts a `did:webvh:<scid>:<host>...` id to its parallel `did:web:<host>...`
   id.
 
-- `deriveNextKeyHash(publicKeyMultibase: string): Promise<string>`
-  Derives a `nextKeyHashes` entry. Returns the spec's **bare base58btc**
-  multihash (NOT `z`-prefixed multibase); do not multibase-encode it.
+- `deriveNextKeyHash(key: string): Promise<string>`
+  Derives a `nextKeyHashes` entry. Accepts a bare Ed25519 multikey, a
+  `did:key` DID, or a `did:key` verification method id, and throws for
+  anything else. Returns the spec's **bare base58btc** multihash (NOT
+  `z`-prefixed multibase); do not multibase-encode it. The `nextKeyHashes`
+  option of `createDID`/`updateDID` and the `nextKeyHashes` parameter of a
+  resolved log must hold these derived hashes. A `did:key` or multikey passed
+  in their place is rejected.
 
 ## License
 

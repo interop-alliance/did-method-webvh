@@ -1,5 +1,11 @@
 import { beforeAll, describe, expect, test, vi } from 'vitest';
-import { documentStateIsValid, hashChainIsValid, newKeysAreInNextKeys, scidIsFromHash } from '../src/assertions.js';
+import {
+  assertValidNextKeyHashes,
+  documentStateIsValid,
+  hashChainIsValid,
+  newKeysAreInNextKeys,
+  scidIsFromHash,
+} from '../src/assertions.js';
 import {
   AbstractCrypto,
   createDataIntegrityProofTemplate,
@@ -15,6 +21,7 @@ import type {
   Verifier,
 } from '../src/interfaces.js';
 import { createDID } from '../src/method.js';
+import { applyEntryToMeta } from '../src/method_versions/method.v1.0.meta.js';
 import { createHash, deriveHash, deriveNextKeyHash } from '../src/utils/crypto.js';
 import {
   createMultihash,
@@ -434,6 +441,57 @@ describe('Assertion Guards', () => {
   test('newKeysAreInNextKeys throws when update key hash is not pre-committed', async () => {
     const unrelatedHash = await deriveNextKeyHash('z6Mkp6hULXj3f4P7vLQxqqQF6q2SCMXt9vEmx5R6M1sQ8YvY');
     await expect(newKeysAreInNextKeys([updateKey], [unrelatedHash])).rejects.toThrow('Invalid update key');
+  });
+
+  test('deriveNextKeyHash normalizes supported update key forms', async () => {
+    const bareHash = await deriveNextKeyHash(updateKey);
+    expect(bareHash).toBe(encodeBase58Btc(createMultihash(await createHash(updateKey), MultihashAlgorithm.SHA2_256)));
+    await expect(deriveNextKeyHash(`did:key:${updateKey}`)).resolves.toBe(bareHash);
+    await expect(deriveNextKeyHash(`did:key:${updateKey}#${updateKey}`)).resolves.toBe(bareHash);
+  });
+
+  test('deriveNextKeyHash rejects a 32-byte X25519 public key', async () => {
+    const multikey = multibaseEncode(new Uint8Array([0xec, 0x01, ...new Uint8Array(32)]), MultibaseEncoding.BASE58_BTC);
+
+    await expect(deriveNextKeyHash(multikey)).rejects.toThrow(
+      'Invalid next key: Unexpected multikey codec: expected 0xed, got 0xec'
+    );
+  });
+
+  test('deriveNextKeyHash rejects Ed25519 public key material of the wrong length', async () => {
+    for (const keyLength of [0, 31, 33]) {
+      const multikey = multibaseEncode(
+        new Uint8Array([0xed, 0x01, ...new Uint8Array(keyLength)]),
+        MultibaseEncoding.BASE58_BTC
+      );
+
+      for (const input of [multikey, `did:key:${multikey}`, `did:key:${multikey}#${multikey}`]) {
+        await expect(deriveNextKeyHash(input)).rejects.toThrow('Invalid next key: ');
+      }
+    }
+  });
+
+  test('assertValidNextKeyHashes rejects did:key and multikey values', async () => {
+    const nextKeyHash = await deriveNextKeyHash(updateKey);
+
+    expect(assertValidNextKeyHashes([nextKeyHash])).toEqual([nextKeyHash]);
+    expect(() => assertValidNextKeyHashes([`did:key:${updateKey}`])).toThrow(
+      'must be a derived pre-rotation key hash, not a did:key'
+    );
+    expect(() => assertValidNextKeyHashes([updateKey])).toThrow(
+      'must be a derived pre-rotation key hash, not an Ed25519 multikey'
+    );
+    expect(() => assertValidNextKeyHashes(['zInjectedHash'])).toThrow('must be a base58btc-encoded SHA-256 multihash');
+    expect(() => assertValidNextKeyHashes('not-an-array')).toThrow('must be an array');
+  });
+
+  test('applyEntryToMeta rejects log entries whose nextKeyHashes are not derived hashes', async () => {
+    const entry = (parameters: DIDLogEntry['parameters']): DIDLogEntry => ({ ...makeDoc(null), parameters });
+    const genesis = entry({ scid: 'QmTest', updateKeys: [updateKey], nextKeyHashes: [updateKey] });
+    expect(() => applyEntryToMeta(genesis)).toThrow('not an Ed25519 multikey');
+
+    const meta = applyEntryToMeta(entry({ scid: 'QmTest', updateKeys: [updateKey] }));
+    expect(() => applyEntryToMeta(entry({ nextKeyHashes: [`did:key:${updateKey}`] }), meta)).toThrow('not a did:key');
   });
 
   test('scidIsFromHash throws for invalid SCID format', async () => {

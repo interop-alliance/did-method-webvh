@@ -1,3 +1,19 @@
+## 5.12.0 - TBD
+
+### Changed
+
+- `nextKeyHashes` entries are validated as bare base58btc SHA-256 multihashes
+  in `createDID`, `updateDID`, and log resolution. A `did:key` or multikey
+  passed in place of its derived hash is rejected with a pointer to
+  `deriveNextKeyHash`, instead of producing a log that cannot rotate keys. A
+  log carrying malformed `nextKeyHashes` no longer resolves. Ports upstream
+  PR #197 (commits `cfe2285`, `e740701`, `fc19ae9`).
+- `deriveNextKeyHash` accepts a bare Ed25519 multikey, a `did:key` DID, or a
+  `did:key` verification method id, and hashes the bare multikey in all three
+  cases. Any other input throws `Invalid next key: <cause>`. Because
+  pre-rotation checks derive hashes from `updateKeys`, a pre-rotation log
+  whose `updateKeys` are not Ed25519 multikeys now fails with that error.
+
 ## 5.11.1 - 2026-09-28
 
 ### Changed

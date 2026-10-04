@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { createDID, updateDID } from '../src/method.js';
+import { deriveNextKeyHash } from '../src/utils/crypto.js';
 import {
   asPublicVerificationMethods,
   createTestSigner,
@@ -248,6 +249,7 @@ describe('Happy Path Tests', () => {
 
   test('Update DID with future update key', async () => {
     const authKey1 = await generateTestVerificationMethod();
+    const authKey2 = await generateTestVerificationMethod();
     const verifier = new TestCryptoImplementation({ verificationMethod: authKey1 });
 
     const { log: initialLog } = await createDID({
@@ -258,7 +260,7 @@ describe('Happy Path Tests', () => {
       verifier,
     });
 
-    const nextKeyHash = 'z6MkgYGF3thn8k1Qz9P4c3mKthZXNhUgkdwBwE5hbWFJktGH';
+    const nextKeyHash = await deriveNextKeyHash(authKey2.publicKeyMultibase!);
     const { doc: updatedDoc, meta } = await updateDID({
       log: initialLog,
       updated: nextSecond(initialLog),
@@ -270,6 +272,23 @@ describe('Happy Path Tests', () => {
 
     expect(meta.nextKeyHashes).toHaveLength(1);
     expect(meta.nextKeyHashes[0]).toBe(nextKeyHash);
+  });
+
+  test('Create DID rejects update keys passed as nextKeyHashes', async () => {
+    const authKey1 = await generateTestVerificationMethod();
+    const authKey2 = await generateTestVerificationMethod();
+    const verifier = new TestCryptoImplementation({ verificationMethod: authKey1 });
+
+    await expect(
+      createDID({
+        address: 'example.com',
+        signer: createTestSigner(authKey1),
+        updateKeys: [authKey1.publicKeyMultibase!],
+        verificationMethods: asPublicVerificationMethods(authKey1),
+        nextKeyHashes: [`did:key:${authKey2.publicKeyMultibase}`],
+        verifier,
+      })
+    ).rejects.toThrow('must be a derived pre-rotation key hash, not a did:key');
   });
 
   test('Update DID with explicit assertionMethod option', async () => {
