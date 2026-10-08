@@ -67,6 +67,10 @@ export function validateSingleVersionSelector(options: {
  * supported combined selector: "the document containing this method around
  * this time".) The single entry into `resolveV1Log` calls this, so the
  * in-memory and HTTPS paths reject conflicting selectors identically.
+ *
+ * A versioned verification-method DID URL (`<did>?versionId=<id>#<fragment>`)
+ * is a dereference, not a selector combination, and does not pass through
+ * this check.
  */
 export function validateResolutionSelectors(options: {
   versionId?: string;

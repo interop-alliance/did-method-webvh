@@ -1,3 +1,38 @@
+## 5.13.0 - TBD
+
+### Added
+
+- `dereferenceVerificationMethod(log, didUrl)` answers a verification-method
+  DID URL of the form `did:webvh:<scid>:<host>?versionId=<id>#<fragment>`
+  over an already-loaded log. It returns the member `<document id>#<fragment>`
+  of the document at that version, or of the latest document when the
+  `versionId` parameter is absent, and `null` when the version or the member
+  does not exist. The member is matched by the document's own id, so a
+  portable DID's pre-move versions are reachable under the current DID. It
+  makes no network request and does not verify the log; the caller passes a
+  log it has already verified.
+- `parseVerificationMethodUrl(didUrl)` splits such a URL into its bare DID,
+  the optional `versionId`, and the optional fragment. A query carrying any
+  other DID parameter throws, as does a repeated, valueless, or empty
+  `versionId`, or an empty query.
+
+### Changed
+
+- `createResolveVM` (and so `resolveVM`) accepts a versioned `did:webvh`
+  verification-method DID URL. It resolves the log with the `versionId`
+  selector and dereferences the member from that version's document by the
+  document's own id. Previously the query was kept as part of the DID and the
+  lookup failed. The URL's DID must be the selected document's id or a DID
+  the log has moved from. A URL naming no member rejects for both forms
+  (previously the unversioned form could resolve to `null`). The returned
+  member is a copy, not a reference into the loaded log. The log is loaded
+  once per bare DID within one resolver instance, so the versioned and
+  unversioned forms of one DID share a fetch.
+- The did-io driver's `get({ url })` honors `?versionId=` and dereferences the
+  fragment in the document at that version. Previously the query was dropped
+  and the fragment was looked up in the latest document. Unsupported DID
+  parameters now throw instead of being ignored.
+
 ## 5.12.0 - 2026-10-03
 
 ### Changed

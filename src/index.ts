@@ -9,6 +9,7 @@ export {
   signerFromDidKeySigner,
   signerFromExternalKey,
 } from './cryptography.js';
+export { dereferenceVerificationMethod, parseVerificationMethodUrl } from './dereference.js';
 export { convertWebvhIdToWebId, createVMID, generateParallelDidWeb } from './did-document.js';
 export * from './interfaces.js';
 export { createDID, deactivateDID, resolveDID, resolveDIDFromLog, updateDID } from './method.js';

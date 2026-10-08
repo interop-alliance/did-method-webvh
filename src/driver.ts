@@ -17,6 +17,7 @@
 
 import type { IDIDResolutionResult } from '@interop/data-integrity-core';
 import { DIDResolutionError } from '@interop/data-integrity-core';
+import { parseVerificationMethodUrl } from './dereference.js';
 import { hasMatchingId } from './did-document.js';
 import type { DIDDoc, FetchLike, Verifier } from './interfaces.js';
 import { resolveDID } from './method.js';
@@ -73,7 +74,10 @@ function dereferenceFragment(doc: DIDDoc, id: string): Record<string, unknown> {
 /**
  * Builds a did-io-compatible `did:webvh` driver for a document loader's
  * resolver. A bare DID resolves to its DID document; a `did#fragment` URL is
- * dereferenced straight to its verification-method (or service) node.
+ * dereferenced straight to its verification-method (or service) node. A
+ * `did?versionId=<id>#fragment` URL dereferences the node in the document at
+ * that version, found by the document's own id, so a portable DID's earlier
+ * versions are reachable under the current DID.
  *
  * Resolution failures in `get()` throw a `DIDResolutionError` (from
  * `@interop/data-integrity-core`) carrying the resolution error `code` and RFC
@@ -110,11 +114,14 @@ export function createDidWebvhDriver({
       if (!didOrUrl) {
         throw new TypeError('A DID or a URL is required to resolve.');
       }
-      // Separate the bare DID from any `?query` or `#fragment`.
-      const [didAuthority = ''] = didOrUrl.split(/[#?]/);
-      const fragment = didOrUrl.includes('#') ? didOrUrl.slice(didOrUrl.indexOf('#') + 1) : undefined;
+      // Any DID parameter other than `versionId` is rejected by the parser.
+      const { did: didAuthority, versionId, fragment } = parseVerificationMethodUrl(didOrUrl);
 
-      const { didDocument, didResolutionMetadata } = await resolveDID(didAuthority, { verifier, fetch: fetchFn });
+      const { didDocument, didResolutionMetadata } = await resolveDID(didAuthority, {
+        verifier,
+        fetch: fetchFn,
+        versionId,
+      });
       // The envelope's IDIDDocument is structurally stricter than this
       // package's DIDDoc; narrow back at this single boundary.
       const doc = didDocument as unknown as DIDDoc | null;

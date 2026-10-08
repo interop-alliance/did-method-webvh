@@ -2,13 +2,14 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 import { createDidWebvhDriver, defaultWebvhLogVerifier } from '../src/driver.js';
 import type { DIDLog, FetchLike, VerificationMethod } from '../src/interfaces.js';
-import { createDID } from '../src/method.js';
+import { createDID, updateDID } from '../src/method.js';
 import { logToJsonlString } from '../src/utils.js';
 import {
   asPublicVerificationMethods,
   createRoutedFetchMock,
   createTestSigner,
   generateTestVerificationMethod,
+  nextSecond,
   stubGlobalFetchUnused,
   TestCryptoImplementation,
 } from './utils.js';
@@ -100,6 +101,41 @@ describe('createDidWebvhDriver', () => {
 
     expect(result.didDocument).toBeNull();
     expect(result.didResolutionMetadata.error).toBe('invalidOptions');
+  });
+
+  test('get() dereferences a versioned URL in the document at that version', async () => {
+    const key2 = await generateTestVerificationMethod('assertionMethod');
+    const signer = createTestSigner(authKey);
+    const created = await createDID({
+      address: 'example.com',
+      signer,
+      verifier,
+      updateKeys: [authKey.publicKeyMultibase!],
+      verificationMethods: asPublicVerificationMethods(authKey, key2),
+    });
+    const updated = await updateDID({
+      log: created.log,
+      updated: nextSecond(created.log),
+      signer,
+      verifier,
+      updateKeys: [authKey.publicKeyMultibase!],
+      verificationMethods: asPublicVerificationMethods(authKey),
+    });
+    const key2Id = updated.log[0].state.verificationMethod!.find(
+      (vm) => vm.publicKeyMultibase === key2.publicKeyMultibase
+    )!.id!;
+    const fragment = key2Id.slice(key2Id.indexOf('#') + 1);
+    vi.stubGlobal('fetch', logFetchMock(updated.log));
+    const driver = createDidWebvhDriver({ verifier });
+
+    const node = await driver.get({ url: `${created.did}?versionId=${updated.log[0].versionId}#${fragment}` });
+    expect(node).toMatchObject({ id: key2Id, publicKeyMultibase: key2.publicKeyMultibase });
+
+    await expect(driver.get({ url: `${created.did}#${fragment}` })).rejects.toThrow(/not found/);
+    await expect(driver.get({ url: `${created.did}?versionId=9-unknown#${fragment}` })).rejects.toThrow();
+    await expect(driver.get({ url: `${created.did}?versionTime=2024-01-01T00:00:00Z#${fragment}` })).rejects.toThrow(
+      /Unsupported DID parameter/
+    );
   });
 
   test('get() resolves a clean log', async () => {
