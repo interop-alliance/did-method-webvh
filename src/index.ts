@@ -27,6 +27,7 @@ export {
 export { canonicalizeStrict } from './utils/canonicalize.js';
 export { deriveHash, deriveNextKeyHash } from './utils/crypto.js';
 export { MultibaseEncoding, multibaseDecode, multibaseEncode } from './utils/multiformats.js';
+export { replaceValueInObject } from './utils/object.js';
 export {
   buildVersionId,
   getBaseUrl,

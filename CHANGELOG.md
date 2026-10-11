@@ -1,3 +1,14 @@
+## 5.14.0 - TBD
+
+### Added
+
+- `replaceValueInObject(obj, searchValue, replaceValue)` is exported from the
+  package root. It is the structural string substitution the resolver uses to
+  recompute a SCID (every occurrence of `searchValue` in every string reachable
+  from `obj`, returned as a fresh structure), so a consumer verifying a
+  did:webvh-shaped log can run the same substitution instead of re-deriving
+  it.
+
 ## 5.13.0 - 2026-10-08
 
 ### Added
