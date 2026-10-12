@@ -1,4 +1,9 @@
-import { hashCanonicalDocument, prepareDataForSigning, validateWebvhProofShape } from './cryptography.js';
+import {
+  hashCanonicalDocument,
+  prepareDataForSigning,
+  resolvePublicKeyMultibase,
+  validateWebvhProofShape,
+} from './cryptography.js';
 import type { DataIntegrityProof, DIDLogEntry, ResolveVerificationMethod, Verifier } from './interfaces.js';
 import { deriveNextKeyHash } from './utils/crypto.js';
 import {
@@ -66,12 +71,7 @@ export const verifyEntryProofs = async (
       return `Unknown cryptosuite ${value}`;
     });
 
-    const vm = await resolveVM(proof.verificationMethod);
-    if (!vm?.publicKeyMultibase) {
-      throw new Error(`Verification Method ${proof.verificationMethod} not found`);
-    }
-
-    const publicKey = decodeEd25519Multikey(vm.publicKeyMultibase);
+    const publicKey = decodeEd25519Multikey(await resolvePublicKeyMultibase(resolveVM, proof.verificationMethod));
 
     const { proofValue, ...restProof } = proof;
     const signature = multibaseDecode(proofValue).bytes;

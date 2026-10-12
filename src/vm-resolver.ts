@@ -7,6 +7,7 @@
  * `countVerifiedWitnessApprovals` take the resolver as an option) instead of
  * the shared bottom modules importing the top of the stack.
  */
+import { VerificationMethodError } from '@interop/data-integrity-core';
 import { parseVerificationMethodUrl } from './dereference.js';
 import { findVerificationMethod } from './did-document.js';
 import type { DIDLog, LogSourceOptions, ResolveVerificationMethod, VerificationMethod } from './interfaces.js';
@@ -35,7 +36,8 @@ const resolveWebvhVM = async (
   options: LogSourceOptions
 ): Promise<VerificationMethod> => {
   const { did, versionId, fragment } = parseVerificationMethodUrl(vm);
-  const notFound = () => new Error(`Verification method ${vm} not found`);
+  const notFound = () =>
+    new VerificationMethodError(`Verification method ${vm} not found`, { code: 'notFound', verificationMethod: vm });
   if (fragment === undefined) {
     throw notFound();
   }
@@ -112,8 +114,16 @@ export const createResolveVM = (options: LogSourceOptions = {}): ResolveVerifica
         return await memoized(members, vm, () => resolveWebvhVM(vm, loadLog, resolve, options));
       }
       throw new Error(`Verification method ${vm} not found`);
-    } catch {
-      throw new Error(`Error resolving VM ${vm}`);
+    } catch (error) {
+      // A typed verification-method fault passes through unchanged so callers
+      // can branch on its `name`/`code`; anything else (fetch, parse,
+      // log-validation failures) is wrapped. Matched by `name` rather than
+      // `instanceof`, as the class documents, since a duplicated package copy
+      // would defeat `instanceof`.
+      if (error instanceof Error && error.name === 'VerificationMethodError') {
+        throw error;
+      }
+      throw new Error(`Error resolving VM ${vm}`, { cause: error });
     }
   };
 

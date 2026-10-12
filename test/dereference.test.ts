@@ -173,14 +173,23 @@ describe('createResolveVM with versioned DID URLs', () => {
     const resolve = createResolveVM({ resolveControlledDid: async () => log });
     const vmUrl = `${did}?versionId=${log[0].versionId}#${fragmentOf(key2Id)}`;
 
-    await expect(resolve(vmUrl)).rejects.toThrow(`Error resolving VM ${vmUrl}`);
+    await expect(resolve(vmUrl)).rejects.toMatchObject({
+      name: 'VerificationMethodError',
+      code: 'notFound',
+      verificationMethod: vmUrl,
+      message: `Verification method ${vmUrl} not found`,
+    });
   });
 
   test('rejects a versioned URL with no fragment', async () => {
     const resolve = createResolveVM({ resolveControlledDid: async () => log });
     const vmUrl = `${did}?versionId=${log[1].versionId}`;
 
-    await expect(resolve(vmUrl)).rejects.toThrow(`Error resolving VM ${vmUrl}`);
+    await expect(resolve(vmUrl)).rejects.toMatchObject({
+      name: 'VerificationMethodError',
+      code: 'notFound',
+      verificationMethod: vmUrl,
+    });
   });
 
   test('returns a copy, not a reference into the loaded log', async () => {
@@ -208,7 +217,11 @@ describe('createResolveVM with versioned DID URLs', () => {
     const resolve = createResolveVM({ resolveControlledDid: async () => log });
     const vmUrl = `${did}?versionId=9-unknown#${fragmentOf(key2Id)}`;
 
-    await expect(resolve(vmUrl)).rejects.toThrow(`Error resolving VM ${vmUrl}`);
+    await expect(resolve(vmUrl)).rejects.toMatchObject({
+      name: 'VerificationMethodError',
+      code: 'notFound',
+      verificationMethod: vmUrl,
+    });
   });
 
   test('rejects a URL with an unsupported DID parameter', async () => {

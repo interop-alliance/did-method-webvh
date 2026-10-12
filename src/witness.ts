@@ -1,6 +1,7 @@
 import {
   createDataIntegrityProofTemplate,
   prepareDataForSigning,
+  resolvePublicKeyMultibase,
   signDataIntegrityProof,
   validateWebvhProofShape,
 } from './cryptography.js';
@@ -229,12 +230,7 @@ const verifyWitnessProofSignature = async (
       return 'Invalid witness proof cryptosuite';
     });
 
-    const vm = await resolveVM(proof.verificationMethod);
-    if (!vm?.publicKeyMultibase) {
-      throw new Error(`Verification Method ${proof.verificationMethod} not found`);
-    }
-
-    const publicKey = decodeEd25519Multikey(vm.publicKeyMultibase);
+    const publicKey = decodeEd25519Multikey(await resolvePublicKeyMultibase(resolveVM, proof.verificationMethod));
 
     const { proofValue, ...proofWithoutValue } = proof;
 

@@ -131,7 +131,19 @@ describe('createDidWebvhDriver', () => {
     const node = await driver.get({ url: `${created.did}?versionId=${updated.log[0].versionId}#${fragment}` });
     expect(node).toMatchObject({ id: key2Id, publicKeyMultibase: key2.publicKeyMultibase });
 
-    await expect(driver.get({ url: `${created.did}#${fragment}` })).rejects.toThrow(/not found/);
+    await expect(driver.get({ url: `${created.did}#${fragment}` })).rejects.toMatchObject({
+      name: 'VerificationMethodError',
+      code: 'notFound',
+      verificationMethod: `${created.did}#${fragment}`,
+      message: `DID document entity with id "${created.did}#${fragment}" not found.`,
+    });
+    // The error names the URL the caller asked for, selector included.
+    const versionedMiss = `${created.did}?versionId=${updated.log[1].versionId}#${fragment}`;
+    await expect(driver.get({ url: versionedMiss })).rejects.toMatchObject({
+      name: 'VerificationMethodError',
+      code: 'notFound',
+      verificationMethod: versionedMiss,
+    });
     await expect(driver.get({ url: `${created.did}?versionId=9-unknown#${fragment}` })).rejects.toThrow();
     await expect(driver.get({ url: `${created.did}?versionTime=2024-01-01T00:00:00Z#${fragment}` })).rejects.toThrow(
       /Unsupported DID parameter/
@@ -164,6 +176,29 @@ describe('createDidWebvhDriver', () => {
     await expect(createDidWebvhDriver({ verifier }).get({ did })).rejects.toMatchObject({
       code: 'invalidDid',
       message: expect.stringContaining('Witness threshold not met'),
+    });
+  });
+
+  test('get() dereferences a service fragment and reports a missing one as notFound', async () => {
+    const service = { id: '{DID}#files', type: 'TestService', serviceEndpoint: 'https://example.com/files' };
+    const created = await createDID({
+      address: 'example.com',
+      signer: createTestSigner(authKey),
+      verifier,
+      updateKeys: [authKey.publicKeyMultibase!],
+      verificationMethods: asPublicVerificationMethods(authKey),
+      services: [service],
+    });
+    vi.stubGlobal('fetch', logFetchMock(created.log));
+    const driver = createDidWebvhDriver({ verifier });
+
+    const node = await driver.get({ url: `${created.did}#files` });
+    expect(node).toMatchObject({ ...service, id: `${created.did}#files` });
+
+    await expect(driver.get({ url: `${created.did}#whois` })).rejects.toMatchObject({
+      name: 'VerificationMethodError',
+      code: 'notFound',
+      verificationMethod: `${created.did}#whois`,
     });
   });
 });

@@ -1,8 +1,10 @@
 import type { ISigner } from '@interop/data-integrity-core';
+import { VerificationMethodError } from '@interop/data-integrity-core';
 import type {
   DataIntegrityProof,
   DataIntegrityProofPurpose,
   DataIntegrityProofTemplate,
+  ResolveVerificationMethod,
   SignableDocument,
   Signer,
   SignerOptions,
@@ -107,6 +109,26 @@ export const validateWebvhProofShape = (
   if (proof.cryptosuite !== 'eddsa-jcs-2022') {
     throw new Error(message('cryptosuite', proof.cryptosuite));
   }
+};
+
+/**
+ * Resolves a proof's verification method to its `publicKeyMultibase`.
+ *
+ * @throws {VerificationMethodError} With code `notFound` when the resolver
+ *   returns no method, or one without a public key.
+ */
+export const resolvePublicKeyMultibase = async (
+  resolveVM: ResolveVerificationMethod,
+  verificationMethod: string
+): Promise<string> => {
+  const vm = await resolveVM(verificationMethod);
+  if (!vm?.publicKeyMultibase) {
+    throw new VerificationMethodError(`Verification Method ${verificationMethod} not found`, {
+      code: 'notFound',
+      verificationMethod,
+    });
+  }
+  return vm.publicKeyMultibase;
 };
 
 /**

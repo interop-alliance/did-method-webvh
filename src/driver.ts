@@ -16,7 +16,7 @@
  */
 
 import type { IDIDResolutionResult } from '@interop/data-integrity-core';
-import { DIDResolutionError } from '@interop/data-integrity-core';
+import { DIDResolutionError, VerificationMethodError } from '@interop/data-integrity-core';
 import { parseVerificationMethodUrl } from './dereference.js';
 import { hasMatchingId } from './did-document.js';
 import type { DIDDoc, FetchLike, Verifier } from './interfaces.js';
@@ -42,9 +42,10 @@ const MULTIKEY_CONTEXT = 'https://w3id.org/security/multikey/v1';
  *
  * @param doc The resolved DID document.
  * @param id The fully-qualified node id (`did#fragment`).
- * @returns The matched node with an `@context`.
+ * @returns The matched node with an `@context`, or `undefined` if no node has
+ *   that id.
  */
-function dereferenceFragment(doc: DIDDoc, id: string): Record<string, unknown> {
+function dereferenceFragment(doc: DIDDoc, id: string): Record<string, unknown> | undefined {
   const hasId = hasMatchingId(id);
 
   let match = (doc.verificationMethod ?? []).find(hasId) as Record<string, unknown> | undefined;
@@ -64,7 +65,7 @@ function dereferenceFragment(doc: DIDDoc, id: string): Record<string, unknown> {
     }
   }
   if (!match) {
-    throw new Error(`DID document entity with id "${id}" not found.`);
+    return undefined;
   }
 
   const context = match.type === 'Multikey' ? MULTIKEY_CONTEXT : doc['@context'];
@@ -82,11 +83,13 @@ function dereferenceFragment(doc: DIDDoc, id: string): Record<string, unknown> {
  * Resolution failures in `get()` throw a `DIDResolutionError` (from
  * `@interop/data-integrity-core`) carrying the resolution error `code` and RFC
  * 9457 `problemDetails`, so callers can branch on the failure class instead of
- * string-matching messages. The driver also implements the optional
- * `resolveDID()` of did-io's `DidMethodDriver`: a non-throwing, spec-shaped
- * resolution returning the DID Resolution Result envelope produced natively by
- * this package's {@link resolveDID} (preserving webvh document metadata such
- * as `scid` and `updateKeys`).
+ * string-matching messages. A fragment that names no node in the resolved
+ * document throws a `VerificationMethodError` (same package) with code
+ * `notFound` and the requested DID URL in `verificationMethod`. The driver
+ * also implements the optional `resolveDID()` of did-io's `DidMethodDriver`: a
+ * non-throwing, spec-shaped resolution returning the DID Resolution Result
+ * envelope produced natively by this package's {@link resolveDID} (preserving
+ * webvh document metadata such as `scid` and `updateKeys`).
  *
  * @param options Driver options.
  * @param [options.verifier] Verifier for the DID's history-log proofs. Defaults
@@ -139,7 +142,19 @@ export function createDidWebvhDriver({
         });
       }
       if (fragment) {
-        return dereferenceFragment(doc, `${doc.id}#${fragment}`);
+        // The node is looked up by the document's own id so a portable DID's
+        // earlier versions resolve under the current DID. An absent node has
+        // no kind, so a missing service is reported the same way as a missing
+        // verification method.
+        const id = `${doc.id}#${fragment}`;
+        const node = dereferenceFragment(doc, id);
+        if (!node) {
+          throw new VerificationMethodError(`DID document entity with id "${id}" not found.`, {
+            code: 'notFound',
+            verificationMethod: didOrUrl,
+          });
+        }
+        return node;
       }
       return doc;
     },

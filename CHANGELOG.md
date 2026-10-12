@@ -1,3 +1,20 @@
+## 5.15.0 - TBD
+
+### Changed
+
+- The did-io driver's `get()` throws `VerificationMethodError` (from
+  `@interop/data-integrity-core`) with code `notFound` and the requested DID
+  URL in `verificationMethod` when a `did#fragment` names a node the resolved
+  document does not have. An absent node has no kind, so a missing service
+  fragment is reported the same way. The message is unchanged.
+- `createResolveVM` / `resolveVM` throw the same `VerificationMethodError`
+  (code `notFound`) when a `did:webvh` verification-method URL names no
+  member, instead of wrapping it as `Error resolving VM ...`. Other failures
+  are still wrapped, now with the original error as `cause`. Entry-proof and
+  witness-proof verification throw it when the resolver returns no key. The
+  messages are unchanged.
+- Update to `@interop/data-integrity-core@8.9.0`.
+
 ## 5.14.0 - 2026-10-11
 
 ### Added
