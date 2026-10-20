@@ -41,8 +41,5 @@ export {
 } from './utils.js';
 export { defaultWebvhLogVerifier } from './verifier.js';
 export { createResolveVM, resolveVM } from './vm-resolver.js';
-export {
-  createWitnessProof,
-  signWitnessProofEntries,
-  signWitnessProofEntry,
-} from './witness.js';
+export { createWitnessProof, fetchWitnessProofs } from './witness.js';
+export { signWitnessProofEntry } from './witness-signing.js';

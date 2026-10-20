@@ -77,12 +77,17 @@ npm run lint
   for implementors to extend; `createDataIntegrityProofTemplate` and
   `signDataIntegrityProof` for proof construction; data preparation for
   signing. Consumers implement `sign()` and `verify()`.
-- **[src/witness.ts](src/witness.ts)** -- Witness proof creation and
+- **[src/witness.ts](src/witness.ts)** -- Witness proof primitives and
   validation: `countVerifiedWitnessApprovals`, `validateWitnessParameter`,
-  `resolveWitnessParameter`, `createWitnessProof`, `signWitnessProofEntries`.
+  `resolveWitnessParameter`, `createWitnessProof`, `fetchWitnessProofs`.
+- **[src/witness-signing.ts](src/witness-signing.ts)** -- The witness-side
+  `signWitnessProofEntry`, which validates a candidate log through the
+  resolver's `resolveWitnessCandidateRequirement` before signing. It lives
+  above `witness.ts` because the resolver imports the primitives.
   Witness thresholds are enforced inside resolution; there is no separate
   public witness-introspection API (upstream's `getWitnessRequirements` /
-  `verifyWitnessProofs` were not adopted).
+  `verifyWitnessProofs` / `resolveLogWithWitnessResults` were not adopted;
+  the candidate-requirement helper covers the one internal use).
 - **[src/did-document.ts](src/did-document.ts)** -- DID document construction
   and queries: `createDIDDoc`, `findVerificationMethod`,
   `generateParallelDidWeb`, placeholder replacement.
@@ -140,6 +145,42 @@ of [decentralized-identity/didwebvh-ts](https://github.com/decentralized-identit
 When porting an upstream PR, translate it through the following deliberate
 divergences (newest first). Library behavior and public API are otherwise kept
 aligned with upstream.
+
+### Historical selectors return a clean snapshot
+
+Upstream (`c07e2a9`) decorates every historical result with `invalidDid`
+when a later log entry fails validation. This fork returns the selected
+snapshot with `error` undefined when the snapshot itself is valid, since the
+later entry's failure says nothing about the requested version. The one
+exception is an unmet witness threshold, which decorates the snapshot with
+`invalidDid` (see `finalizeResolutionChecks` in
+`method.v1.0.resolution.ts`). Which versions are enforced matches upstream:
+after a successful traversal every version's threshold is enforced, so a
+historical snapshot is decorated when any later version lacks its proofs;
+after a failed traversal only the selected version and its predecessors are
+enforced, over the validated prefix of the log. Witness retrieval failures
+and post-deactivation entries throw as upstream does.
+
+**When porting:** keep the Stage 2 catch in `resolveV1Log` free of error
+decoration, and adapt upstream tests that assert `error: 'invalidDid'` on a
+clean historical snapshot to assert `error` undefined. Future sweeps should
+not re-raise `c07e2a9`'s decoration change.
+
+### Witness signing API
+
+Upstream's blind `signWitnessProofEntry` / `signWitnessProofEntries` (sign a
+`versionId` for every witness in a map of signers, no validation) were
+removed here as upstream removed them (`9956d8c`). The validating
+`signWitnessProofEntry` lives in `src/witness-signing.ts` and is built on
+`resolveWitnessCandidateRequirement` in the resolver rather than on upstream's
+`resolveLogWithWitnessResults` / `core/witness-requirements.ts`, which this
+fork does not have. `createWitnessProof` is kept as the exported primitive and
+is what tests use to build proof fixtures.
+
+**When porting:** upstream changes to `signWitnessProofEntry` land in
+`src/witness-signing.ts`; changes to its candidate validation land in
+`resolveWitnessCandidateRequirement`. Upstream's `WitnessRequirement` result
+shape and `getWitnessRequirements` / `verifyWitnessProofs` remain declined.
 
 ### Authored `didDocument` mode is stricter than upstream
 

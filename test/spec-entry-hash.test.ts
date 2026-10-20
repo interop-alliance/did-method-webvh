@@ -70,6 +70,13 @@ describe('didwebvh v1.0 entryHash spec compliance', () => {
     }
   });
 
+  test('genesis resolution rejects a claimed entry hash that does not match the derived hash', async () => {
+    const tamperedLog: DIDLog = JSON.parse(JSON.stringify(log));
+    tamperedLog[0].versionId = '1-QmInvalidGenesisEntryHash';
+
+    await expect(resolveDIDFromLog(tamperedLog, { verifier })).rejects.toThrow('Hash chain broken');
+  });
+
   test('substituting the SCID placeholder produces a different hash (regression)', async () => {
     // Direct regression guard: if create/verify ever reverts to hashing with
     // the "{SCID}" placeholder for entries 2+, this computation would match

@@ -52,6 +52,8 @@ interface ResolutionSnapshot {
   did: string;
   doc: DIDDoc | null;
   meta: DIDResolutionMeta;
+  /** The 1-based number of log entries this snapshot reflects. */
+  versionNumber: number;
 }
 
 interface ResolverContext {
@@ -86,13 +88,7 @@ export const resolveV1Log = async (
   if (selectorError) {
     throw new Error(selectorError.detail);
   }
-  if (log.length === 0) {
-    throw new Error(`Log identity binding check failed: no entries to process`);
-  }
-  const protocol = log[0]?.parameters?.method;
-  if (protocol !== METHOD_PROTOCOL_V1_0) {
-    throw new Error(`'${protocol}' is not a supported method version.`);
-  }
+  assertSupportedLog(log);
   const resolverContext = createInitialResolverContext();
   const hasExplicitHistoricalSelector =
     options.versionNumber !== undefined ||
@@ -100,25 +96,26 @@ export const resolveV1Log = async (
     options.versionTime !== undefined ||
     options.verificationMethod !== undefined;
 
+  // Stage 2: process log entries. A historical selector may keep the snapshot
+  // it already latched when a later entry is invalid; the snapshot was itself
+  // valid, so the later entry's error does not taint it.
   try {
-    // Stage 2: process log entries and enforce post-loop checks.
     await processResolvedLogEntries({
       resolverContext,
       logEntries: log,
       options,
     });
   } catch (e) {
-    // Stage 3: preserve a captured historical result when possible.
-    const resolvedSnapshot = resolverContext.resolvedSnapshot;
-    if (!resolvedSnapshot) {
+    if (!resolverContext.resolvedSnapshot) {
       throw e;
     }
-
-    if (resolvedSnapshot.meta && (!hasExplicitHistoricalSelector || e instanceof WitnessThresholdError)) {
-      const message = e instanceof Error ? e.message : String(e);
-      Object.assign(resolvedSnapshot.meta, toErrorMeta('invalidDid', message));
-    }
   }
+
+  // Stage 3: post-traversal invariants and witness enforcement. These run
+  // outside the try above so a witness retrieval failure is never swallowed
+  // by the historical fallback. After a failed traversal they cover only the
+  // validated prefix, and only the versions up to the selected one.
+  await finalizeResolutionChecks({ resolverContext, logEntries: log, options });
 
   // Stage 4: finalize fallback selection and shape the response.
   let resolvedSnapshot = resolverContext.resolvedSnapshot;
@@ -221,6 +218,12 @@ const processResolvedLogEntries = async ({
 }): Promise<void> => {
   // Process each log entry in order and update resolution context.
   for (let entryIndex = 0; entryIndex < logEntries.length; entryIndex++) {
+    // Deactivation is terminal: a validly signed entry appended afterwards
+    // must not become the latest state.
+    if (resolverContext.meta.deactivated) {
+      throw new Error(`Log entry '${logEntries[entryIndex].versionId}' follows a deactivation entry`);
+    }
+
     const entryContext = validateAndParseLogEntry({
       entry: logEntries[entryIndex],
       expectedVersionNumber: entryIndex + 1,
@@ -272,37 +275,150 @@ const processResolvedLogEntries = async ({
       (!!options.verificationMethod && !!findVerificationMethod(doc, options.verificationMethod)) ||
       options.versionNumber === versionNumber ||
       options.versionId === resolverContext.meta.versionId;
-    if (!matchesSelector && options.versionTime && options.versionTime > entryContext.currentVersionTime) {
+    if (!matchesSelector && options.versionTime && options.versionTime >= entryContext.currentVersionTime) {
       // The next entry's versionTime is parsed here only when a versionTime
       // selector is in play; the next iteration's strict validation is the
       // canonical parse.
-      const nextEntry = logEntries[entryIndex + 1];
-      matchesSelector = !nextEntry || options.versionTime < new Date(nextEntry.versionTime);
+      // An unparseable next versionTime is treated as no next entry; the
+      // next iteration rejects that entry, and the snapshot latched here
+      // is what a historical selector then falls back to.
+      const nextVersionTime = Date.parse(logEntries[entryIndex + 1]?.versionTime);
+      matchesSelector = Number.isNaN(nextVersionTime) || options.versionTime.getTime() < nextVersionTime;
     }
 
     const snapshot: ResolutionSnapshot = {
       doc,
       did,
       meta: { ...resolverContext.meta },
+      versionNumber,
     };
     if (matchesSelector && !resolverContext.resolvedSnapshot) {
       resolverContext.resolvedSnapshot = snapshot;
     }
     resolverContext.lastValidSnapshot = snapshot;
   }
+};
 
-  // Run post-iteration invariants and witness enforcement.
+const finalizeResolutionChecks = async ({
+  resolverContext,
+  logEntries,
+  options,
+}: {
+  resolverContext: ResolverContext;
+  logEntries: DIDLog;
+  options: InternalResolutionOptions;
+}): Promise<void> => {
   if (options.requestedDid && !resolverContext.didIdMatched) {
     throw new Error(`Requested DID '${options.requestedDid}' does not match state.id in any valid log version`);
   }
 
-  if (resolverContext.requiredWitnessChecks.length > 0) {
-    await enforceRequiredWitnessChecks({
-      requiredWitnessChecks: resolverContext.requiredWitnessChecks,
-      options,
-      did: resolverContext.lastValidSnapshot?.did ?? '',
-      logEntries,
-    });
+  const { resolvedSnapshot, lastValidSnapshot } = resolverContext;
+  if (!lastValidSnapshot) {
+    return;
+  }
+
+  // After a successful traversal every version is enforced, so a later
+  // version's unmet threshold decorates a historical snapshot. After a failed
+  // traversal only the selected version and its predecessors are enforced;
+  // the entries between it and the invalid one were validated but the log
+  // as published is broken, so their thresholds are not held against the
+  // selected version.
+  const logTraversalSucceeded = lastValidSnapshot.versionNumber === logEntries.length;
+  const maxVersionNumber =
+    logTraversalSucceeded || !resolvedSnapshot ? lastValidSnapshot.versionNumber : resolvedSnapshot.versionNumber;
+  try {
+    await enforceWitnessChecksUpTo({ resolverContext, lastValidSnapshot, logEntries, options, maxVersionNumber });
+  } catch (e) {
+    // A historical snapshot survives an unmet threshold but reports it.
+    if (!(e instanceof WitnessThresholdError) || !resolvedSnapshot) {
+      throw e;
+    }
+    Object.assign(resolvedSnapshot.meta, toErrorMeta('invalidDid', e.message));
+  }
+};
+
+/**
+ * Enforces the collected witness checks whose target version is at most
+ * `maxVersionNumber`, over the validated prefix of the log. Checks are only
+ * collected for validated entries, so proofs over a never-validated entry do
+ * not count. Proofs published for a later validated version still count
+ * toward an earlier one.
+ */
+const enforceWitnessChecksUpTo = async ({
+  resolverContext,
+  lastValidSnapshot,
+  logEntries,
+  options,
+  maxVersionNumber,
+}: {
+  resolverContext: ResolverContext;
+  lastValidSnapshot: ResolutionSnapshot;
+  logEntries: DIDLog;
+  options: InternalResolutionOptions;
+  maxVersionNumber: number;
+}): Promise<void> => {
+  const requiredWitnessChecks = resolverContext.requiredWitnessChecks.filter(
+    (check) => check.targetVersionNumber <= maxVersionNumber
+  );
+  if (requiredWitnessChecks.length === 0) {
+    return;
+  }
+  await enforceRequiredWitnessChecks({
+    requiredWitnessChecks,
+    options,
+    did: lastValidSnapshot.did,
+    logEntries: logEntries.slice(0, lastValidSnapshot.versionNumber),
+  });
+};
+
+/**
+ * Validates a witness-signing candidate log and returns the witness
+ * requirement governing its final entry.
+ *
+ * The whole candidate is resolved (structure, hash chain, controller proofs,
+ * deactivation), and the witness thresholds of every entry before the final
+ * one are enforced. The final entry's own threshold is not enforced, since
+ * the caller is about to contribute a proof toward it. Returns `undefined`
+ * when no active witness requirement governs the final entry.
+ */
+export const resolveWitnessCandidateRequirement = async (
+  candidateLog: DIDLog,
+  options: InternalResolutionOptions
+): Promise<WitnessParameter | undefined> => {
+  assertSupportedLog(candidateLog);
+  const resolverContext = createInitialResolverContext();
+  await processResolvedLogEntries({ resolverContext, logEntries: candidateLog, options });
+  const { lastValidSnapshot } = resolverContext;
+  if (!lastValidSnapshot) {
+    return undefined;
+  }
+
+  const candidateVersionNumber = candidateLog.length;
+  await enforceWitnessChecksUpTo({
+    resolverContext,
+    lastValidSnapshot,
+    logEntries: candidateLog,
+    options,
+    maxVersionNumber: candidateVersionNumber - 1,
+  });
+
+  return resolverContext.requiredWitnessChecks.find((check) => check.targetVersionNumber === candidateVersionNumber)
+    ?.witness;
+};
+
+const assertHashChain = (recomputedHash: string, entryHash: string, versionId: string): void => {
+  if (recomputedHash !== entryHash) {
+    throw new Error(`Hash chain broken at '${versionId}'`);
+  }
+};
+
+const assertSupportedLog = (log: DIDLog): void => {
+  if (log.length === 0) {
+    throw new Error(`Log identity binding check failed: no entries to process`);
+  }
+  const protocol = log[0]?.parameters?.method;
+  if (protocol !== METHOD_PROTOCOL_V1_0) {
+    throw new Error(`'${protocol}' is not a supported method version.`);
   }
 };
 
@@ -380,7 +496,11 @@ const processV1GenesisEntry = async ({
   entryContext: ParsedResolutionEntryContext;
   options: InternalResolutionOptions;
 }): Promise<DIDDoc> => {
-  const { entry: sourceEntry, parsedStateDid } = entryContext;
+  const {
+    entry: sourceEntry,
+    parsedVersion: { entryHash },
+    parsedStateDid,
+  } = entryContext;
   const { parameters, proof } = sourceEntry;
 
   // applyEntryToMeta enforces the genesis invariant (non-empty scid/updateKeys)
@@ -415,6 +535,9 @@ const processV1GenesisEntry = async ({
   const prelimEntry = replaceValueInObject(logEntry, PLACEHOLDER, resolverContext.meta.scid);
 
   const logEntryHash2 = await deriveHash(prelimEntry);
+  // The published versionId must carry the derived entry hash, as it does for
+  // every later entry; a valid SCID and proof alone do not bind it.
+  assertHashChain(logEntryHash2, entryHash, resolverContext.meta.versionId);
   const verified = await documentStateIsValid(
     { ...prelimEntry, versionId: buildVersionId(1, logEntryHash2), proof },
     {
@@ -493,9 +616,7 @@ const processV1SubsequentEntry = async ({
   // Hash chain
   const { proof: _proof, ...entryWithoutProof } = logEntries[entryIndex];
   const recomputedHash = await deriveHash({ ...entryWithoutProof, versionId: logEntries[entryIndex - 1].versionId });
-  if (recomputedHash !== entryHash) {
-    throw new Error(`Hash chain broken at '${resolverContext.meta.versionId}'`);
-  }
+  assertHashChain(recomputedHash, entryHash, resolverContext.meta.versionId);
 
   // Signature verification
   let keys: string[];

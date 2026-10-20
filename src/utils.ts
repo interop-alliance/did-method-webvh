@@ -142,22 +142,17 @@ export const writeLogToDisk = async (path: string, log: DIDLog) => {
 };
 
 export async function fetchLogFromIdentifier(identifier: string, fetchFn: FetchLike = fetch): Promise<DIDLog> {
-  try {
-    const url = getFileUrl(identifier);
-    const response = await fetchFn(url);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const text = (await response.text()).trim();
-    if (!text) {
-      throw new Error(`DID log not found for ${identifier}`);
-    }
-    return readLogFromString(text);
-  } catch (error) {
-    console.error('Error fetching DID log:', error);
-    throw error;
+  const url = getFileUrl(identifier);
+  const response = await fetchFn(url);
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
   }
+
+  const text = (await response.text()).trim();
+  if (!text) {
+    throw new Error(`DID log not found for ${identifier}`);
+  }
+  return readLogFromString(text);
 }
 
 /**
@@ -169,20 +164,28 @@ export async function loadDIDLog(did: string, { resolveControlledDid, fetch }: L
   return (await resolveControlledDid?.(did)) ?? (await fetchLogFromIdentifier(did, fetch));
 }
 
+/**
+ * Fetches the `did-witness.json` file published beside a DID's log. A missing
+ * file (404) means the DID has no witness proofs and returns an empty list;
+ * any other failure propagates so a transport problem is not reported as an
+ * unmet witness threshold.
+ */
 export async function fetchWitnessProofs(did: string, fetchFn: FetchLike = fetch): Promise<WitnessProofFileEntry[]> {
-  try {
-    const url = getFileUrl(did).replace('did.jsonl', 'did-witness.json');
+  const url = getFileUrl(did).replace('did.jsonl', 'did-witness.json');
 
-    const response = await fetchFn(url);
-    if (!response.ok) {
+  const response = await fetchFn(url);
+  if (!response.ok) {
+    if (response.status === 404) {
       return [];
     }
-
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching witness proofs:', error);
-    return [];
+    throw new Error(`HTTP error! status: ${response.status}`);
   }
+
+  const body: unknown = await response.json();
+  if (!Array.isArray(body)) {
+    throw new Error(`Witness proof file at ${url} is not a JSON array`);
+  }
+  return body as WitnessProofFileEntry[];
 }
 
 // Re-exported from the leaf modules so existing importers of `./utils.js` are

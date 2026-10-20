@@ -1,3 +1,57 @@
+## 5.16.0 - TBD
+
+### Security
+
+- Resolution rejects a log entry whose `proof` is an empty array; previously
+  it passed the missing-proof guard and verified as authorized (upstream
+  `c9eaff4`).
+- The genesis entry's published `versionId` hash is now compared with the
+  derived entry hash, as later entries already were; a tampered genesis
+  `versionId` with a valid SCID and proof no longer resolves (upstream
+  `d8784a6`).
+- Resolution throws `Log entry '<versionId>' follows a deactivation entry`
+  for any entry after a deactivation, so a validly signed appended entry can
+  no longer undo a deactivation (upstream `c07e2a9`).
+- Witness thresholds are enforced for historical selectors even when a later
+  log entry is invalid. After a failed traversal, enforcement runs over the
+  validated prefix for the selected version and its predecessors only. Proofs
+  over never-validated entries do not count (upstream `46f0a36`, `72ba349`).
+- `resolveDID` with a historical selector now reports `invalidDid` when the
+  requested DID matches no valid log version's `state.id`; previously the
+  historical fallback swallowed the mismatch and returned the snapshot.
+- `fetchWitnessProofs` throws when the `did-witness.json` body is not a JSON
+  array instead of failing later with a `TypeError`.
+
+### Added
+
+- `signWitnessProofEntry({ trustedLog, candidateLog, witnessSigner,
+  witnessProofs, verifier? })` validates a controller-proposed candidate log
+  and signs its final entry as a witness: the candidate must extend the
+  trusted tip by one entry (or be a lone genesis entry), the whole log is
+  resolved, earlier witness thresholds are enforced against the supplied
+  proofs, and the signer must be in the governing witness list. Nothing is
+  fetched (upstream `9956d8c`, `ff5e55b`, `62e0dc4`, `c43ba83`).
+- `fetchWitnessProofs` is exported from the package root (upstream
+  `62e0dc4`).
+
+### Changed
+
+- `fetchWitnessProofs` returns an empty list only on a 404. Any other HTTP
+  status or a failed fetch now throws, so a transport failure surfaces as
+  `internalError` instead of `Witness threshold not met` (upstream
+  `e4e2788`).
+- A `versionTime` selector equal to an entry's own `versionTime` selects that
+  entry (upstream `e0abed3`).
+- Runtime `console.error` / `console.warn` calls in log fetching and witness
+  proof verification were removed (upstream `e4e2788`).
+
+### Removed
+
+- The blind `signWitnessProofEntry(options)` and `signWitnessProofEntries(...)`
+  helpers and the `WitnessSigningResult` type. `WitnessSigningOptions` now
+  describes the new validating function. Use `createWitnessProof` to sign a
+  proof without validation (upstream `9956d8c`).
+
 ## 5.15.0 - 2026-10-12
 
 ### Changed

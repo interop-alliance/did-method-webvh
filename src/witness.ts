@@ -15,8 +15,6 @@ import type {
   WitnessEntry,
   WitnessParameter,
   WitnessProofFileEntry,
-  WitnessSigningOptions,
-  WitnessSigningResult,
 } from './interfaces.js';
 import { createDate } from './utils/iso8601-datetime.js';
 import { decodeEd25519Multikey, decodeMultikey, MultikeyCodec, multibaseDecode } from './utils/multiformats.js';
@@ -62,82 +60,6 @@ export async function createWitnessProof(
   };
 
   return signDataIntegrityProof({ versionId }, proofTemplate, adaptedSigner);
-}
-
-/**
- * Signs one did-witness proof entry for a single target `versionId`.
- *
- * The signer map is keyed by witness DID (`did:key:...`).
- *
- * @param options Witness signing options for one target version.
- * @returns A witness proof file entry for the target version.
- */
-export async function signWitnessProofEntry(options: WitnessSigningOptions): Promise<WitnessSigningResult> {
-  if (!options.versionId) {
-    throw new Error('versionId is required');
-  }
-
-  if (options.witnesses.length === 0) {
-    throw new Error('Witness list cannot be empty');
-  }
-
-  const proofs = await Promise.all(
-    options.witnesses.map(async (witness) => {
-      const { did } = parseDidKeyDid(witness.id);
-      const signer = options.witnessSignersByDid[did];
-
-      if (!signer) {
-        throw new Error(`Missing witness signer for ${did}`);
-      }
-
-      const verificationMethod = signer.getVerificationMethodId();
-      const parsedVerificationMethod = parseDidKeyVerificationMethod(verificationMethod);
-
-      if (parsedVerificationMethod.did !== did) {
-        throw new Error(`Witness signer verificationMethod DID does not match witness id: ${did}`);
-      }
-
-      const proofTemplate = createDataIntegrityProofTemplate({
-        verificationMethod,
-        created: options.created,
-        proofPurpose: 'assertionMethod',
-      });
-
-      return signDataIntegrityProof({ versionId: options.versionId }, proofTemplate, signer);
-    })
-  );
-
-  return {
-    versionId: options.versionId,
-    proof: proofs,
-  };
-}
-
-/**
- * Signs did-witness proof entries for multiple target `versionId`s.
- *
- * @param versionIds Target DID log version ids.
- * @param witnesses Witness DID entries used to sign.
- * @param witnessSignersByDid Signer map keyed by witness did:key DID.
- * @param created Optional proof creation time in ISO format.
- * @returns A witness proof file entry per version id.
- */
-export async function signWitnessProofEntries(
-  versionIds: string[],
-  witnesses: WitnessEntry[],
-  witnessSignersByDid: Record<string, Signer>,
-  created?: string
-): Promise<WitnessSigningResult[]> {
-  return Promise.all(
-    versionIds.map((versionId) =>
-      signWitnessProofEntry({
-        versionId,
-        witnesses,
-        witnessSignersByDid,
-        created,
-      })
-    )
-  );
 }
 
 export function hasActiveWitnessRequirement(witness?: WitnessParameter | null): witness is WitnessParameter {
@@ -245,12 +167,7 @@ const verifyWitnessProofSignature = async (
       throw new Error('Invalid witness proof signature');
     }
     return true;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(
-      `Ignoring invalid witness proof for version ${proofSet.versionId} ` +
-        `(verificationMethod: ${proof.verificationMethod}): ${message}`
-    );
+  } catch {
     return false;
   }
 };
@@ -297,12 +214,7 @@ export async function countVerifiedWitnessApprovals(
       try {
         const parsedVerificationMethod = parseDidKeyVerificationMethod(proof.verificationMethod);
         witness = witnessesByDid.get(parsedVerificationMethod.did);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        console.warn(
-          `Ignoring invalid witness proof for version ${proofSet.versionId} ` +
-            `(verificationMethod: ${proof.verificationMethod}): ${message}`
-        );
+      } catch {
         continue;
       }
       if (!witness || processedWitnesses.has(witness.id)) {

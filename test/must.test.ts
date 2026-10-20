@@ -39,6 +39,15 @@ describe('did:webvh normative tests', async () => {
     expect(resolved.meta.versionId.split('-')[0]).toBe('1');
   });
 
+  test('Resolve MUST reject a log entry with no controller proof', async () => {
+    const { proof: _proof, ...entryWithoutProof } = newLog1[0];
+    for (const entry of [{ ...newLog1[0], proof: [] }, entryWithoutProof]) {
+      await expect(resolveDIDFromLog([entry], { verifier: testImplementation })).rejects.toThrow(
+        'Missing proof in DID log entry'
+      );
+    }
+  });
+
   test('Resolve MUST process the DID Log correctly (negative)', async () => {
     let err: unknown;
     const malformedLog = 'malformed log content';
@@ -196,12 +205,6 @@ describe('did:webvh normative witness tests', async () => {
       },
     ];
 
-    const warnings: string[] = [];
-    const originalWarn = console.warn;
-    console.warn = (...args: unknown[]) => {
-      warnings.push(args.map(String).join(' '));
-    };
-
     let err: unknown;
     try {
       await resolveDIDFromLog(initialDID.log, {
@@ -210,13 +213,10 @@ describe('did:webvh normative witness tests', async () => {
       });
     } catch (e) {
       err = e;
-    } finally {
-      console.warn = originalWarn;
     }
     expect(err).toBeDefined();
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toContain('Witness threshold not met');
-    expect(warnings.some((msg) => msg.includes('Invalid witness proof cryptosuite'))).toBe(true);
   });
 
   test('resolver MUST verify witness proofs before accepting DID update', async () => {

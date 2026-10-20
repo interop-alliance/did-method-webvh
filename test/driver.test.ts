@@ -171,7 +171,6 @@ describe('createDidWebvhDriver', () => {
       verifier,
     });
     vi.stubGlobal('fetch', logFetchMock(log));
-    vi.spyOn(console, 'error').mockImplementation(() => {});
 
     await expect(createDidWebvhDriver({ verifier }).get({ did })).rejects.toMatchObject({
       code: 'invalidDid',

@@ -11,10 +11,13 @@ import { createDID, deactivateDID, resolveDIDFromLog, updateDID } from '../src/m
 import { deriveHash } from '../src/utils/crypto.js';
 import { MultibaseEncoding, multibaseEncode } from '../src/utils/multiformats.js';
 import { parseDidKeyDid, parseDidKeyVerificationMethod } from '../src/utils.js';
-import { createWitnessProof, signWitnessProofEntries, signWitnessProofEntry } from '../src/witness.js';
+import { createWitnessProof } from '../src/witness.js';
+import { signWitnessProofEntry } from '../src/witness-signing.js';
 import {
   asPublicVerificationMethods,
   createTestSigner,
+  createTestVerifier,
+  createWitnessedTestDID,
   createWitnessSigner,
   generateTestVerificationMethod,
   nextSecond,
@@ -551,24 +554,12 @@ describe('Witness Implementation Tests', async () => {
       },
     ];
 
-    const warnings: string[] = [];
-    const originalWarn = console.warn;
-    console.warn = (...args: unknown[]) => {
-      warnings.push(args.map(String).join(' '));
-    };
-
-    try {
-      await expect(
-        resolveDIDFromLog(initialDID.log, {
-          witnessProofs,
-          verifier: testImplementation,
-        })
-      ).rejects.toThrow(`Witness threshold not met for version ${initialDID.log[0].versionId}`);
-    } finally {
-      console.warn = originalWarn;
-    }
-
-    expect(warnings.some((msg) => msg.includes('Invalid witness proof purpose'))).toBe(true);
+    await expect(
+      resolveDIDFromLog(initialDID.log, {
+        witnessProofs,
+        verifier: testImplementation,
+      })
+    ).rejects.toThrow(`Witness threshold not met for version ${initialDID.log[0].versionId}`);
   });
 
   test('parseDidKeyDid accepts a valid did:key DID', () => {
@@ -620,67 +611,299 @@ describe('Witness Implementation Tests', async () => {
     );
   });
 
-  test('signWitnessProofEntry signs for every configured witness', async () => {
-    const versionId = initialDID.log[0].versionId;
-    const created = '2026-05-22T12:00:00Z';
-    const result = await signWitnessProofEntry({
-      versionId,
-      witnesses: [{ id: `did:key:${witness1.publicKeyMultibase}` }, { id: `did:key:${witness2.publicKeyMultibase}` }],
-      witnessSignersByDid: {
-        [`did:key:${witness1.publicKeyMultibase}`]: createTestSigner(witness1),
-        [`did:key:${witness2.publicKeyMultibase}`]: createTestSigner(witness2),
+  describe('signWitnessProofEntry', () => {
+    const createWitnessedCandidate = async (controller: VerificationMethod, witness: VerificationMethod) => {
+      const verifier = createTestVerifier(controller);
+      const trusted = await createWitnessedTestDID({ controller, witness, verifier });
+      const witnessProofs = [
+        {
+          versionId: trusted.log[0].versionId,
+          proof: [
+            await createWitnessProof(
+              createWitnessSigner(witness),
+              trusted.log[0].versionId,
+              witnessVerificationMethod(witness)
+            ),
+          ],
+        },
+      ];
+      const candidate = await updateDID({
+        log: trusted.log,
+        updated: nextSecond(trusted.log),
+        signer: createTestSigner(controller),
+        updateKeys: [controller.publicKeyMultibase!],
+        verificationMethods: asPublicVerificationMethods(controller),
+        verifier,
+        witnessProofs,
+      });
+
+      return { candidate, trusted, verifier, witnessProofs };
+    };
+
+    // The table is built lazily because `initialDID` is created in `beforeAll`.
+    test.each([
+      {
+        name: 'an empty trusted log',
+        logs: () => ({ trustedLog: [], candidateLog: [initialDID.log[0], initialDID.log[0]] }),
       },
-      created,
+      {
+        name: 'a non-empty trusted log',
+        logs: () => ({ trustedLog: [initialDID.log[0]], candidateLog: [initialDID.log[0]] }),
+      },
+    ])('rejects a candidate without exactly one new entry over $name', async ({ logs }) => {
+      await expect(
+        signWitnessProofEntry({
+          ...logs(),
+          witnessSigner: createTestSigner(authKey),
+          witnessProofs: [],
+        })
+      ).rejects.toThrow('candidateLog must contain exactly one entry more than trustedLog');
     });
 
-    expect(result.versionId).toBe(versionId);
-    expect(result.proof).toHaveLength(2);
-    expect(result.proof[0].created).toBe(created);
-    expect(result.proof[1].created).toBe(created);
-    expect(result.proof.map((proof) => proof.proofPurpose)).toEqual(['assertionMethod', 'assertionMethod']);
-  });
+    test('requires an explicit witness proof list and does not fetch remote proofs', async () => {
+      const controller = await generateTestVerificationMethod();
+      const witness = await generateTestVerificationMethod();
+      const { candidate, trusted, verifier } = await createWitnessedCandidate(controller, witness);
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('unexpected network fetch'));
 
-  test('signWitnessProofEntry rejects missing signer', async () => {
-    await expect(
-      signWitnessProofEntry({
-        versionId: initialDID.log[0].versionId,
-        witnesses: [{ id: `did:key:${witness1.publicKeyMultibase}` }, { id: `did:key:${witness2.publicKeyMultibase}` }],
-        witnessSignersByDid: {
-          [`did:key:${witness1.publicKeyMultibase}`]: createTestSigner(witness1),
-        },
-      })
-    ).rejects.toThrow(`Missing witness signer for did:key:${witness2.publicKeyMultibase}`);
-  });
+      try {
+        await expect(
+          signWitnessProofEntry({
+            trustedLog: trusted.log,
+            candidateLog: candidate.log,
+            witnessSigner: createTestSigner(witness),
+            verifier,
+          } as unknown as Parameters<typeof signWitnessProofEntry>[0])
+        ).rejects.toThrow('witnessProofs is required; pass [] for an empty witness list');
+        expect(fetchSpy).not.toHaveBeenCalled();
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
 
-  test('signWitnessProofEntry rejects malformed signer verificationMethod', async () => {
-    await expect(
-      signWitnessProofEntry({
-        versionId: initialDID.log[0].versionId,
-        witnesses: [{ id: `did:key:${witness1.publicKeyMultibase}` }],
-        witnessSignersByDid: {
-          [`did:key:${witness1.publicKeyMultibase}`]: {
-            sign: async () => ({ proofValue: 'zbad' }),
-            getVerificationMethodId: () => '#relative',
-          },
-        },
-      })
-    ).rejects.toThrow('did:key verificationMethod must be an absolute DID URL');
-  });
+    test('validates a candidate continuation and signs a proof the resolver accepts', async () => {
+      const controller = await generateTestVerificationMethod();
+      const witness = await generateTestVerificationMethod();
+      const { candidate, trusted, verifier, witnessProofs } = await createWitnessedCandidate(controller, witness);
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('unexpected network fetch'));
 
-  test('signWitnessProofEntries signs multiple versionIds', async () => {
-    const results = await signWitnessProofEntries(
-      [initialDID.log[0].versionId, '2-test-version'],
-      [{ id: `did:key:${witness1.publicKeyMultibase}` }],
-      {
-        [`did:key:${witness1.publicKeyMultibase}`]: createTestSigner(witness1),
-      },
-      '2026-05-22T12:00:00Z'
-    );
+      try {
+        const witnessProof = await signWitnessProofEntry({
+          trustedLog: trusted.log,
+          candidateLog: candidate.log,
+          witnessSigner: createTestSigner(witness),
+          witnessProofs,
+          verifier,
+        });
 
-    expect(results).toHaveLength(2);
-    expect(results.map((result) => result.versionId)).toEqual([initialDID.log[0].versionId, '2-test-version']);
-    expect(results[0].proof).toHaveLength(1);
-    expect(results[1].proof).toHaveLength(1);
+        expect(witnessProof.versionId).toBe(candidate.log[1].versionId);
+        expect(witnessProof.proof).toHaveLength(1);
+        expect(witnessProof.proof[0].proofPurpose).toBe('assertionMethod');
+        expect(fetchSpy).not.toHaveBeenCalled();
+
+        const resolved = await resolveDIDFromLog(candidate.log, {
+          verifier,
+          witnessProofs: [...witnessProofs, witnessProof],
+        });
+        expect(resolved.meta.versionId).toBe(candidate.log[1].versionId);
+        expect(resolved.meta.error).toBeUndefined();
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
+
+    test('signs a genesis entry without enforcing its threshold', async () => {
+      const controller = await generateTestVerificationMethod();
+      const witness = await generateTestVerificationMethod();
+      const { trusted, verifier } = await createWitnessedCandidate(controller, witness);
+
+      const witnessProof = await signWitnessProofEntry({
+        trustedLog: [],
+        candidateLog: [trusted.log[0]],
+        witnessSigner: createTestSigner(witness),
+        witnessProofs: [],
+        verifier,
+      });
+
+      expect(witnessProof.versionId).toBe(trusted.log[0].versionId);
+      expect(witnessProof.proof).toHaveLength(1);
+    });
+
+    test('rejects a non-genesis entry supplied as the sole candidate entry when trustedLog is empty', async () => {
+      const controller = await generateTestVerificationMethod();
+      const witness = await generateTestVerificationMethod();
+      const { candidate, verifier } = await createWitnessedCandidate(controller, witness);
+      const standaloneSubsequentEntry = {
+        ...candidate.log[1],
+        parameters: { ...candidate.log[1].parameters, method: candidate.log[0].parameters.method },
+      };
+
+      await expect(
+        signWitnessProofEntry({
+          trustedLog: [],
+          candidateLog: [standaloneSubsequentEntry],
+          witnessSigner: createTestSigner(witness),
+          witnessProofs: [],
+          verifier,
+        })
+      ).rejects.toThrow("version '2' in log doesn't match expected '1'.");
+    });
+
+    test('enforces witness membership for genesis signing', async () => {
+      const controller = await generateTestVerificationMethod();
+      const witness = await generateTestVerificationMethod();
+      const unauthorized = await generateTestVerificationMethod();
+      const { trusted, verifier } = await createWitnessedCandidate(controller, witness);
+
+      await expect(
+        signWitnessProofEntry({
+          trustedLog: [],
+          candidateLog: [trusted.log[0]],
+          witnessSigner: createTestSigner(unauthorized),
+          witnessProofs: [],
+          verifier,
+        })
+      ).rejects.toThrow('not a member');
+    });
+
+    test('rejects a malformed genesis candidate', async () => {
+      const controller = await generateTestVerificationMethod();
+      const witness = await generateTestVerificationMethod();
+      const { trusted, verifier } = await createWitnessedCandidate(controller, witness);
+      const malformedGenesis = { ...trusted.log[0], state: { ...trusted.log[0].state, id: 'not-a-did' } };
+
+      await expect(
+        signWitnessProofEntry({
+          trustedLog: [],
+          candidateLog: [malformedGenesis],
+          witnessSigner: createTestSigner(witness),
+          witnessProofs: [],
+          verifier,
+        })
+      ).rejects.toThrow();
+    });
+
+    test('rejects a candidate whose prefix tip does not match the trusted tip', async () => {
+      const controller = await generateTestVerificationMethod();
+      const witness = await generateTestVerificationMethod();
+      const { candidate, trusted, verifier, witnessProofs } = await createWitnessedCandidate(controller, witness);
+      const mismatchedTrustedLog = [{ ...trusted.log[0], versionId: '1-untrusted-tip' }];
+
+      await expect(
+        signWitnessProofEntry({
+          trustedLog: mismatchedTrustedLog,
+          candidateLog: candidate.log,
+          witnessSigner: createTestSigner(witness),
+          witnessProofs,
+          verifier,
+        })
+      ).rejects.toThrow('Candidate log does not extend the trusted log tip');
+    });
+
+    test('rejects signing when prior witness proofs are missing', async () => {
+      const controller = await generateTestVerificationMethod();
+      const witness = await generateTestVerificationMethod();
+      const { candidate, trusted, verifier } = await createWitnessedCandidate(controller, witness);
+      const priorVersionId = trusted.log[trusted.log.length - 1].versionId;
+
+      await expect(
+        signWitnessProofEntry({
+          trustedLog: trusted.log,
+          candidateLog: candidate.log,
+          witnessSigner: createTestSigner(witness),
+          witnessProofs: [],
+          verifier,
+        })
+      ).rejects.toThrow(`Witness threshold not met for version ${priorVersionId}: got 0, need 1`);
+    });
+
+    test('rejects a candidate with a broken hash chain', async () => {
+      const controller = await generateTestVerificationMethod();
+      const witness = await generateTestVerificationMethod();
+      const { candidate, trusted, verifier, witnessProofs } = await createWitnessedCandidate(controller, witness);
+      const tamperedCandidate = [
+        candidate.log[0],
+        { ...candidate.log[1], state: { ...candidate.log[1].state, alsoKnownAs: ['did:example:tampered'] } },
+      ];
+
+      await expect(
+        signWitnessProofEntry({
+          trustedLog: trusted.log,
+          candidateLog: tamperedCandidate,
+          witnessSigner: createTestSigner(witness),
+          witnessProofs,
+          verifier,
+        })
+      ).rejects.toThrow('Hash chain broken');
+    });
+
+    test('rejects a candidate tip with no active witness requirement', async () => {
+      const controller = await generateTestVerificationMethod();
+      const verifier = createTestVerifier(controller);
+      const trusted = await createDID({
+        address: 'example.com',
+        signer: createTestSigner(controller),
+        updateKeys: [controller.publicKeyMultibase!],
+        verificationMethods: asPublicVerificationMethods(controller),
+        verifier,
+      });
+      const candidate = await updateDID({
+        log: trusted.log,
+        updated: nextSecond(trusted.log),
+        signer: createTestSigner(controller),
+        updateKeys: [controller.publicKeyMultibase!],
+        verificationMethods: asPublicVerificationMethods(controller),
+        verifier,
+      });
+
+      await expect(
+        signWitnessProofEntry({
+          trustedLog: trusted.log,
+          candidateLog: candidate.log,
+          witnessSigner: createTestSigner(controller),
+          witnessProofs: [],
+          verifier,
+        })
+      ).rejects.toThrow('Candidate entry is not governed by an active witness requirement');
+    });
+
+    test('rejects a signer outside the governing witness list', async () => {
+      const controller = await generateTestVerificationMethod();
+      const witness = await generateTestVerificationMethod();
+      const unauthorized = await generateTestVerificationMethod();
+      const { candidate, trusted, verifier, witnessProofs } = await createWitnessedCandidate(controller, witness);
+
+      await expect(
+        signWitnessProofEntry({
+          trustedLog: trusted.log,
+          candidateLog: candidate.log,
+          witnessSigner: createTestSigner(unauthorized),
+          witnessProofs,
+          verifier,
+        })
+      ).rejects.toThrow('not a member');
+    });
+
+    test('rejects a malformed signer verification method', async () => {
+      const controller = await generateTestVerificationMethod();
+      const witness = await generateTestVerificationMethod();
+      const { candidate, trusted, verifier, witnessProofs } = await createWitnessedCandidate(controller, witness);
+      const validSigner = createTestSigner(witness);
+      const malformedSigner: Signer = {
+        sign: (input) => validSigner.sign(input),
+        getVerificationMethodId: () => 'not-a-did-key',
+      };
+
+      await expect(
+        signWitnessProofEntry({
+          trustedLog: trusted.log,
+          candidateLog: candidate.log,
+          witnessSigner: malformedSigner,
+          witnessProofs,
+          verifier,
+        })
+      ).rejects.toThrow('Malformed did:key verificationMethod');
+    });
   });
 
   test('Resolve requires witness threshold for each required entry', async () => {

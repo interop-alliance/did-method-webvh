@@ -292,17 +292,25 @@ Deactivates an existing DID.
 ### Witness Functions
 
 -
+`signWitnessProofEntry({ trustedLog, candidateLog, witnessSigner, witnessProofs, verifier? }): Promise<WitnessProofFileEntry>`
+Validates a controller-proposed candidate log and signs its final entry as a
+witness. The candidate must extend `trustedLog` by exactly one entry (pass an
+empty `trustedLog` to sign a genesis entry). The whole candidate is resolved,
+the witness thresholds of every earlier version are enforced against
+`witnessProofs`, and the signer must be listed in the witness requirement
+governing the final entry. Nothing is fetched; pass `[]` when no proofs are
+published yet. Returns `{ versionId, proof: [proof] }`, ready to append to
+`did-witness.json`.
+
+-
 `createWitnessProof(signer, versionId, verificationMethod, created?): Promise<DataIntegrityProof>`
-Creates and signs one witness proof for a specific `versionId`.
+Low-level: creates and signs one witness proof for a specific `versionId`
+without validating the log. Prefer `signWitnessProofEntry`.
 
 -
-`signWitnessProofEntry(options: WitnessSigningOptions): Promise<WitnessSigningResult>`
-Signs one did-witness proof entry (`{ versionId, proof[] }`) for a single target
-version.
-
--
-`signWitnessProofEntries(versionIds: string[], witnesses: WitnessEntry[], witnessSignersByDid: Record<string, WitnessSigner>, created?: string): Promise<WitnessSigningResult[]>`
-Signs did-witness proof entries for multiple target versions.
+`fetchWitnessProofs(did, fetch?): Promise<WitnessProofFileEntry[]>`
+Fetches the `did-witness.json` published beside a DID's log. A 404 returns an
+empty list; any other failure throws.
 
 ### Cryptography Functions
 

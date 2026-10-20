@@ -50,7 +50,7 @@ export const verifyEntryProofs = async (
   }
 
   let { proof: proofs, ...rest } = entry;
-  if (!proofs) {
+  if (!proofs || (Array.isArray(proofs) && proofs.length === 0)) {
     throw new Error('Missing proof in DID log entry');
   }
   if (!Array.isArray(proofs)) {

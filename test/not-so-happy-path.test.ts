@@ -1,15 +1,21 @@
 import { beforeAll, describe, expect, test } from 'vitest';
 import type { CreateDIDInterface, CreateDIDResult, DIDLog, VerificationMethod } from '../src/interfaces.js';
 import { createDID, deactivateDID, resolveDIDFromLog, updateDID } from '../src/method.js';
+import { prepareUpdateEntry } from '../src/method_versions/method.v1.0.entries.js';
 import { resolveDIDFromLog as resolveDIDFromLogV1 } from '../src/method_versions/method.v1.0.js';
 import { createMultihash, encodeBase58Btc, MultihashAlgorithm } from '../src/utils/multiformats.js';
+import { createWitnessProof } from '../src/witness.js';
+import { signWitnessProofEntry } from '../src/witness-signing.js';
 import {
   asPublicVerificationMethods,
   createFutureDIDLog,
   createTestSigner,
+  createWitnessedTestDID,
+  createWitnessSigner,
   generateTestVerificationMethod,
   nextSecond,
   TestCryptoImplementation,
+  witnessVerificationMethod,
 } from './utils.js';
 
 describe('Not So Happy Path Tests', () => {
@@ -274,6 +280,142 @@ describe('Not So Happy Path Tests', () => {
     expect(result.meta.versionId).toBe(log1[0].versionId);
     expect(result.meta.error).toBeUndefined();
     expect(result.meta.problemDetails).toBeUndefined();
+  });
+
+  test('rejects a validly signed entry appended after deactivation while preserving earlier selected history', async () => {
+    const genesis = await createDID({
+      address: 'example.com',
+      signer: createTestSigner(authKey),
+      updateKeys: [authKey.publicKeyMultibase!],
+      verificationMethods: asPublicVerificationMethods(authKey),
+      verifier: testImplementation,
+    });
+    const deactivated = await deactivateDID({
+      log: genesis.log,
+      signer: createTestSigner(authKey),
+      verifier: testImplementation,
+    });
+    const validDeactivation = await resolveDIDFromLog(deactivated.log, { verifier: testImplementation });
+    expect(validDeactivation.doc).toBeNull();
+    expect(validDeactivation.meta.deactivated).toBe(true);
+    expect(validDeactivation.meta.error).toBeUndefined();
+
+    // Hand-build a correctly hashed and signed entry 3 past the deactivation.
+    const deactivatedResolution = await resolveDIDFromLogV1(deactivated.log, { verifier: testImplementation });
+    const illegalUpdate = await prepareUpdateEntry({
+      options: { log: deactivated.log, signer: createTestSigner(authKey), verifier: testImplementation },
+      lastEntry: deactivated.log[deactivated.log.length - 1],
+      lastMeta: deactivatedResolution.meta,
+      versionNumber: deactivated.log.length + 1,
+      createdDate: nextSecond(deactivated.log),
+    });
+    const illegallyExtendedLog = [...deactivated.log, illegalUpdate];
+
+    await expect(
+      signWitnessProofEntry({
+        trustedLog: deactivated.log,
+        candidateLog: illegallyExtendedLog,
+        witnessSigner: createTestSigner(authKey),
+        witnessProofs: [],
+        verifier: testImplementation,
+      })
+    ).rejects.toThrow('follows a deactivation entry');
+
+    // The valid historical version is still selectable, and reports the
+    // DID-global deactivation; the fork does not taint it with the later
+    // entry's error.
+    const historical = await resolveDIDFromLog(illegallyExtendedLog, {
+      versionNumber: 1,
+      verifier: testImplementation,
+    });
+    expect(historical.doc).not.toBeNull();
+    expect(historical.meta.versionId).toBe(genesis.log[0].versionId);
+    expect(historical.meta.deactivated).toBe(true);
+    expect(historical.meta.error).toBeUndefined();
+
+    await expect(resolveDIDFromLog(illegallyExtendedLog, { verifier: testImplementation })).rejects.toThrow(
+      'follows a deactivation entry'
+    );
+  });
+
+  describe('witness enforcement for historical selectors', () => {
+    const createWitnessedDID = () => createWitnessedTestDID({ controller: authKey, verifier: testImplementation });
+    const signProof = (targetVersionId: string) =>
+      createWitnessProof(createWitnessSigner(authKey), targetVersionId, witnessVerificationMethod(authKey));
+
+    test.each(['versionNumber', 'versionId', 'versionTime'] as const)(
+      'enforces witness proofs before returning a selected snapshot when a later entry is invalid (%s)',
+      async (selectorType) => {
+        const witnessed = await createWitnessedDID();
+        const versionId = witnessed.log[0].versionId;
+        const invalidTail = {
+          ...witnessed.log[0],
+          versionId: '2-junk',
+          versionTime: 'junk',
+        };
+        const log = [...witnessed.log, invalidTail];
+        const selectorByType = {
+          versionId: { versionId },
+          versionNumber: { versionNumber: 1 },
+          versionTime: { versionTime: new Date(Date.parse(witnessed.log[0].versionTime) + 1000) },
+        };
+        const selector = selectorByType[selectorType];
+
+        // No proofs: the selected version's own threshold is still enforced.
+        const missing = await resolveDIDFromLog(log, { ...selector, verifier: testImplementation, witnessProofs: [] });
+        expect(missing.meta.error).toBe('invalidDid');
+        expect(missing.meta.problemDetails?.detail).toContain(`Witness threshold not met for version ${versionId}`);
+
+        // A proof over the never-validated tail does not count toward it.
+        const unvalidatedTailProof = await resolveDIDFromLog(log, {
+          ...selector,
+          verifier: testImplementation,
+          witnessProofs: [{ versionId: invalidTail.versionId, proof: [await signProof(invalidTail.versionId)] }],
+        });
+        expect(unvalidatedTailProof.meta.error).toBe('invalidDid');
+        expect(unvalidatedTailProof.meta.problemDetails?.detail).toContain('Witness threshold not met');
+
+        // A proof over the selected version satisfies it, and the clean
+        // historical snapshot is returned.
+        const witnessedHistory = await resolveDIDFromLog(log, {
+          ...selector,
+          verifier: testImplementation,
+          witnessProofs: [{ versionId, proof: [await signProof(versionId)] }],
+        });
+        expect(witnessedHistory.doc?.id).toBe(witnessed.did);
+        expect(witnessedHistory.meta.versionId).toBe(versionId);
+        expect(witnessedHistory.meta.error).toBeUndefined();
+      }
+    );
+
+    test('counts a version 2 witness proof when resolving version 1 despite an invalid version 3 entry', async () => {
+      const witnessed = await createWitnessedDID();
+      const updated = await updateDID({
+        log: witnessed.log,
+        updated: nextSecond(witnessed.log),
+        signer: createTestSigner(authKey),
+        updateKeys: [authKey.publicKeyMultibase!],
+        verificationMethods: asPublicVerificationMethods(authKey),
+        verifier: testImplementation,
+        witnessProofs: [
+          { versionId: witnessed.log[0].versionId, proof: [await signProof(witnessed.log[0].versionId)] },
+        ],
+      });
+      const laterProof = await signProof(updated.log[1].versionId);
+
+      const result = await resolveDIDFromLog(
+        [...updated.log, { ...updated.log[1], versionId: '3-junk', versionTime: 'junk' }],
+        {
+          versionNumber: 1,
+          verifier: testImplementation,
+          witnessProofs: [{ versionId: updated.log[1].versionId, proof: [laterProof] }],
+        }
+      );
+
+      expect(result.doc?.id).toBe(witnessed.did);
+      expect(result.meta.versionId).toBe(witnessed.log[0].versionId);
+      expect(result.meta.error).toBeUndefined();
+    });
   });
 
   test('Accepts a versionTime up to 5 minutes in the future', async () => {

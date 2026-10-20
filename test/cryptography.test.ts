@@ -266,23 +266,11 @@ describe('Injectable Cryptography Tests', () => {
       ],
     };
 
-    const warnings: string[] = [];
-    const originalWarn = console.warn;
-    console.warn = (...args: unknown[]) => {
-      warnings.push(args.map(String).join(' '));
-    };
-
-    try {
-      const approvals = await countVerifiedWitnessApprovals(witnessProofs, witness, {
-        verifier: failingMockImplementation,
-        resolveVM,
-      });
-      expect(approvals).toBe(0);
-    } finally {
-      console.warn = originalWarn;
-    }
-
-    expect(warnings.some((msg) => msg.includes('Invalid witness proof signature'))).toBe(true);
+    const approvals = await countVerifiedWitnessApprovals(witnessProofs, witness, {
+      verifier: failingMockImplementation,
+      resolveVM,
+    });
+    expect(approvals).toBe(0);
   });
 
   test('Require verifier implementation', async () => {
@@ -373,6 +361,12 @@ describe('Assertion Guards', () => {
 
   test('throws when proof is missing', async () => {
     await expect(documentStateIsValid(makeDoc(null), { updateKeys: [updateKey], verifier, resolveVM })).rejects.toThrow(
+      'Missing proof in DID log entry'
+    );
+  });
+
+  test('throws when proof array is empty', async () => {
+    await expect(documentStateIsValid(makeDoc([]), { updateKeys: [updateKey], verifier, resolveVM })).rejects.toThrow(
       'Missing proof in DID log entry'
     );
   });

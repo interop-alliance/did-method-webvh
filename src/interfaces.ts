@@ -145,16 +145,17 @@ export interface ParsedDidKeyVerificationMethod {
   keyMultibase: string;
 }
 
+/** Options for {@link signWitnessProofEntry}: the controller-proposed candidate log and the witness's signer. */
 export interface WitnessSigningOptions {
-  versionId: string;
-  witnesses: WitnessEntry[];
-  witnessSignersByDid: Record<string, Signer>;
-  created?: string;
-}
-
-export interface WitnessSigningResult {
-  versionId: string;
-  proof: DataIntegrityProof[];
+  /** The log the witness has already accepted; empty when signing a genesis entry. */
+  trustedLog: DIDLog;
+  /** `trustedLog` plus exactly one new entry, the one to approve. */
+  candidateLog: DIDLog;
+  /** The witness's did:key signer. */
+  witnessSigner: Signer<Pick<DIDLogEntry, 'versionId'>>;
+  /** Witness proofs already published for the log; pass `[]` when there are none. Never fetched. */
+  witnessProofs: WitnessProofFileEntry[];
+  verifier?: Verifier;
 }
 
 export interface WitnessParameter {

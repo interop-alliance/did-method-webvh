@@ -90,6 +90,18 @@ beforeAll(async () => {
   });
 });
 
+test('Resolve DID at each exact version time', async () => {
+  for (const [index, entry] of log.entries()) {
+    const resolved = await resolveDIDFromLog(log, {
+      versionTime: new Date(entry.versionTime),
+      verifier: testImplementation,
+    });
+
+    expect(resolved.meta.error).toBeUndefined();
+    expect(resolved.meta.versionId.split('-')[0]).toBe(String(index + 1));
+  }
+});
+
 test('Resolve DID at time (first)', async () => {
   const resolved = await resolveDIDFromLog(log, {
     versionTime: new Date('2021-01-15T08:32:55Z'),

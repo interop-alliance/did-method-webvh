@@ -14,6 +14,7 @@ import type {
   VerificationMethod,
   Verifier,
 } from '../src/interfaces.js';
+import { createDID } from '../src/method.js';
 import { deriveHash } from '../src/utils/crypto.js';
 import { createDate } from '../src/utils/iso8601-datetime.js';
 import { MultibaseEncoding, multibaseDecode, multibaseEncode } from '../src/utils/multiformats.js';
@@ -47,8 +48,7 @@ export class TestCryptoImplementation extends AbstractCrypto implements Verifier
   async verify(signature: Uint8Array, message: Uint8Array, publicKey: Uint8Array): Promise<boolean> {
     try {
       return crypto.verify(publicKey, message, signature);
-    } catch (error) {
-      console.error('Error verifying signature:', error);
+    } catch {
       return false;
     }
   }
@@ -88,6 +88,28 @@ export function createTestVerifier(verificationMethod: VerificationMethod): Veri
   return new TestCryptoImplementation({ verificationMethod });
 }
 
+/**
+ * A DID on example.com controlled by `controller` whose genesis entry requires
+ * one witness proof from `witness` (the controller's own key by default).
+ */
+export const createWitnessedTestDID = ({
+  controller,
+  witness = controller,
+  verifier = createTestVerifier(controller),
+}: {
+  controller: VerificationMethod;
+  witness?: VerificationMethod;
+  verifier?: Verifier;
+}) =>
+  createDID({
+    address: 'example.com',
+    signer: createTestSigner(controller),
+    updateKeys: [controller.publicKeyMultibase!],
+    verificationMethods: asPublicVerificationMethods(controller),
+    witness: { threshold: 1, witnesses: [{ id: `did:key:${witness.publicKeyMultibase}` }] },
+    verifier,
+  });
+
 /** The did:key verification method id of a witness's key. */
 export const witnessVerificationMethod = (vm: VerificationMethod) =>
   `did:key:${vm.publicKeyMultibase}#${vm.publicKeyMultibase}`;
@@ -116,13 +138,13 @@ export const stubGlobalFetchUnused = () => {
 };
 
 // A fetch mock that serves a body per URL suffix (`did.jsonl`,
-// `did-witness.json`) and answers 404 for anything else.
-export const createRoutedFetchMock = (routes: Record<string, string>) =>
+// `did-witness.json`) and answers `fallbackStatus` (404) for anything else.
+export const createRoutedFetchMock = (routes: Record<string, string>, fallbackStatus = 404) =>
   vi.fn(async (url: string) => {
     const match = Object.entries(routes).find(([suffix]) => url.endsWith(suffix));
     return {
       ok: match !== undefined,
-      status: match ? 200 : 404,
+      status: match ? 200 : fallbackStatus,
       text: async () => match?.[1] ?? '',
       json: async () => (match ? JSON.parse(match[1]) : null),
     };
