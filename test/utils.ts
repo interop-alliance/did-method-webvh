@@ -1,5 +1,5 @@
 import * as crypto from '@stablelib/ed25519';
-import { vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { METHOD, PLACEHOLDER } from '../src/constants.js';
 import { AbstractCrypto, createDataIntegrityProofTemplate, prepareDataForSigning } from '../src/cryptography.js';
 import { createDIDDoc, replaceCreateDidPlaceholders } from '../src/did-document.js';
@@ -14,7 +14,8 @@ import type {
   VerificationMethod,
   Verifier,
 } from '../src/interfaces.js';
-import { createDID } from '../src/method.js';
+import { createDID, resolveDIDFromLog, updateDID } from '../src/method.js';
+import { prepareGenesisEntry } from '../src/method_versions/method.v1.0.entries.js';
 import { deriveHash } from '../src/utils/crypto.js';
 import { createDate } from '../src/utils/iso8601-datetime.js';
 import { MultibaseEncoding, multibaseDecode, multibaseEncode } from '../src/utils/multiformats.js';
@@ -202,3 +203,65 @@ export const createFutureDIDLog = async (authKey: VerificationMethod, minutesAhe
 
   return [prelimEntry];
 };
+
+/** Creates a DID from `address` (and optional `paths`) and resolves its log. */
+export async function createAndResolve(address: string, paths?: string[]) {
+  const authKey = await generateTestVerificationMethod();
+  const verifier = new TestCryptoImplementation({ verificationMethod: authKey });
+  const created = await createDID({
+    address,
+    paths,
+    signer: createTestSigner(authKey),
+    updateKeys: [authKey.publicKeyMultibase!],
+    verificationMethods: asPublicVerificationMethods(authKey),
+    verifier,
+  });
+  const resolved = await resolveDIDFromLog(created.log, { verifier });
+  return { created, resolved };
+}
+
+/** Asserts that a created DID matches `expectedDid` and resolves cleanly to itself. */
+export function expectRoundTrip(
+  { created, resolved }: Awaited<ReturnType<typeof createAndResolve>>,
+  expectedDid: (scid: string) => string
+) {
+  const scid = created.log[0].parameters.scid!;
+  expect(created.did).toBe(expectedDid(scid));
+  expect(created.doc.id).toBe(created.did);
+  expect(created.did).not.toContain(PLACEHOLDER);
+  expect(resolved.meta.error).toBeUndefined();
+  expect(resolved.did).toBe(created.did);
+  expect(resolved.doc?.id).toBe(created.did);
+  expect(resolved.meta.versionId).toBe(created.log[0].versionId);
+}
+
+/**
+ * Creates a signed genesis log for `did` exactly as written, bypassing createDID's
+ * address canonicalization. Simulates logs written by earlier releases or other
+ * implementations (e.g. lowercase hex, uppercase hosts, percent-encoded U-labels).
+ */
+export async function createUncanonicalizedDID({ did, portable = false }: { did: string; portable?: boolean }) {
+  const authKey = await generateTestVerificationMethod();
+  const verifier = new TestCryptoImplementation({ verificationMethod: authKey });
+  const signer = createTestSigner(authKey);
+  const updateKeys = [authKey.publicKeyMultibase!];
+  const entry = await prepareGenesisEntry({
+    options: {
+      address: did,
+      portable,
+      signer,
+      updateKeys,
+      verificationMethods: asPublicVerificationMethods(authKey),
+      verifier,
+    },
+    controller: did,
+    createdDate: createDate(),
+  });
+  const created = { did: entry.state.id!, doc: entry.state, log: [entry] as DIDLog };
+  const update = (address?: string, paths?: string[]) =>
+    updateDID({ log: created.log, signer, updateKeys, verifier, address, paths });
+  return { created, scid: entry.parameters.scid!, verifier, signer, updateKeys, update };
+}
+
+/** A valid 46-character base58btc SCID for identifier fixtures that never get resolved. */
+export const MOCK_SCID = 'QmYEM6EkqHneikXFPD7mEoBi9CeaQgu5F3XMJxXCX44Jcz';

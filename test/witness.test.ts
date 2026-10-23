@@ -417,6 +417,39 @@ describe('Witness Implementation Tests', async () => {
     expect(resolved.meta?.witness?.threshold).toBe(1);
   });
 
+  test('Omitting witness on update retains the active witness configuration', async () => {
+    const proofsFor = async (versionId: string) => ({
+      versionId,
+      proof: await Promise.all([
+        createWitnessProof(createWitnessSigner(witness1), versionId, witnessVerificationMethod(witness1)),
+        createWitnessProof(createWitnessSigner(witness2), versionId, witnessVerificationMethod(witness2)),
+      ]),
+    });
+    const v1Proofs = [await proofsFor(initialDID.log[0].versionId)];
+
+    const v2 = await updateDID({
+      log: initialDID.log,
+      signer: createTestSigner(authKey),
+      verifier: testImplementation,
+      witnessProofs: v1Proofs,
+    });
+
+    expect(v2.log[1].parameters).not.toHaveProperty('witness');
+    expect(v2.meta.witness).toEqual(initialDID.meta.witness);
+
+    const unwitnessed = await resolveDIDFromLog(v2.log, {
+      versionNumber: 1,
+      verifier: testImplementation,
+      witnessProofs: v1Proofs,
+    });
+    expect(unwitnessed.meta.error).toBe('invalidDid');
+
+    const allProofs = [...v1Proofs, await proofsFor(v2.log[1].versionId)];
+    const resolved = await resolveDIDFromLog(v2.log, { verifier: testImplementation, witnessProofs: allProofs });
+    expect(resolved.meta.error).toBeUndefined();
+    expect(resolved.meta.witness).toEqual(initialDID.meta.witness);
+  });
+
   test('Disable witnessing by setting witness list to null', async () => {
     // Create proofs for initial version
     const versionId = initialDID.log[0].versionId;

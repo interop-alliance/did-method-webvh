@@ -437,7 +437,7 @@ const createInitialResolverContext = (): ResolverContext => {
       nextKeyHashes: [],
       prerotation: false,
       witness: undefined,
-      watchers: null,
+      watchers: [],
     },
     host: '',
     previousVersionTime: undefined,

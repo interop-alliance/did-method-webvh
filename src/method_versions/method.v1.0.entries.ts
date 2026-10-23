@@ -21,6 +21,7 @@ import type {
   DIDLogEntry,
   DIDResolutionMeta,
   UpdateDIDInterface,
+  WitnessParameter,
 } from '../interfaces.js';
 import { deriveHash } from '../utils/crypto.js';
 import { replaceValueInObject } from '../utils/object.js';
@@ -92,7 +93,22 @@ const resolveNextDidContext = ({
     priorPaths: parsedLastEntryDid.paths ?? [],
     context: 'updateDID path segments',
   });
-  const controller = normalizedAddress.controller;
+  // A non-canonical previous DID (e.g. a percent-encoded U-label domain)
+  // canonicalizes to a different string. Re-supplying its current location in
+  // any form is not a move, so the previous DID is kept as-is. A previous DID
+  // that resolution accepts but the stricter address parser does not (a
+  // legacy U-label host on a runtime without IDNA) is not the same location.
+  let canonicalLastEntryDid: string | undefined;
+  try {
+    canonicalLastEntryDid = normalizeUpdateDidAddress({
+      address: lastEntryDid,
+      scid: parsedLastEntryDid.scid,
+      priorPaths: [],
+      context: 'updateDID previous DID',
+    }).controller;
+  } catch {}
+  const controller =
+    normalizedAddress.controller === canonicalLastEntryDid ? lastEntryDid : normalizedAddress.controller;
 
   if (controller !== lastEntryDid && !portable) {
     throw new Error('Cannot move DID: portability is disabled');
@@ -253,13 +269,17 @@ export async function prepareUpdateEntry({
   const lastEntryDid = requireDidDocumentId(lastEntry.state.id);
   const parsedLastEntryDid = parseDidWebvhIdentifier(lastEntryDid, 'last entry state.id');
 
-  const watchersValue = options.watchers !== undefined ? options.watchers : lastMeta.watchers;
-  const witness = options.witness?.witnesses?.length
-    ? {
-        witnesses: options.witness.witnesses,
-        threshold: options.witness.threshold ?? 0,
-      }
-    : {};
+  // An omitted watchers list retains the previous value; null writes [].
+  const watchers = options.watchers === undefined ? lastMeta.watchers : (options.watchers ?? []);
+  // An omitted witness is left out of the parameters so the previous value is
+  // retained. null (or an empty list) writes {} to disable witnessing.
+  let witness: WitnessParameter | undefined;
+  if (options.witness !== undefined) {
+    witness = options.witness?.witnesses?.length
+      ? { witnesses: options.witness.witnesses, threshold: options.witness.threshold ?? 0 }
+      : {};
+    validateWitnessParameter(witness);
+  }
 
   if (options.portable === true) {
     throw new Error(
@@ -273,11 +293,9 @@ export async function prepareUpdateEntry({
       : {}),
     ...(options.nextKeyHashes !== undefined ? { nextKeyHashes: assertValidNextKeyHashes(options.nextKeyHashes) } : {}),
     ...(options.portable === false ? { portable: false } : {}),
-    witness,
-    watchers: watchersValue ?? [],
+    ...(witness !== undefined ? { witness } : {}),
+    watchers,
   };
-
-  validateWitnessParameter(params.witness);
 
   if (lastMeta.prerotation) {
     await newKeysAreInNextKeys(options.updateKeys ?? [], lastMeta.nextKeyHashes ?? []);

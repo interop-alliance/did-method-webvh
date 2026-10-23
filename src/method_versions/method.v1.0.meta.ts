@@ -52,8 +52,7 @@ export const parseGenesisParameters = (parameters: DIDLogEntry['parameters']): G
  */
 export const applyEntryToMeta = (entry: DIDLogEntry, previousMeta?: DIDResolutionMeta): DIDResolutionMeta => {
   const { parameters } = entry;
-  const copyWatchers = (watchers: string[] | null | undefined): string[] | null =>
-    watchers == null ? null : [...watchers];
+  const copyWatchers = (watchers: string[] | null | undefined): string[] => [...(watchers ?? [])];
 
   if (!previousMeta) {
     const { scid, updateKeys } = parseGenesisParameters(parameters);

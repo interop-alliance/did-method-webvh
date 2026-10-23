@@ -13,6 +13,7 @@ import {
   createWitnessedTestDID,
   createWitnessSigner,
   generateTestVerificationMethod,
+  MOCK_SCID,
   nextSecond,
   stubGlobalFetchUnused,
   TestCryptoImplementation,
@@ -138,6 +139,18 @@ describe('resolveDID over HTTPS', () => {
     expect(result.didDocument).toBeNull();
     expect(result.didResolutionMetadata.error).toBe('invalidDid');
     expect(result.didResolutionMetadata.problemDetails?.detail).toMatch(/does not match state\.id/);
+  });
+
+  test('rejects a malformed SCID before any fetch', async () => {
+    const fetchSpy = vi.fn<FetchLike>(() => {
+      throw new Error('fetch must not be called');
+    });
+
+    const result = await resolveDID('did:webvh:bad:example.com', { verifier, fetch: fetchSpy });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(result.didDocument).toBeNull();
+    expect(result.didResolutionMetadata.error).toBe('invalidDid');
   });
 
   test('maps an HTTP 404 to the notFound resolution error', async () => {
@@ -273,7 +286,7 @@ describe('fetchLogFromIdentifier', () => {
     const entries = [{ versionId: '1-abc' }, { versionId: '2-def' }];
     const fetchMock = stubFetchResponse(entries.map((entry) => JSON.stringify(entry)).join('\n'));
 
-    const fetched = await fetchLogFromIdentifier('did:webvh:scid123:example.com:dids:issuer');
+    const fetched = await fetchLogFromIdentifier(`did:webvh:${MOCK_SCID}:example.com:dids:issuer`);
 
     expect(fetchMock).toHaveBeenCalledWith('https://example.com/dids/issuer/did.jsonl');
     expect(fetched).toEqual(entries);
@@ -284,7 +297,7 @@ describe('fetchLogFromIdentifier', () => {
     stubGlobalFetchUnused();
     const customFetch = createFetchMock(entries.map((entry) => JSON.stringify(entry)).join('\n'));
 
-    const fetched = await fetchLogFromIdentifier('did:webvh:scid123:example.com:dids:issuer', customFetch);
+    const fetched = await fetchLogFromIdentifier(`did:webvh:${MOCK_SCID}:example.com:dids:issuer`, customFetch);
 
     expect(customFetch).toHaveBeenCalledWith('https://example.com/dids/issuer/did.jsonl');
     expect(globalThis.fetch).not.toHaveBeenCalled();
@@ -302,7 +315,7 @@ describe('fetchWitnessProofs', () => {
     const proofs = [{ versionId: '1-abc', proof: [] }];
     const fetchMock = stubFetchResponse(JSON.stringify(proofs));
 
-    const result = await fetchWitnessProofs('did:webvh:scid123:example.com');
+    const result = await fetchWitnessProofs(`did:webvh:${MOCK_SCID}:example.com`);
 
     expect(fetchMock).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json');
     expect(result).toEqual(proofs);
@@ -313,7 +326,7 @@ describe('fetchWitnessProofs', () => {
     stubGlobalFetchUnused();
     const customFetch = createFetchMock(JSON.stringify(proofs));
 
-    const result = await fetchWitnessProofs('did:webvh:scid123:example.com', customFetch);
+    const result = await fetchWitnessProofs(`did:webvh:${MOCK_SCID}:example.com`, customFetch);
 
     expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json');
     expect(globalThis.fetch).not.toHaveBeenCalled();
@@ -323,25 +336,25 @@ describe('fetchWitnessProofs', () => {
   test('returns an empty list when the witness proof file is missing', async () => {
     stubFetchResponse('', { ok: false, status: 404 });
 
-    expect(await fetchWitnessProofs('did:webvh:scid123:example.com')).toEqual([]);
+    expect(await fetchWitnessProofs(`did:webvh:${MOCK_SCID}:example.com`)).toEqual([]);
   });
 
   test('throws on a non-404 HTTP error instead of returning an empty list', async () => {
     stubFetchResponse('', { ok: false, status: 503 });
 
-    await expect(fetchWitnessProofs('did:webvh:scid123:example.com')).rejects.toThrow('HTTP error! status: 503');
+    await expect(fetchWitnessProofs(`did:webvh:${MOCK_SCID}:example.com`)).rejects.toThrow('HTTP error! status: 503');
   });
 
   test('propagates a failed fetch', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('connection refused')));
 
-    await expect(fetchWitnessProofs('did:webvh:scid123:example.com')).rejects.toThrow('connection refused');
+    await expect(fetchWitnessProofs(`did:webvh:${MOCK_SCID}:example.com`)).rejects.toThrow('connection refused');
   });
 
   test('throws when the witness proof file is not a JSON array', async () => {
     stubFetchResponse(JSON.stringify({ error: 'misconfigured' }));
 
-    await expect(fetchWitnessProofs('did:webvh:scid123:example.com')).rejects.toThrow('is not a JSON array');
+    await expect(fetchWitnessProofs(`did:webvh:${MOCK_SCID}:example.com`)).rejects.toThrow('is not a JSON array');
   });
 });
 
@@ -352,13 +365,13 @@ describe('resolveVM', () => {
   });
 
   test('resolves did:webvh VM via direct verificationMethod array match', async () => {
-    const vmId = 'did:webvh:scid123:example.com#key-1';
+    const vmId = `did:webvh:${MOCK_SCID}:example.com#key-1`;
 
     stubFetchResponse('{"versionId":"1-abc"}\n{"versionId":"2-def"}');
     const resolveV1LogSpy = vi.spyOn(resolutionModule, 'resolveV1Log').mockResolvedValue({
-      did: 'did:webvh:scid123:example.com',
+      did: `did:webvh:${MOCK_SCID}:example.com`,
       doc: {
-        id: 'did:webvh:scid123:example.com',
+        id: `did:webvh:${MOCK_SCID}:example.com`,
         verificationMethod: [
           {
             id: vmId,
@@ -386,13 +399,13 @@ describe('resolveVM', () => {
   });
 
   test('does not memoize did:webvh resolutions across calls, so key rotations are picked up', async () => {
-    const vmId = 'did:webvh:scid123:example.com#key-1';
+    const vmId = `did:webvh:${MOCK_SCID}:example.com#key-1`;
 
     const fetchMock = stubFetchResponse('{"versionId":"1-abc"}');
     vi.spyOn(resolutionModule, 'resolveV1Log').mockResolvedValue({
-      did: 'did:webvh:scid123:example.com',
+      did: `did:webvh:${MOCK_SCID}:example.com`,
       doc: {
-        id: 'did:webvh:scid123:example.com',
+        id: `did:webvh:${MOCK_SCID}:example.com`,
         verificationMethod: [{ id: vmId, type: 'Multikey', publicKeyMultibase: 'zSomeKey' }],
       },
       meta: {},
@@ -405,16 +418,16 @@ describe('resolveVM', () => {
   });
 
   test('resolves did:webvh VM via verification relationship object fallback', async () => {
-    const vmId = 'did:webvh:scid123:example.com#assertion-key';
+    const vmId = `did:webvh:${MOCK_SCID}:example.com#assertion-key`;
 
     stubFetchResponse('{"versionId":"1-abc"}\n{"versionId":"2-def"}');
     vi.spyOn(resolutionModule, 'resolveV1Log').mockResolvedValue({
-      did: 'did:webvh:scid123:example.com',
+      did: `did:webvh:${MOCK_SCID}:example.com`,
       doc: {
-        id: 'did:webvh:scid123:example.com',
+        id: `did:webvh:${MOCK_SCID}:example.com`,
         verificationMethod: [],
         assertionMethod: [
-          'did:webvh:scid123:example.com#string-reference',
+          `did:webvh:${MOCK_SCID}:example.com#string-reference`,
           {
             id: vmId,
             type: 'Multikey',

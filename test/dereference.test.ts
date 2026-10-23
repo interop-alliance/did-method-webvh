@@ -8,6 +8,7 @@ import {
   createTestSigner,
   createTestVerifier,
   generateTestVerificationMethod,
+  MOCK_SCID,
   nextSecond,
   stubGlobalFetchUnused,
 } from './utils.js';
@@ -61,52 +62,52 @@ beforeAll(async () => {
 
 describe('parseVerificationMethodUrl', () => {
   test('parses a versioned verification-method DID URL', () => {
-    expect(parseVerificationMethodUrl('did:webvh:abc:example.com?versionId=2-xyz#key-1')).toEqual({
-      did: 'did:webvh:abc:example.com',
+    expect(parseVerificationMethodUrl(`did:webvh:${MOCK_SCID}:example.com?versionId=2-xyz#key-1`)).toEqual({
+      did: `did:webvh:${MOCK_SCID}:example.com`,
       versionId: '2-xyz',
       fragment: 'key-1',
     });
   });
 
   test('parses an unversioned verification-method DID URL', () => {
-    expect(parseVerificationMethodUrl('did:webvh:abc:example.com#key-1')).toEqual({
-      did: 'did:webvh:abc:example.com',
+    expect(parseVerificationMethodUrl(`did:webvh:${MOCK_SCID}:example.com#key-1`)).toEqual({
+      did: `did:webvh:${MOCK_SCID}:example.com`,
       versionId: undefined,
       fragment: 'key-1',
     });
   });
 
   test('a URL with no fragment yields an undefined fragment', () => {
-    expect(parseVerificationMethodUrl('did:webvh:abc:example.com?versionId=1-xyz')).toEqual({
-      did: 'did:webvh:abc:example.com',
+    expect(parseVerificationMethodUrl(`did:webvh:${MOCK_SCID}:example.com?versionId=1-xyz`)).toEqual({
+      did: `did:webvh:${MOCK_SCID}:example.com`,
       versionId: '1-xyz',
       fragment: undefined,
     });
   });
 
   test('throws on an empty query', () => {
-    expect(() => parseVerificationMethodUrl('did:webvh:abc:example.com?#key-1')).toThrow(/Empty query/);
+    expect(() => parseVerificationMethodUrl(`did:webvh:${MOCK_SCID}:example.com?#key-1`)).toThrow(/Empty query/);
   });
 
   test('throws on a valueless or empty versionId', () => {
-    expect(() => parseVerificationMethodUrl('did:webvh:abc:example.com?versionId#key-1')).toThrow(
+    expect(() => parseVerificationMethodUrl(`did:webvh:${MOCK_SCID}:example.com?versionId#key-1`)).toThrow(
       /Empty DID parameter 'versionId'/
     );
-    expect(() => parseVerificationMethodUrl('did:webvh:abc:example.com?versionId=#key-1')).toThrow(
+    expect(() => parseVerificationMethodUrl(`did:webvh:${MOCK_SCID}:example.com?versionId=#key-1`)).toThrow(
       /Empty DID parameter 'versionId'/
     );
   });
 
   test('throws on an unsupported DID parameter', () => {
     expect(() =>
-      parseVerificationMethodUrl('did:webvh:abc:example.com?versionTime=2024-01-01T00:00:00Z#key-1')
+      parseVerificationMethodUrl(`did:webvh:${MOCK_SCID}:example.com?versionTime=2024-01-01T00:00:00Z#key-1`)
     ).toThrow(/Unsupported DID parameter 'versionTime'/);
   });
 
   test('throws on a repeated versionId parameter', () => {
-    expect(() => parseVerificationMethodUrl('did:webvh:abc:example.com?versionId=1-a&versionId=2-b#key-1')).toThrow(
-      /Repeated DID parameter 'versionId'/
-    );
+    expect(() =>
+      parseVerificationMethodUrl(`did:webvh:${MOCK_SCID}:example.com?versionId=1-a&versionId=2-b#key-1`)
+    ).toThrow(/Repeated DID parameter 'versionId'/);
   });
 });
 

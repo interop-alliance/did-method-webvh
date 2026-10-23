@@ -84,6 +84,26 @@ describe('Strict address input validation and parsing', () => {
     expect(doc.id).toMatch(/^did:webvh:[^:]+:example\.com%3A8080:custom:path$/);
   });
 
+  test('Canonicalizes a lowercase port separator in a DID template', async () => {
+    const { doc } = await createFromInput('address', 'did:webvh:{SCID}:example.com%3a8080:custom');
+    expect(doc.id).toMatch(/^did:webvh:[^:]+:example\.com%3A8080:custom$/);
+  });
+
+  test('Keeps colons within URL path segments when creating a DID', async () => {
+    const { did, doc } = await createFromInput('address', 'https://example.com/a:b');
+    expect(did).toMatch(/^did:webvh:[^:]+:example\.com:a%3Ab$/);
+    expect(doc.id).toBe(did);
+  });
+
+  test.each(['https://user:pass@example.com', 'https://example.com:1@other.org/', 'https://localhost:1@evil.com/'])(
+    'Rejects URL input with userinfo: %s',
+    async (address) => {
+      await expect(createFromInput('address', address)).rejects.toThrow(
+        'URL input must not include username or password'
+      );
+    }
+  );
+
   test('Rejects unsupported URL scheme', async () => {
     expect(createFromInput('address', 'ftp://example.com')).rejects.toThrow();
   });
@@ -156,10 +176,57 @@ describe('Strict address input validation and parsing', () => {
     );
   });
 
-  test('Rejects decoded NUL in path segment', async () => {
-    expect(createFromInput('address', 'did:webvh:{SCID}:example.com:test%00secret')).rejects.toThrow(
-      'did:webvh identifier must not contain decoded NUL character within a path segment'
+  test.each([
+    ['NUL', 'did:webvh:{SCID}:example.com:test%00secret', 'did:webvh identifier'],
+    ['tab', 'did:webvh:{SCID}:example.com:a%09b', 'did:webvh identifier'],
+    // WHATWG URL strips tab, CR, and LF before parsing; the raw text is checked.
+    ['raw tab in a URL path', 'https://example.com/a\tb', 'URL pathname'],
+    ['raw newline in a URL path', 'https://example.com/a\nb', 'URL pathname'],
+  ])('Rejects decoded control character (%s) in path segment', async (_name, address, context) => {
+    await expect(createFromInput('address', address)).rejects.toThrow(
+      `${context} must not contain decoded control characters within a path segment`
     );
+  });
+
+  test('Rejects a raw tab in the paths option', async () => {
+    const authKey = await generateTestVerificationMethod();
+    await expect(
+      createDID({
+        address: 'example.com',
+        paths: ['a\tb'],
+        signer: createTestSigner(authKey),
+        updateKeys: [authKey.publicKeyMultibase!],
+        verificationMethods: asPublicVerificationMethods(authKey),
+        verifier: new TestCryptoImplementation({ verificationMethod: authKey }),
+      })
+    ).rejects.toThrow('must not contain decoded control characters within a path segment');
+  });
+
+  test.each(['127.1', '0x7f.1', '01.1', '0177.0.0.1', '2130706433'])(
+    'Rejects non-dotted-quad IPv4 literal host %s in every input form',
+    async (host) => {
+      await expect(createFromInput('domain', host)).rejects.toThrow('IP addresses are not allowed as hosts');
+      await expect(createFromInput('address', `did:webvh:{SCID}:${host}`)).rejects.toThrow(
+        'IP addresses are not allowed as hosts'
+      );
+      await expect(createFromInput('address', `https://${host}/`)).rejects.toThrow(
+        'IP addresses are not allowed as hosts'
+      );
+    }
+  );
+
+  test('Rejects a host whose last label is numeric, as WHATWG URL reads it as IPv4', async () => {
+    await expect(createFromInput('domain', 'example.123')).rejects.toThrow('IP addresses are not allowed as hosts');
+    await expect(createFromInput('address', 'did:webvh:{SCID}:example.123')).rejects.toThrow(
+      'IP addresses are not allowed as hosts'
+    );
+  });
+
+  test('Accepts a host label that happens to be SCID-shaped', async () => {
+    const label = '1'.repeat(46);
+    const { did, doc } = await createFromInput('domain', `${label}.example.com`);
+    expect(did).toMatch(new RegExp(`^did:webvh:[^:]+:${label}\\.example\\.com$`));
+    expect(doc.alsoKnownAs).toBeUndefined();
   });
 
   test('Rejects leading whitespace in decoded path segment', async () => {

@@ -2,7 +2,7 @@ import type { VerificationRelationship } from './constants.js';
 import { BASE_CONTEXT, DID_PLACEHOLDER, PLACEHOLDER, VERIFICATION_RELATIONSHIPS } from './constants.js';
 import type { DIDDoc, ServiceEndpoint, VerificationMethod } from './interfaces.js';
 import { parseDidWebvhIdentifier } from './utils/did-identifier.js';
-import { mapStringsInObject, replaceValueInObject, replaceValuesInObject } from './utils/object.js';
+import { mapStringsInObject, replaceValuesInObject } from './utils/object.js';
 import { requireDidDocumentId } from './utils.js';
 
 type NormalizedVerificationMethods = Required<Pick<DIDDoc, 'verificationMethod' | VerificationRelationship>>;
@@ -33,7 +33,7 @@ export function validateCreateDidDocument(didDocument: DIDDoc): void {
 export function convertWebvhIdToWebId(id: string): string {
   let locationKey: string;
   try {
-    ({ locationKey } = parseDidWebvhIdentifier(id, 'did:webvh id'));
+    ({ locationKey } = parseDidWebvhIdentifier(id, 'did:webvh id', { allowScidPlaceholder: true }));
   } catch {
     throw new Error(`Invalid did:webvh id '${id}'`);
   }
@@ -481,13 +481,23 @@ export function replaceCreateDidPlaceholders<T>(input: T, scid: string, did: str
 }
 
 export function generateParallelDidWeb(didwebvhDid: string, didwebvhDoc: DIDDoc): DIDDoc {
-  const { scid } = parseDidWebvhIdentifier(didwebvhDid, 'did:webvh id');
-  const webDoc = replaceValueInObject(didwebvhDoc, `did:webvh:${scid}:`, 'did:web:');
+  const { scid, locationKey } = parseDidWebvhIdentifier(didwebvhDid, 'did:webvh id');
+  const prefix = `did:webvh:${scid}:`;
+  const canonicalDid = `${prefix}${locationKey}`;
+  // Self-references written with a lowercase `%3a` port separator are brought
+  // to the canonical string first, so the derived document is not split across
+  // the two forms.
+  const canonicalize: Array<[string, string]> = [
+    [didwebvhDid, canonicalDid],
+    [`did:web:${didwebvhDid.slice(prefix.length)}`, `did:web:${locationKey}`],
+  ];
+  const webDoc = replaceValuesInObject(didwebvhDoc, [...canonicalize, [prefix, 'did:web:']]);
 
   const webDid = requireDidDocumentId(webDoc.id);
+  const sourceAliases = Array.isArray(didwebvhDoc.alsoKnownAs) ? didwebvhDoc.alsoKnownAs : [];
   const aliases = appendAlias(
-    (Array.isArray(webDoc.alsoKnownAs) ? webDoc.alsoKnownAs : []).filter((alias: string) => alias !== webDid),
-    didwebvhDid
+    replaceValuesInObject(sourceAliases, canonicalize).filter((alias: string) => alias !== webDid),
+    canonicalDid
   );
 
   return {

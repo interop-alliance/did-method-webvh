@@ -146,6 +146,24 @@ When porting an upstream PR, translate it through the following deliberate
 divergences (newest first). Library behavior and public API are otherwise kept
 aligned with upstream.
 
+### migrateDID was declined
+
+Upstream (`6714b11`, `24f3abb`, `51d86dc`) added `migrateDID`. It appends a
+portable-move entry that renames a percent-encoded U-label DID to its A-label
+form with the same SCID. It is built on a `nextDid` bypass threaded through
+`prepareUpdateEntry`, plus a migration-only swap of the derived `did:web`
+alias in `alsoKnownAs`.
+
+This fork declined it. It never emitted percent-encoded U-label identifiers,
+so there is nothing to migrate. The API would be permanent surface without a
+caller. Of `51d86dc`, the service-id rewrite is already covered by
+`rewriteSelfReferences`. The `generateParallelDidWeb` alias-source fix was
+ported, so the alias list comes from the original document's `alsoKnownAs`.
+
+**When porting:** upstream changes to `migrateDID`, `MigrateDIDOptions`, the
+`nextDid` parameter, or the migration-only alias swap are N/A. Future sweeps
+should not re-raise them.
+
 ### Historical selectors return a clean snapshot
 
 Upstream (`c07e2a9`) decorates every historical result with `invalidDid`

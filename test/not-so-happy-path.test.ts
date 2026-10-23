@@ -775,13 +775,14 @@ describe('Not So Happy Path Tests', () => {
     const tamperedLog: DIDLog = JSON.parse(JSON.stringify(initialDID.log));
     const originalScid = tamperedLog[0].parameters.scid as string;
 
-    // Build a SHA-384 multihash (48-byte digest) so the structure is valid but algorithm is wrong
-    const fakeDigest = new Uint8Array(48).fill(0xab);
-    const sha384Multihash = createMultihash(fakeDigest, MultihashAlgorithm.SHA2_384);
-    const sha384Scid = encodeBase58Btc(sha384Multihash);
+    // Build a SHA3-256 multihash (32-byte digest) so the structure and the
+    // 46-character SCID length are valid but the algorithm is wrong
+    const fakeDigest = new Uint8Array(32).fill(0xab);
+    const wrongAlgorithmMultihash = createMultihash(fakeDigest, MultihashAlgorithm.SHA3_256);
+    const wrongAlgorithmScid = encodeBase58Btc(wrongAlgorithmMultihash);
 
     // Replace every occurrence of the real SCID with the SHA-384 one
-    const tamperedStr = JSON.stringify(tamperedLog).replaceAll(originalScid, sha384Scid);
+    const tamperedStr = JSON.stringify(tamperedLog).replaceAll(originalScid, wrongAlgorithmScid);
     const tamperedLogWithBadScid: DIDLog = JSON.parse(tamperedStr);
 
     await expect(resolveDIDFromLog(tamperedLogWithBadScid, { verifier: testImplementation })).rejects.toThrow(

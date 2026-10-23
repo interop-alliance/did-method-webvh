@@ -1,3 +1,76 @@
+## 5.17.0 - TBD
+
+### Changed
+
+- Resolution metadata `watchers` is always an array; a log that omits
+  `watchers` or sets it to `null` resolves to `[]` (upstream `f1f1d7c`).
+- DID addresses canonicalize the host to its lowercase A-label (`xn--`) form
+  in every input form (bare domain, URL, `did:webvh` DID or `{SCID}`
+  template). The host is decoded once and NFC-normalized; ASCII hosts are
+  lowercased. A `{SCID}` placeholder (or the SCID, on update) in a host label
+  or path segment is kept verbatim (upstream `9ad53c1`).
+- Path segments of a `did:webvh` address and inherited prior-entry paths are
+  canonicalized to uppercase-hex idchars, like other path input (upstream
+  `9ad53c1`).
+- Percent-encoded U-label identifiers still resolve; the derived URL uses the
+  A-label host (upstream `9ad53c1`).
+- Re-supplying a DID's current location on update, in any form, is not a move
+  and keeps the existing DID (upstream `9ad53c1`).
+- The SCID segment of a `did:webvh` identifier must be 46 base58btc
+  characters (the `{SCID}` placeholder remains valid on create); malformed
+  identifiers are rejected before any fetch (upstream `4036363`).
+
+### Fixed
+
+- Path segments from URL addresses and the `paths` option are percent-encoded
+  as single DID path components (`:` to `%3A`, `~` to `%7E`) (upstream
+  `40f26da`).
+- Derived HTTPS URLs decode each DID path segment once and re-encode it with
+  uppercase hex, per the DID-to-HTTPS transformation (upstream `d06764b`).
+- Empty path segments in a `did:webvh` identifier or the `paths` option are
+  rejected (upstream `d06764b`).
+- Raw (unencoded) non-ASCII text in a `did:webvh` identifier is rejected
+  (upstream `9ad53c1`).
+- An encoded port must be one to five digits in the TCP range; `parseInt`
+  no longer accepts trailing text such as `%3A8080x`.
+- Path segments of a `did:webvh` identifier must consist of DID Core
+  `idchar`s (ALPHA, DIGIT, `.`, `-`, `_`, or percent-encoded bytes); raw
+  `@`, space, `~`, and similar characters are rejected.
+- Percent-encoded ASCII characters in the host of a `did:webvh` identifier
+  (such as `exa%41mple.com`) are rejected, so one location cannot be written
+  as two identifiers; percent-encoding remains valid for U-label bytes.
+- `generateParallelDidWeb` canonicalizes a lowercase `%3a` port separator in
+  the source document's self-references, so the derived `did:web` document
+  does not list itself under the other form.
+- Hosts are validated as DNS names (label syntax, at least two labels, 253
+  characters at most); `localhost` is still allowed (upstream `9ad53c1`).
+- Runtimes whose `URL` cannot apply IDNA throw for non-ASCII hosts instead of
+  deriving a wrong URL (upstream `9ad53c1`).
+- Unpaired UTF-16 surrogates in address or path input are rejected (upstream
+  `9ad53c1`).
+- The parallel `did:web` document keeps `did:webvh` aliases from the source
+  document's `alsoKnownAs` instead of rewriting them to `did:web` (upstream
+  `51d86dc`).
+- An update that omits `witness` no longer writes `witness: {}` (which
+  disables witnessing); the previous configuration is retained, and
+  `witness: null` still disables it (upstream `387787c`).
+- Hosts that WHATWG URL reads as IPv4 literals (`127.1`, `0x7f.1`, `01.1`, a
+  numeric last label) are rejected in every input form, not only the dotted
+  quad.
+- On update, a `did:webvh` address must carry the SCID of the DID being
+  updated; another SCID is rejected instead of being rewritten.
+- The ASCII labels and total length of a percent-encoded U-label identifier
+  are validated when the identifier is parsed, instead of failing later when
+  its URL is derived.
+- Decoded control characters in a path segment are rejected, including tab,
+  CR, and LF in a URL address, which WHATWG URL strips before parsing.
+- A host label that is itself SCID-shaped (46 base58btc characters) no longer
+  makes a `{SCID}` template unparseable.
+- An update with an `address` no longer fails when the previous DID resolves
+  but cannot be re-canonicalized as an address; it is treated as a different
+  location.
+- `DIDResolutionMeta.watchers` is typed as a required array.
+
 ## 5.16.0 - 2026-10-20
 
 ### Security

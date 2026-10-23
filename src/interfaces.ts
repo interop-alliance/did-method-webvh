@@ -102,7 +102,7 @@ export interface DIDResolutionMeta {
   nextKeyHashes: string[];
   deactivated: boolean;
   witness?: WitnessParameter;
-  watchers?: string[] | null;
+  watchers: string[];
   error?: DidResolutionError;
   problemDetails?: ProblemDetails;
 }

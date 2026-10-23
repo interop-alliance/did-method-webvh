@@ -1,10 +1,12 @@
 import { beforeAll, describe, expect, test } from 'vitest';
+import { generateParallelDidWeb } from '../src/did-document.js';
 import type { CreateDIDResult, DIDLog, VerificationMethod } from '../src/interfaces.js';
 import { createDID, resolveDIDFromLog, updateDID } from '../src/method.js';
 import {
   asPublicVerificationMethods,
   createTestSigner,
   generateTestVerificationMethod,
+  MOCK_SCID,
   nextSecond,
   TestCryptoImplementation,
 } from './utils.js';
@@ -362,5 +364,20 @@ describe('Portable move self-reference rewriting', () => {
     const endpoint = updated.doc.service?.[1].serviceEndpoint as { self: string; other: string };
     expect(endpoint.self).toBe(`${newDid}/inbox`);
     expect(endpoint.other).toBe(`${externalDid}#key-1`);
+  });
+});
+
+describe('Parallel did:web alias sources', () => {
+  test('keeps did:webvh aliases from an earlier move instead of rewriting them to did:web', () => {
+    const scid = MOCK_SCID;
+    const did = `did:webvh:${scid}:new.example`;
+    const oldAlias = `did:webvh:${scid}:old.example`;
+    const doc = { '@context': ['https://www.w3.org/ns/did/v1'], id: did, alsoKnownAs: [oldAlias] };
+
+    const webDoc = generateParallelDidWeb(did, doc);
+
+    expect(webDoc.id).toBe('did:web:new.example');
+    expect(webDoc.alsoKnownAs).toEqual([oldAlias, did]);
+    expect(webDoc.alsoKnownAs).not.toContain('did:web:old.example');
   });
 });

@@ -9,6 +9,7 @@ import {
   createRoutedFetchMock,
   createTestSigner,
   generateTestVerificationMethod,
+  MOCK_SCID,
   nextSecond,
   stubGlobalFetchUnused,
   TestCryptoImplementation,
@@ -62,7 +63,7 @@ describe('createDidWebvhDriver', () => {
     const driver = createDidWebvhDriver({ verifier });
     // An unresolvable host fails fast; we only assert the call is wired, not the
     // network outcome.
-    await expect(driver.get({ did: 'did:webvh:QmExample:invalid.example' })).rejects.toThrow();
+    await expect(driver.get({ did: `did:webvh:${MOCK_SCID}:invalid.example` })).rejects.toThrow();
     expect(typeof driver.get).toBe('function');
     void used;
   });
@@ -97,7 +98,7 @@ describe('createDidWebvhDriver', () => {
   test('resolveDID() rejects a non-function per-call fetch as invalidOptions', async () => {
     const driver = createDidWebvhDriver();
 
-    const result = await driver.resolveDID({ did: 'did:webvh:QmExample:example.com', fetch: 'nope' });
+    const result = await driver.resolveDID({ did: `did:webvh:${MOCK_SCID}:example.com`, fetch: 'nope' });
 
     expect(result.didDocument).toBeNull();
     expect(result.didResolutionMetadata.error).toBe('invalidOptions');

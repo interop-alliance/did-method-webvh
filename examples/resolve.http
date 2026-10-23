@@ -7,7 +7,7 @@ GET http://localhost:3010/resolve/did:webvh:QmPEQVM1JPTyrvEgBcDXwjK4TeyLGSX1Pxjg
 
 ### 400
 
-GET http://localhost:3010/resolve/did:webvh:potato:gist.githubusercontent.com:brianorwhatever:9c4633d18eb644f7a47f93a802691626:raw
+GET http://localhost:3010/resolve/did:webvh:QmYEM6EkqHneikXFPD7mEoBi9CeaQgu5F3XMJxXCX44Jcz:gist.githubusercontent.com:brianorwhatever:9c4633d18eb644f7a47f93a802691626:raw
 
 ### 200
 

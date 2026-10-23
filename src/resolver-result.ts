@@ -29,7 +29,7 @@ export interface WebvhDocumentMetadata extends IDIDDocumentMetadata {
   prerotation?: boolean;
   portable?: boolean;
   witness?: DIDResolutionMeta['witness'];
-  watchers?: string[] | null;
+  watchers?: string[];
 }
 
 const CONTENT_TYPE = 'application/did+ld+json';

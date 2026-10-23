@@ -12,6 +12,7 @@ import {
   asPublicVerificationMethods,
   createTestSigner,
   generateTestVerificationMethod,
+  MOCK_SCID,
   TestCryptoImplementation,
 } from './utils.js';
 
@@ -182,49 +183,49 @@ describe('Resolver URL derivation', () => {
     ['example.com:localhost', 'https://example.com/localhost', ''],
     ['example.com:api:localhost:issuer', 'https://example.com/api/localhost/issuer', ''],
     ['example.com%3A8443:localhost', 'https://example.com:8443/localhost', ''],
-    ['%6Cocalhost.example.com', 'https://localhost.example.com', '/.well-known'],
+    ['localhost.example.com', 'https://localhost.example.com', '/.well-known'],
   ])('Picks the scheme for %s by exact host match', (address, location, logDirectory) => {
-    const did = `did:webvh:scid:${address}`;
+    const did = `did:webvh:${MOCK_SCID}:${address}`;
 
     expect(getBaseUrl(did)).toBe(location);
     expect(getFileUrl(did)).toBe(`${location}${logDirectory}/did.jsonl`);
   });
 
   test('Uses http for localhost DID host', () => {
-    const did = 'did:webvh:scid:localhost%3A8000:test:path';
+    const did = `did:webvh:${MOCK_SCID}:localhost%3A8000:test:path`;
     expect(getBaseUrl(did)).toBe('http://localhost:8000/test/path');
     expect(getFileUrl(did)).toBe('http://localhost:8000/test/path/did.jsonl');
   });
 
   test('Uses https for non-localhost DID host', () => {
-    const did = 'did:webvh:scid:example.com%3A8080:custom:path';
+    const did = `did:webvh:${MOCK_SCID}:example.com%3A8080:custom:path`;
     expect(getBaseUrl(did)).toBe('https://example.com:8080/custom/path');
     expect(getFileUrl(did)).toBe('https://example.com:8080/custom/path/did.jsonl');
   });
 
   test('Uses .well-known did.jsonl when DID has no path', () => {
-    const did = 'did:webvh:scid:example.com';
+    const did = `did:webvh:${MOCK_SCID}:example.com`;
     expect(getBaseUrl(did)).toBe('https://example.com');
     expect(getFileUrl(did)).toBe('https://example.com/.well-known/did.jsonl');
   });
 
   test('Rejects DID identifier containing fragment or query contamination', () => {
-    expect(() => getBaseUrl('did:webvh:scid:example.com#frag')).toThrow(
+    expect(() => getBaseUrl(`did:webvh:${MOCK_SCID}:example.com#frag`)).toThrow(
       'Address input must not include query or fragment components'
     );
-    expect(() => getBaseUrl('did:webvh:scid:example.com?query=1')).toThrow(
+    expect(() => getBaseUrl(`did:webvh:${MOCK_SCID}:example.com?query=1`)).toThrow(
       'Address input must not include query or fragment components'
     );
   });
 
   test('Rejects DID identifier containing traversal-style path segments', () => {
-    expect(() => getBaseUrl('did:webvh:scid:example.com:..:secret')).toThrow(
+    expect(() => getBaseUrl(`did:webvh:${MOCK_SCID}:example.com:..:secret`)).toThrow(
       'did:webvh identifier must not contain dot-segments'
     );
-    expect(() => getBaseUrl('did:webvh:scid:example.com:%2E%2E:secret')).toThrow(
+    expect(() => getBaseUrl(`did:webvh:${MOCK_SCID}:example.com:%2E%2E:secret`)).toThrow(
       'did:webvh identifier must not contain dot-segments'
     );
-    expect(() => getBaseUrl('did:webvh:scid:example.com:a%2Fb')).toThrow(
+    expect(() => getBaseUrl(`did:webvh:${MOCK_SCID}:example.com:a%2Fb`)).toThrow(
       'did:webvh identifier must not contain decoded slash within a single path segment'
     );
   });
@@ -237,12 +238,35 @@ describe('Direct utility guards and parsers', () => {
   });
 
   test('requireDidDocumentId returns the provided id when present', () => {
-    expect(requireDidDocumentId('did:webvh:scid:example.com')).toBe('did:webvh:scid:example.com');
+    expect(requireDidDocumentId(`did:webvh:${MOCK_SCID}:example.com`)).toBe(`did:webvh:${MOCK_SCID}:example.com`);
   });
 
   test('parseCanonicalAddress rejects did:webvh with missing domain segment', () => {
     expect(() => parseCanonicalAddress('did:webvh:onlyscid')).toThrow(
       'Invalid did:webvh identifier: must contain SCID (or {SCID} placeholder) and domain'
+    );
+  });
+
+  test.each([
+    ['45 characters', MOCK_SCID.slice(0, 45)],
+    ['47 characters', `${MOCK_SCID}A`],
+    ['a 0', `0${MOCK_SCID.slice(1)}`],
+    ['an O', `O${MOCK_SCID.slice(1)}`],
+    ['an I', `I${MOCK_SCID.slice(1)}`],
+    ['an l', `l${MOCK_SCID.slice(1)}`],
+    ['the {SCID} placeholder', '{SCID}'],
+  ])('Rejects an identifier whose SCID is %s', (_label, scid) => {
+    const did = `did:webvh:${scid}:example.com`;
+    expect(() => parseDidWebvhIdentifier(did, 'test id')).toThrow('test id must include a valid SCID');
+    expect(() => getBaseUrl(did)).toThrow('did:webvh identifier must include a valid SCID');
+    expect(() => getFileUrl(did)).toThrow('did:webvh identifier must include a valid SCID');
+  });
+
+  test('Accepts a 46-character base58btc SCID and the {SCID} creation placeholder', () => {
+    expect(parseDidWebvhIdentifier(`did:webvh:${MOCK_SCID}:example.com`, 'test id').scid).toBe(MOCK_SCID);
+    expect(parseCanonicalAddress('did:webvh:{SCID}:example.com').canonicalHost).toBe('example.com');
+    expect(() => parseCanonicalAddress('did:webvh:bad:example.com')).toThrow(
+      'did:webvh identifier must include a valid SCID'
     );
   });
 
@@ -268,15 +292,15 @@ describe('Direct utility guards and parsers', () => {
 
   test('parseDidWebvhIdentifier rejects missing SCID segment', () => {
     expect(() => parseDidWebvhIdentifier('did:webvh::example.com', 'resolver input')).toThrow(
-      'resolver input must include SCID segment'
+      'resolver input must include a valid SCID'
     );
   });
 
   test('parseDidWebvhIdentifier returns parsed location and paths', () => {
-    const parsed = parseDidWebvhIdentifier('did:webvh:scid123:example.com%3A8443:tenant:issuer', 'resolver input');
+    const parsed = parseDidWebvhIdentifier(`did:webvh:${MOCK_SCID}:example.com%3A8443:tenant:issuer`, 'resolver input');
 
     expect(parsed).toEqual({
-      scid: 'scid123',
+      scid: MOCK_SCID,
       didDomainComponent: 'example.com%3A8443',
       paths: ['tenant', 'issuer'],
       locationKey: 'example.com%3A8443:tenant:issuer',

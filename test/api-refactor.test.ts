@@ -6,7 +6,13 @@ import { createDID, resolveDIDFromLog, updateDID } from '../src/method.js';
 import { deriveNextKeyHash, getHashCacheSizeForTests, HASH_CACHE_MAX_ENTRIES } from '../src/utils/crypto.js';
 import { MultibaseEncoding, multibaseEncode } from '../src/utils/multiformats.js';
 import { getBaseUrl, getFileUrl, logToJsonlString, readLogFromString } from '../src/utils.js';
-import { asPublicVerificationMethods, createTestSigner, generateTestVerificationMethod, nextSecond } from './utils.js';
+import {
+  asPublicVerificationMethods,
+  createTestSigner,
+  generateTestVerificationMethod,
+  MOCK_SCID,
+  nextSecond,
+} from './utils.js';
 
 // R2 -- the core API defaults `verifier` to defaultWebvhLogVerifier, so a
 // consumer never has to import from /driver or thread it through every call.
@@ -58,16 +64,25 @@ describe('R3: exported log and URL utilities', () => {
   });
 
   test('getBaseUrl / getFileUrl map a did:webvh id to its did.jsonl URL', () => {
-    const did = 'did:webvh:QmScid:example.com';
+    const did = `did:webvh:${MOCK_SCID}:example.com`;
     expect(getBaseUrl(did)).toBe('https://example.com');
     expect(getFileUrl(did)).toBe('https://example.com/.well-known/did.jsonl');
 
-    const pathed = 'did:webvh:QmScid:example.com:user:alice';
+    const pathed = `did:webvh:${MOCK_SCID}:example.com:user:alice`;
     expect(getFileUrl(pathed)).toBe('https://example.com/user/alice/did.jsonl');
   });
 
+  test('convertWebvhIdToWebId accepts a template whose host has a SCID-shaped label', () => {
+    const label = '1'.repeat(46);
+    expect(convertWebvhIdToWebId(`did:webvh:{SCID}:${label}.example.com:{SCID}`)).toBe(
+      `did:web:${label}.example.com:{SCID}`
+    );
+  });
+
   test('convertWebvhIdToWebId strips the SCID segment', () => {
-    expect(convertWebvhIdToWebId('did:webvh:QmScid:example.com:user:alice')).toBe('did:web:example.com:user:alice');
+    expect(convertWebvhIdToWebId(`did:webvh:${MOCK_SCID}:example.com:user:alice`)).toBe(
+      'did:web:example.com:user:alice'
+    );
   });
 });
 

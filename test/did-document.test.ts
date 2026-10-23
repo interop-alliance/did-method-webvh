@@ -16,6 +16,7 @@ import {
   createTestSigner,
   createTestVerifier,
   generateTestVerificationMethod,
+  MOCK_SCID,
   nextSecond,
 } from './utils.js';
 
@@ -128,7 +129,7 @@ describe('didDocument create pass-through', () => {
         verifier: createTestVerifier(authKey),
         updateKeys: [authKey.publicKeyMultibase!],
         didDocument: {
-          id: 'did:webvh:abc123:example.com',
+          id: `did:webvh:${MOCK_SCID}:example.com`,
         },
       })
     ).rejects.toThrow("didDocument.id must contain a '{SCID}' or '{DID}' placeholder");
@@ -303,6 +304,27 @@ describe('didDocument create pass-through', () => {
 });
 
 describe('generateParallelDidWeb', () => {
+  test('canonicalizes a lowercase %3a port separator from a foreign log', () => {
+    const storedDid = `did:webvh:${MOCK_SCID}:example.com%3a8080`;
+    const doc: DIDDoc = {
+      '@context': [...BASE_CONTEXT],
+      id: storedDid,
+      alsoKnownAs: [`did:web:example.com%3a8080`],
+      verificationMethod: [
+        { id: `${storedDid}#key-1`, type: 'Multikey', controller: storedDid, publicKeyMultibase: 'z6Mk' },
+      ],
+      authentication: [`${storedDid}#key-1`],
+    };
+
+    const webDoc = generateParallelDidWeb(storedDid, doc);
+
+    expect(webDoc.id).toBe('did:web:example.com%3A8080');
+    expect(webDoc.alsoKnownAs).toEqual([`did:webvh:${MOCK_SCID}:example.com%3A8080`]);
+    expect(webDoc.verificationMethod?.[0].id).toBe('did:web:example.com%3A8080#key-1');
+    expect(webDoc.verificationMethod?.[0].controller).toBe('did:web:example.com%3A8080');
+    expect(webDoc.authentication).toEqual(['did:web:example.com%3A8080#key-1']);
+  });
+
   test('generates did:web doc with correct id', async () => {
     const authKey = await generateTestVerificationMethod();
     const { did, doc } = await createDID({
@@ -529,12 +551,12 @@ describe('did-document helper branches', () => {
       type: 'Multikey',
     };
 
-    const vmId = createVMID(vm, 'did:webvh:zQmExample:example.com');
-    expect(vmId).toMatch(/^did:webvh:zQmExample:example.com#[a-z0-9]{8}$/);
+    const vmId = createVMID(vm, `did:webvh:${MOCK_SCID}:example.com`);
+    expect(vmId).toMatch(new RegExp(`^did:webvh:${MOCK_SCID}:example\\.com#[a-z0-9]{8}$`));
   });
 
   test('normalizeVMs defaults a vm without purpose into authentication only', () => {
-    const did = 'did:webvh:zQmExample:example.com';
+    const did = `did:webvh:${MOCK_SCID}:example.com`;
     const normalized = normalizeVMs(
       [
         {
@@ -551,7 +573,7 @@ describe('did-document helper branches', () => {
   });
 
   test('normalizeVMs emits a vm id once per relationship even when purpose repeats it', () => {
-    const did = 'did:webvh:zQmExample:example.com';
+    const did = `did:webvh:${MOCK_SCID}:example.com`;
     const normalized = normalizeVMs(
       [
         {
@@ -570,7 +592,7 @@ describe('did-document helper branches', () => {
   });
 
   test('normalizeVMs relationship entries reuse the materialized id for a vm with no id or publicKeyMultibase', () => {
-    const did = 'did:webvh:zQmExample:example.com';
+    const did = `did:webvh:${MOCK_SCID}:example.com`;
     const normalized = normalizeVMs(
       [
         // Neither `id` nor `publicKeyMultibase`: the id is materialized from a
@@ -596,7 +618,7 @@ describe('did-document helper branches', () => {
     };
 
     const doc: DIDDoc = {
-      id: 'did:webvh:zQmExample:example.com',
+      id: `did:webvh:${MOCK_SCID}:example.com`,
       authentication: [vm as unknown as string],
     };
 
@@ -605,10 +627,10 @@ describe('did-document helper branches', () => {
   });
 
   test('createDIDDoc propagates a populated relationship field and omits empty ones', async () => {
-    const assertionVmId = 'did:webvh:zQmExample:example.com#assertion-key-1';
+    const assertionVmId = `did:webvh:${MOCK_SCID}:example.com#assertion-key-1`;
 
     const doc = createDIDDoc({
-      did: 'did:webvh:zQmExample:example.com',
+      did: `did:webvh:${MOCK_SCID}:example.com`,
       verificationMethods: [
         {
           id: assertionVmId,
