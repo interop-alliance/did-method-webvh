@@ -33,6 +33,7 @@ export {
   getBaseUrl,
   getFileUrl,
   logToJsonlString,
+  normalizeCreateDidAddress,
   parseAndValidateVersionId,
   parseDidKeyDid,
   parseDidKeyVerificationMethod,

@@ -1,3 +1,12 @@
+## 5.18.0 - TBD
+
+### Added
+
+- `normalizeCreateDidAddress` is exported from the package root: the
+  create-time address normalization `createDID` runs, for a caller that
+  builds a `{SCID}` controller template from a URL and path segments and
+  needs the same canonical identifier.
+
 ## 5.17.0 - 2026-10-22
 
 ### Changed
