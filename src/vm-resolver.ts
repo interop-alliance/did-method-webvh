@@ -7,7 +7,7 @@
  * `countVerifiedWitnessApprovals` take the resolver as an option) instead of
  * the shared bottom modules importing the top of the stack.
  */
-import { VerificationMethodError } from '@interop/data-integrity-core';
+import { isVerificationMethodError, VerificationMethodError } from '@interop/data-integrity-core';
 import { parseVerificationMethodUrl } from './dereference.js';
 import { findVerificationMethod } from './did-document.js';
 import type { DIDLog, LogSourceOptions, ResolveVerificationMethod, VerificationMethod } from './interfaces.js';
@@ -116,11 +116,9 @@ export const createResolveVM = (options: LogSourceOptions = {}): ResolveVerifica
       throw new Error(`Verification method ${vm} not found`);
     } catch (error) {
       // A typed verification-method fault passes through unchanged so callers
-      // can branch on its `name`/`code`; anything else (fetch, parse,
-      // log-validation failures) is wrapped. Matched by `name` rather than
-      // `instanceof`, as the class documents, since a duplicated package copy
-      // would defeat `instanceof`.
-      if (error instanceof Error && error.name === 'VerificationMethodError') {
+      // can branch on its `code`. Anything else (fetch, parse, log-validation
+      // failures) is wrapped.
+      if (isVerificationMethodError(error)) {
         throw error;
       }
       throw new Error(`Error resolving VM ${vm}`, { cause: error });

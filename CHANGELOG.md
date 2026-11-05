@@ -1,3 +1,14 @@
+## 5.18.1 - TBD
+
+### Changed
+
+- `createResolveVM()` recognizes a `VerificationMethodError` with the
+  `isVerificationMethodError()` guard from `@interop/data-integrity-core`
+  8.10.0 instead of a local `name` check.
+- `@interop/data-integrity-core` is a peer dependency rather than a regular
+  dependency, so a consumer and its DID resolver share one copy of the error
+  classes and interfaces.
+
 ## 5.18.0 - 2026-10-29
 
 ### Added
