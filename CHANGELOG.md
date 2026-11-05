@@ -1,3 +1,11 @@
+# Changelog
+
+## 5.18.2 - TBD
+
+### Fixed
+
+- Update package lock.
+
 ## 5.18.1 - 2026-11-05
 
 ### Changed
