@@ -234,6 +234,33 @@ the same option. The resolver reads only `ok`, `status`, `text()` and
 a plain object with those members.
 
 -
+`dereference(didUrl: string, options?: ResolutionOptions): Promise<string>`
+Dereferences a DID URL with a path, such as
+`did:webvh:<scid>:example.com/images/logo.png`, to the URL of the resource it
+names, following the specification's DID URL path handling. The DID is
+resolved with `resolveDID`. A `versionId`, `versionNumber`, or `versionTime`
+DID parameter in the URL selects the version and replaces any version
+selector among the options, `verificationMethod` included. The `PathHandler`
+service whose `path` is the longest complete match from the beginning of the
+DID URL path is selected, and the rest of the path is appended to its
+`serviceEndpoint` with exactly one `/` between them. Every `PathHandler`
+service is handled this way; the specification's separate `PathService` type
+is not required. A trailing `/` on a service `path` is ignored, a `path` that
+does not start with `/` never matches, and a `serviceEndpoint` carrying a
+query or fragment is rejected. Only the document's own services are
+considered; the specification's implicit `#files` and `#whois` services are
+not applied. A deactivated DID throws, as does a resolution result that
+carries an error, such as an unmet witness threshold. The resource itself is
+not fetched.
+
+The steps are exported for callers working from an already-resolved
+document: `parseDidUrl` splits a DID URL into DID, path, version selector,
+and fragment, optionally narrowed to the DID parameters the caller supports;
+`selectPathHandler` picks the service; `pathHandlerUrl` builds the resource
+URL; `isPathHandler` tests a service's `type`, and
+`PATH_HANDLER_SERVICE_TYPE` names it.
+
+-
 `resolveDIDFromLog(log: DIDLog, options?: ResolutionOptions): Promise<{did: string, doc: any, meta: DIDResolutionMeta}>`
 Resolves directly from an in-memory DID log.
 

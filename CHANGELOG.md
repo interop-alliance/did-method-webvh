@@ -1,5 +1,36 @@
 # Changelog
 
+## 5.19.0 - TBD
+
+### Added
+
+- `dereference(didUrl, options)`: DID URL path dereferencing per the
+  specification's `PathHandler` mechanism. Resolves the DID, selects the
+  `PathHandler` service with the longest matching `path`, and returns its
+  `serviceEndpoint` with the rest of the path appended. Every `PathHandler`
+  service is handled this way; the specification's separate `PathService`
+  type is not required. Only the
+  document's own services are considered; the implicit `#files` and `#whois`
+  services are not applied. A trailing `/` on a service `path` is ignored, a
+  `path` not starting with `/` never matches, the endpoint and the rest of
+  the path are joined with exactly one `/`, and a deactivated DID or a
+  resolution result carrying an error (such as an unmet witness threshold)
+  throws. A `serviceEndpoint` carrying a query or fragment is rejected. A
+  version selector in the URL replaces the `verificationMethod` option as
+  well as the version options. `parseDidUrl` takes an optional list of the
+  DID parameters a caller supports, reports a malformed percent-encoding
+  with the DID URL, requires `versionTime` to be UTC (as the resolver does),
+  and rejects a `versionNumber` beyond the safe integer range.
+  `parseDidUrl`, `selectPathHandler`, `pathHandlerUrl`, `isPathHandler`,
+  `PATH_HANDLER_SERVICE_TYPE`, and `VERSION_SELECTOR_PARAMETERS` are
+  exported for the individual steps.
+  (Upstream issue #216.)
+
+### Changed
+
+- `parseVerificationMethodUrl` is built on `parseDidUrl`: a DID URL path
+  throws, and an empty fragment is treated as none.
+
 ## 5.18.2 - 2026-11-05
 
 ### Fixed

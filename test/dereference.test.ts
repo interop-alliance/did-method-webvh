@@ -104,6 +104,12 @@ describe('parseVerificationMethodUrl', () => {
     ).toThrow(/Unsupported DID parameter 'versionTime'/);
   });
 
+  test('throws on a DID URL path', () => {
+    expect(() => parseVerificationMethodUrl(`did:webvh:${MOCK_SCID}:example.com/whois#key-1`)).toThrow(
+      /DID URL path is not supported/
+    );
+  });
+
   test('throws on a repeated versionId parameter', () => {
     expect(() =>
       parseVerificationMethodUrl(`did:webvh:${MOCK_SCID}:example.com?versionId=1-a&versionId=2-b#key-1`)
