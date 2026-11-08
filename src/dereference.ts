@@ -14,47 +14,23 @@
  */
 import { findVerificationMethod } from './did-document.js';
 import type { DIDLog, VerificationMethod } from './interfaces.js';
+import { parseDidUrl } from './path-handler.js';
 
 /**
  * The parts of a did:webvh verification-method DID URL:
  * `did:webvh:<scid>:<host>[?versionId=<id>]#<fragment>`.
  *
- * `did` is everything before the first `?` or `#`. `fragment` is everything
- * after the `#`, or `undefined` when the URL has none. Only the `versionId`
- * DID parameter is supported. Any other query parameter throws, as does a
- * repeated, valueless, or empty `versionId`, and an empty query. Answering
- * from a different version than the one asked for would be wrong. The DID
- * itself is not validated here.
+ * Built on {@link parseDidUrl}: `did` is everything before the first `?` or
+ * `#`, and `fragment` is everything after the `#`, or `undefined` when the
+ * URL has none. A verification method is a member of the document, so a DID
+ * URL path throws, and of the DID parameters only `versionId` is supported.
+ * Answering from a different version than the one asked for would be wrong.
  */
 export function parseVerificationMethodUrl(didUrl: string): { did: string; versionId?: string; fragment?: string } {
-  const hashIndex = didUrl.indexOf('#');
-  const beforeFragment = hashIndex === -1 ? didUrl : didUrl.slice(0, hashIndex);
-  const fragment = hashIndex === -1 ? undefined : didUrl.slice(hashIndex + 1);
-
-  const queryIndex = beforeFragment.indexOf('?');
-  const did = queryIndex === -1 ? beforeFragment : beforeFragment.slice(0, queryIndex);
-
-  let versionId: string | undefined;
-  if (queryIndex !== -1) {
-    const params = new URLSearchParams(beforeFragment.slice(queryIndex + 1));
-    for (const name of params.keys()) {
-      if (name !== 'versionId') {
-        throw new Error(`Unsupported DID parameter '${name}' in verification method URL ${didUrl}`);
-      }
-    }
-    const versionIds = params.getAll('versionId');
-    if (versionIds.length > 1) {
-      throw new Error(`Repeated DID parameter 'versionId' in verification method URL ${didUrl}`);
-    }
-    if (versionIds.length === 0) {
-      throw new Error(`Empty query in verification method URL ${didUrl}`);
-    }
-    if (versionIds[0] === '') {
-      throw new Error(`Empty DID parameter 'versionId' in verification method URL ${didUrl}`);
-    }
-    versionId = versionIds[0];
+  const { did, path, versionId, fragment } = parseDidUrl(didUrl, ['versionId']);
+  if (path !== '') {
+    throw new Error(`A DID URL path is not supported in verification method URL ${didUrl}`);
   }
-
   return { did, versionId, fragment };
 }
 

@@ -10,6 +10,7 @@ import type {
   UpdateDIDResult,
 } from './interfaces.js';
 import * as v1 from './method_versions/method.v1.0.js';
+import { parseDidUrl, pathHandlerUrl, selectPathHandler } from './path-handler.js';
 import { mapErrorToCode, toErrorResult, toResolutionResult, validateResolutionSelectors } from './resolver-result.js';
 import { loadDIDLog, parseDidWebvhIdentifier } from './utils.js';
 import { defaultWebvhLogVerifier } from './verifier.js';
@@ -67,6 +68,54 @@ export const resolveDID = async (did: string, options: ResolutionOptions = {}): 
     const message = e instanceof Error ? e.message : String(e);
     return toErrorResult(mapErrorToCode(e), message);
   }
+};
+
+/**
+ * Dereferences a did:webvh DID URL with a path, such as
+ * `did:webvh:<scid>:<host>/images/logo.png`, to the URL of the resource it
+ * names, per the specification's DID URL path handling.
+ *
+ * The DID is resolved with {@link resolveDID}. A `versionId`,
+ * `versionNumber`, or `versionTime` DID parameter in the URL selects the
+ * version, and replaces every version selector among `options`, including
+ * `verificationMethod`. The
+ * `PathHandler` service whose `path` is the longest complete match from the
+ * beginning of the DID URL path is selected; its `serviceEndpoint` with the
+ * rest of the path appended is returned, with the URL's fragment, if any,
+ * carried over. The specification's implicit `#files` and `#whois` services
+ * are not applied; only the document's own services are considered. Throws
+ * when the URL has no path, resolution fails or reports an error such as an
+ * unmet witness threshold, the DID is deactivated, no `PathHandler` matches,
+ * or the selected service has no single string `serviceEndpoint`.
+ * The resource itself is not fetched.
+ *
+ * @param didUrl The DID URL to dereference.
+ * @param options Optional resolver settings, as for {@link resolveDID}.
+ * @returns The URL of the resource the DID URL names.
+ */
+export const dereference = async (didUrl: string, options: ResolutionOptions = {}): Promise<string> => {
+  const { did, path, fragment, ...selectors } = parseDidUrl(didUrl);
+  if (path === '') {
+    throw new Error(`DID URL ${didUrl} has no path to dereference`);
+  }
+  // A selector in the URL replaces the version selectors among the options.
+  const { versionId, versionNumber, versionTime, verificationMethod, ...otherOptions } = options;
+  const urlHasSelector = Object.keys(selectors).length > 0;
+  const result = await resolveDID(did, urlHasSelector ? { ...otherOptions, ...selectors } : options);
+  if (result.didDocumentMetadata.deactivated) {
+    throw new Error(`Cannot dereference ${didUrl}: ${did} is deactivated`);
+  }
+  // A document may accompany an error (an unmet witness threshold decorates
+  // the snapshot with `invalidDid`); it is not a document to dereference from.
+  const { error, message } = result.didResolutionMetadata;
+  if (result.didDocument === null || error) {
+    throw new Error(`Could not resolve ${did}: ${error}${message ? ` (${message})` : ''}`);
+  }
+  const selection = selectPathHandler(result.didDocument, path);
+  if (selection === undefined) {
+    throw new Error(`No PathHandler service in the DID document of ${did} matches the path ${path}`);
+  }
+  return `${pathHandlerUrl(selection)}${fragment === undefined ? '' : `#${fragment}`}`;
 };
 
 /**

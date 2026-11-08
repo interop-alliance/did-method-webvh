@@ -12,8 +12,22 @@ export {
 export { dereferenceVerificationMethod, parseVerificationMethodUrl } from './dereference.js';
 export { convertWebvhIdToWebId, createVMID, generateParallelDidWeb } from './did-document.js';
 export * from './interfaces.js';
-export { createDID, deactivateDID, resolveDID, resolveDIDFromLog, updateDID } from './method.js';
+export { createDID, deactivateDID, dereference, resolveDID, resolveDIDFromLog, updateDID } from './method.js';
 export { WitnessThresholdError } from './method_versions/method.v1.0.resolution.js';
+export type {
+  ParsedDidUrl,
+  PathHandlerSelection,
+  PathHandlerService,
+  VersionSelectorParameter,
+} from './path-handler.js';
+export {
+  isPathHandler,
+  PATH_HANDLER_SERVICE_TYPE,
+  parseDidUrl,
+  pathHandlerUrl,
+  selectPathHandler,
+  VERSION_SELECTOR_PARAMETERS,
+} from './path-handler.js';
 export type { ResolutionOptionsError, WebvhDocumentMetadata } from './resolver-result.js';
 export {
   mapErrorToCode,

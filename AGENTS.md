@@ -88,6 +88,14 @@ npm run lint
   public witness-introspection API (upstream's `getWitnessRequirements` /
   `verifyWitnessProofs` / `resolveLogWithWitnessResults` were not adopted;
   the candidate-requirement helper covers the one internal use).
+- **[src/path-handler.ts](src/path-handler.ts)** -- DID URL path handling:
+  `parseDidUrl` (the one DID URL parser; `parseVerificationMethodUrl` in
+  `dereference.ts` is built on it), `selectPathHandler` (longest-match
+  `PathHandler` selection over the document's own services; the implicit
+  `#files` / `#whois` services are not applied), and `pathHandlerUrl`. Every
+  `PathHandler` service is handled by appending the rest of the path to its
+  `serviceEndpoint`; the specification's `PathService` type is not required.
+  Pure; `dereference` in `method.ts` composes it with `resolveDID`.
 - **[src/did-document.ts](src/did-document.ts)** -- DID document construction
   and queries: `createDIDDoc`, `findVerificationMethod`,
   `generateParallelDidWeb`, placeholder replacement.
