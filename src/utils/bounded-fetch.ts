@@ -34,20 +34,42 @@ export const FETCH_MAX_BYTES = 5 * 1024 * 1024;
  * with a `get` method) is consulted; an adapter with plain-object headers
  * gets no early check, and its body is measured as it is read.
  */
-const declaredContentLength = (response: FetchResponse): number =>
-  Number(response.headers?.get?.('content-length') ?? Number.NaN);
+const declaredContentLength = (response: FetchResponse): number => {
+  const headers = response.headers as { get?: (name: string) => unknown } | null | undefined;
+  if (typeof headers?.get !== 'function') {
+    return Number.NaN;
+  }
+  return Number(headers.get('content-length') ?? Number.NaN);
+};
+
+/**
+ * The response body, viewed as a WHATWG stream whose methods may be missing.
+ * `FetchLike` types `body` as `unknown`, so each method is tested before use.
+ */
+const webBody = (response: FetchResponse) =>
+  response.body as Partial<Pick<ReadableStream<Uint8Array>, 'getReader' | 'cancel'>> | null | undefined;
 
 /**
  * Returns a reader for a WHATWG `ReadableStream` body, or `undefined` when the
  * body is absent or is some other kind of stream (a Node `Readable` from
  * node-fetch, for example).
  */
-const streamReader = (response: FetchResponse): ReadableStreamDefaultReader<Uint8Array> | undefined =>
-  response.body?.getReader?.();
+const streamReader = (response: FetchResponse): ReadableStreamDefaultReader<Uint8Array> | undefined => {
+  const body = webBody(response);
+  return typeof body?.getReader === 'function' ? body.getReader() : undefined;
+};
 
 /** Cancels a WHATWG stream body, when the response has one, ignoring failures. */
 const cancelBody = async (response: FetchResponse): Promise<void> => {
-  await response.body?.cancel?.().catch(() => {});
+  const body = webBody(response);
+  if (typeof body?.cancel !== 'function') {
+    return;
+  }
+  try {
+    await body.cancel();
+  } catch {
+    // The body is being discarded, so a failed cancel changes nothing.
+  }
 };
 
 /**
@@ -72,8 +94,9 @@ const wasRedirected = (response: FetchResponse, url: string): boolean => {
 
 /**
  * Reads a response body as text, stopping once it passes `maxBytes`. A
- * declared `content-length` over the limit is rejected before any read. A
- * streamed body is cancelled at the limit, and when `signal` aborts. A
+ * declared `content-length` over the limit is rejected before any read, and
+ * the body is cancelled so the connection is released. A streamed body is
+ * cancelled at the limit, and when `signal` aborts. A
  * response with no WHATWG stream (an adapter object, a Node stream, React
  * Native) is read with `text()` and measured afterwards.
  */
@@ -86,6 +109,7 @@ const readBoundedText = async (
   const tooLarge = () => internalError(`Response body at ${url} exceeds the ${maxBytes} byte limit`);
 
   if (declaredContentLength(response) > maxBytes) {
+    await cancelBody(response);
     throw tooLarge();
   }
 

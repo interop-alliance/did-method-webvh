@@ -6,7 +6,7 @@ import type { IDIDResolutionResult } from '@interop/data-integrity-core';
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 import { logToJsonlString } from '../src/utils.js';
 import { dereference, deriveSrcReferences, resolveDID } from '../src/vh.js';
-import { parseSourceReference } from '../src/vh-source.js';
+import { parseSourceReference, retrieveSource } from '../src/vh-source.js';
 import { stubGlobalFetchUnused } from './utils.js';
 import { appendService, createUrlFetch, createVhFixture, createWitnessedVh } from './vh-helpers.js';
 
@@ -388,6 +388,10 @@ describe('local resolver references', () => {
         network: 'log-only',
       });
       expect(rmeta(result).error).toBeUndefined();
+    });
+
+    test.skipIf(process.platform === 'win32')('a device is not read', async () => {
+      expect(await retrieveSource({ kind: 'file', url: 'file:///dev/null' })).toBeUndefined();
     });
 
     test('a missing file is notFound', async () => {

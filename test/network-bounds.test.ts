@@ -200,10 +200,16 @@ describe('fetchWitnessProofs bounds', () => {
 
   test('rejects a declared content-length over the limit without reading the body', async () => {
     const text = vi.fn(async () => '[]');
+    let cancelled = false;
     const oversized: FetchLike = async () => ({
       ok: true,
       status: 200,
       headers: new Headers({ 'content-length': '1000' }),
+      body: new ReadableStream({
+        cancel() {
+          cancelled = true;
+        },
+      }),
       text,
       json: async () => [],
     });
@@ -212,6 +218,7 @@ describe('fetchWitnessProofs bounds', () => {
 
     expect(error.message).toContain('exceeds the 100 byte limit');
     expect(text).not.toHaveBeenCalled();
+    expect(cancelled).toBe(true);
     expect(mapErrorToCode(error)).toBe('internalError');
   });
 
@@ -261,28 +268,28 @@ describe('fetch adapters without WHATWG headers or body', () => {
 
   test('reads a Node stream body with plain-object headers through text()', async () => {
     const body = JSON.stringify(proofs);
-    const adapter = (async () => ({
+    const adapter: FetchLike = async () => ({
       ok: true,
       status: 200,
       headers: { 'content-length': String(body.length) },
       body: Readable.from([body]),
       text: async () => body,
       json: async () => proofs,
-    })) as unknown as FetchLike;
+    });
 
     expect(await fetchWitnessProofs(DID, adapter)).toEqual(proofs);
     await expect(fetchWitnessProofs(DID, adapter, { maxBytes: 5 })).rejects.toThrow('exceeds the 5 byte limit');
   });
 
   test('returns [] for a 404 witness file from such an adapter', async () => {
-    const adapter = (async () => ({
+    const adapter: FetchLike = async () => ({
       ok: false,
       status: 404,
       headers: {},
       body: Readable.from(['not found']),
       text: async () => 'not found',
       json: async () => ({}),
-    })) as unknown as FetchLike;
+    });
 
     expect(await fetchWitnessProofs(DID, adapter)).toEqual([]);
   });
