@@ -1,11 +1,18 @@
 import * as crypto from '@stablelib/ed25519';
 import { expect, vi } from 'vitest';
 import { METHOD, PLACEHOLDER } from '../src/constants.js';
-import { AbstractCrypto, createDataIntegrityProofTemplate, prepareDataForSigning } from '../src/cryptography.js';
+import {
+  AbstractCrypto,
+  createDataIntegrityProofTemplate,
+  prepareDataForSigning,
+  signDataIntegrityProof,
+} from '../src/cryptography.js';
 import { createDIDDoc, replaceCreateDidPlaceholders } from '../src/did-document.js';
 import type {
+  CreateDIDInterface,
   DataIntegrityProofTemplate,
   DIDLog,
+  DIDLogEntry,
   FetchLike,
   Signer,
   SignerOptions,
@@ -90,6 +97,26 @@ export function createTestVerifier(verificationMethod: VerificationMethod): Veri
 }
 
 /**
+ * A DID on example.com controlled by a freshly generated key, returned with
+ * that key's signer and verifier. `overrides` replace or add `createDID`
+ * options.
+ */
+export const createTestDID = async (overrides: Partial<CreateDIDInterface> = {}) => {
+  const authKey = await generateTestVerificationMethod();
+  const signer = createTestSigner(authKey);
+  const verifier = createTestVerifier(authKey);
+  const created = await createDID({
+    address: 'example.com',
+    signer,
+    verifier,
+    updateKeys: [authKey.publicKeyMultibase!],
+    verificationMethods: asPublicVerificationMethods(authKey),
+    ...overrides,
+  });
+  return { authKey, signer, verifier, ...created };
+};
+
+/**
  * A DID on example.com controlled by `controller` whose genesis entry requires
  * one witness proof from `witness` (the controller's own key by default).
  */
@@ -132,10 +159,44 @@ export const createWitnessSigner = (verificationMethod: VerificationMethod) => {
   };
 };
 
+/**
+ * Appends a signed entry whose `parameters` are written verbatim, so a test can
+ * author values the writer API never emits (nulls, strings, unknown keys). The
+ * entry reuses the last entry's state.
+ */
+export async function appendRawLogEntry({
+  log,
+  signer,
+  parameters,
+  versionTime = nextSecond(log),
+}: {
+  log: DIDLog;
+  signer: Signer;
+  parameters: Record<string, unknown>;
+  versionTime?: string;
+}): Promise<DIDLog> {
+  const previous = log[log.length - 1];
+  const entryWithoutProof = {
+    versionId: previous.versionId,
+    versionTime,
+    parameters,
+    state: previous.state,
+  } as DIDLogEntry;
+  const entryHash = await deriveHash(entryWithoutProof);
+  const entry: DIDLogEntry = { ...entryWithoutProof, versionId: buildVersionId(log.length + 1, entryHash) };
+  const proofTemplate = createDataIntegrityProofTemplate({
+    verificationMethod: signer.getVerificationMethodId(),
+    created: versionTime,
+  });
+  return [...log, { ...entry, proof: [await signDataIntegrityProof(entry, proofTemplate, signer)] }];
+}
+
 // Stub the global fetch to throw, so a test can prove a custom fetch override
-// was used instead.
-export const stubGlobalFetchUnused = () => {
-  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('global fetch should not be called')));
+// was used instead. Returns the stub, for asserting it was never called.
+export const stubGlobalFetchUnused = (): ReturnType<typeof vi.fn> => {
+  const globalFetch = vi.fn().mockRejectedValue(new Error('global fetch should not be called'));
+  vi.stubGlobal('fetch', globalFetch);
+  return globalFetch;
 };
 
 // A fetch mock that serves a body per URL suffix (`did.jsonl`,

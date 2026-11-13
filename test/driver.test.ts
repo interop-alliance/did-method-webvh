@@ -77,7 +77,7 @@ describe('createDidWebvhDriver', () => {
     expect(doc.id).toBe(did);
     const result = await driver.resolveDID({ did });
     expect(result.didDocument?.id).toBe(did);
-    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl');
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl', expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
@@ -90,7 +90,7 @@ describe('createDidWebvhDriver', () => {
     const result = await driver.resolveDID({ did, fetch: perCallFetch });
 
     expect(result.didDocument?.id).toBe(did);
-    expect(perCallFetch).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl');
+    expect(perCallFetch).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl', expect.anything());
     expect(driverFetch).not.toHaveBeenCalled();
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });

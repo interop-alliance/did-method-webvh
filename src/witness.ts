@@ -62,6 +62,11 @@ export async function createWitnessProof(
   return signDataIntegrityProof({ versionId }, proofTemplate, adaptedSigner);
 }
 
+/**
+ * Whether a witness parameter requires witness proofs. Only a validated
+ * parameter is passed here, so anything other than `{}` (or an absent
+ * parameter) is an active requirement.
+ */
 export function hasActiveWitnessRequirement(witness?: WitnessParameter | null): witness is WitnessParameter {
   if (!witness?.witnesses || witness.witnesses.length === 0) {
     return false;
@@ -72,52 +77,83 @@ export function hasActiveWitnessRequirement(witness?: WitnessParameter | null): 
 
 /**
  * Normalizes an entry's `witness` parameter at the parse boundary: an absent
- * key returns `undefined` (inherit the prior value), a cleared (`null`)
- * witness becomes `{}`, and a wire-format string `threshold` is coerced to a
- * number so every downstream comparison works on numbers. The legacy v0.5
- * top-level `witnesses`/`witnessThreshold` shape is rejected outright --
- * ignoring it would silently resolve a previously witness-enforced log with
- * no witness requirement. The returned object never aliases the entry's
- * parameters, so mutating resolution meta cannot corrupt the caller's log.
+ * key returns `undefined` (inherit the prior value) and a cleared (`null`)
+ * witness becomes `{}`. A malformed value (a non-integer threshold, a witness
+ * list that is not an array) is left as-is for `validateWitnessParameter` to
+ * reject. The returned object never aliases the entry's parameters, so
+ * mutating resolution meta cannot corrupt the caller's log.
  */
 export function resolveWitnessParameter(parameters: DIDLogEntry['parameters']): WitnessParameter | undefined {
-  if ('witnesses' in parameters || 'witnessThreshold' in parameters) {
-    throw new Error(
-      "Legacy 'witnesses'/'witnessThreshold' parameters are not supported; declare a 'witness' parameter"
-    );
-  }
-
   if (!('witness' in parameters)) {
     return undefined;
   }
 
   const witness: WitnessParameter = { ...(parameters.witness ?? {}) };
-  if (witness.witnesses) {
+  if (Array.isArray(witness.witnesses)) {
     witness.witnesses = witness.witnesses.map((entry) => ({ ...entry }));
-  }
-  if (witness.threshold !== undefined) {
-    witness.threshold = parseInt(String(witness.threshold), 10);
   }
   return witness;
 }
 
 /**
- * Validates a non-empty witness parameter; no-ops when the parameter is
- * absent or carries an empty witness list (an inactive requirement).
+ * Normalizes `createDID` / `updateDID` witness input to the parameter that is
+ * written. `null`, or an absent or empty witness list, writes `{}`, which
+ * disables witnessing; a `threshold` given with no witnesses must still be an
+ * integer. Any other input is validated by `validateWitnessParameter` and
+ * written as `{ threshold, witnesses }`.
+ */
+export function toWitnessParameter(witness: WitnessParameter | null): WitnessParameter {
+  const { threshold, witnesses } = (witness ?? {}) as { threshold: unknown; witnesses: unknown };
+  if (witnesses === undefined || (Array.isArray(witnesses) && witnesses.length === 0)) {
+    assertIntegerThreshold(threshold);
+    return {};
+  }
+  const normalized = { threshold, witnesses } as WitnessParameter;
+  validateWitnessParameter(normalized);
+  return normalized;
+}
+
+const assertIntegerThreshold = (threshold: unknown): void => {
+  // did:webvh v1.0 requires a JSON integer; strings and fractions are rejected rather than coerced.
+  if (threshold !== undefined && !Number.isInteger(threshold)) {
+    throw new Error(`Witness threshold must be an integer: ${JSON.stringify(threshold)}`);
+  }
+};
+
+/**
+ * Validates a witness parameter. `{}` (and an absent or `null` parameter)
+ * disables witnessing. Any other value must carry a non-empty `witnesses`
+ * array of distinct Ed25519 `did:key` DIDs and an integer `threshold` from 1
+ * to the number of witnesses. The specification requires resolution to fail
+ * on a malformed witness parameter rather than treat it as "no witnesses".
+ * Keys other than `threshold` and `witnesses` are not checked.
  */
 export function validateWitnessParameter(witness: WitnessParameter | null | undefined): void {
-  if (!witness?.witnesses || !Array.isArray(witness.witnesses) || witness.witnesses.length === 0) {
+  if (!witness) {
+    return;
+  }
+  if (typeof witness !== 'object' || Array.isArray(witness)) {
+    throw new Error('Witness parameter must be a JSON object');
+  }
+  if (Object.keys(witness).length === 0) {
     return;
   }
 
-  const normalizedThreshold = parseInt(String(witness.threshold ?? 0), 10);
+  const { threshold, witnesses } = witness as { threshold: unknown; witnesses: unknown };
+  assertIntegerThreshold(threshold);
+  if (!Array.isArray(witnesses) || witnesses.length === 0) {
+    throw new Error('Witness list must be a non-empty array');
+  }
+  if (threshold === undefined) {
+    throw new Error('Witness threshold is required');
+  }
 
-  if (!witness.threshold || normalizedThreshold < 1 || normalizedThreshold > witness.witnesses.length) {
+  if ((threshold as number) < 1 || (threshold as number) > witnesses.length) {
     throw new Error('Witness threshold must be between 1 and the number of witnesses');
   }
 
   const ids = new Set<string>();
-  for (const w of witness.witnesses) {
+  for (const w of witnesses as WitnessEntry[]) {
     let parsedDid: ReturnType<typeof parseDidKeyDid>;
     try {
       parsedDid = parseDidKeyDid(w.id);

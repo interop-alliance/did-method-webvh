@@ -123,7 +123,7 @@ publishes a GitHub Release.
 
 ### How to cut a release
 
-1. In GitHub, go to **Releases** → **Draft a new release**
+1. In GitHub, go to **Releases** > **Draft a new release**
 2. Set **Tag** to the next version, e.g. `v2.7.5`
 3. Choose the target branch/commit (typically `main`)
 4. Click **Publish release**
@@ -138,7 +138,7 @@ That will trigger the publish workflow, which will:
 ### npm authentication
 
 Publishing
-uses [npm OIDC trusted publishing](https://docs.npmjs.com/trusted-publishers) —
+uses [npm OIDC trusted publishing](https://docs.npmjs.com/trusted-publishers) --
 the workflow exchanges its GitHub Actions OIDC token for a short-lived npm
 publish token at publish time. No static `NPM_TOKEN` is required.
 
@@ -210,6 +210,72 @@ When resolving a requested earlier version (for example with `versionId`,
 document while still reporting `meta.error = "invalidDid"` if a later log entry
 fails verification.
 
+Resolution rejects a log entry whose `parameters` is not a JSON object or has a
+key outside the set `did:webvh:1.0` defines (`scid`, `method`, `updateKeys`,
+`nextKeyHashes`, `portable`, `witness`, `watchers`, `ttl`, `deactivated`).
+Each parameter value must have the JSON type the specification defines, or be
+`null`. A witness `threshold` must be a JSON integer, so a string such as `"2"`
+is rejected. A `ttl` must be a JSON integer from 0 to 2^31 - 1 (the RFC 2181
+range the specification cites); 0 means the DID should not be cached.
+
+Only `{}` (or `null`) disables witnessing. Any other `witness` value must have
+a non-empty `witnesses` array of distinct Ed25519 `did:key` DIDs and a
+`threshold` from 1 to the number of witnesses, or resolution fails.
+`createDID` and `updateDID` write `{}` when the witness input has no
+witnesses.
+
+In the resolution result returned by `resolveDID` (and by `toResolutionResult`),
+`didDocumentMetadata.ttl` and `didDocumentMetadata.witness.threshold` are
+strings containing integers, since DID resolution metadata does not carry
+numbers. `resolveDIDFromLog`
+and the `meta` returned by `createDID`, `updateDID`, and `deactivateDID` carry
+both as numbers, as do log entries.
+
+## Network access
+
+The library reaches the network in these cases.
+
+- `resolveDID` and `dereference` fetch the DID's `did.jsonl`, unless
+  `resolveControlledDid` supplies the log.
+- Verifying a log that declares witnesses fetches `did-witness.json` when
+  `witnessProofs` is omitted. This covers `resolveDID`, `resolveDIDFromLog`,
+  and `updateDID` or `deactivateDID` without `priorMeta`.
+- A proof whose verification method is a `did:webvh` DID URL causes that
+  DID's log, and its witness file, to be fetched.
+
+The witness URL is derived from the DID inside the log. Whoever wrote the log
+therefore picks the host, including `http://localhost` and any port. A server
+that verifies logs it did not write should do one of the following.
+
+- Pass `network: 'none'` together with `witnessProofs`.
+- Pass `witnessProofs` explicitly.
+- Supply its own `fetch` that applies its own destination policy.
+
+With `network: 'none'`, a log that requires witness proofs must come with
+`witnessProofs`. Without them, resolution fails with the `notFound`
+resolution error ("Witness proofs not found ... supply witnessProofs"). An
+explicit `witnessProofs: []` is checked as an empty proof list, so the
+threshold is not met.
+
+The `did.jsonl` and `did-witness.json` fetches are bounded. Each has a 10
+second deadline covering the request and the body read, and a 5 MiB body
+limit. A declared `content-length` over the limit is rejected up front, a
+streamed body is cancelled at the limit, and a response without a WHATWG
+stream is measured after `text()`. Redirects are refused, and a response that
+reports one (`redirected: true`, or a `url` other than the one requested) is
+refused too. These bounds apply to a custom `fetch` as well, which receives
+`redirect: 'error'` and an abort `signal` in `init`.
+
+Retrieval failures are thrown as `DIDResolutionError` from
+`@interop/data-integrity-core` and keep their `code` in the resolution
+result. A 404 or empty `did.jsonl` is `notFound`. Any other HTTP status, a
+timeout, an oversized body, a redirect, and an error thrown by `fetch` are
+`internalError`. A 404 for `did-witness.json` means there are no witness
+proofs. Every other failure is `invalidDid`.
+
+`signWitnessProofEntry` requires `witnessProofs` and does not fetch the
+witness file.
+
 ## API Reference
 
 ### Core Functions
@@ -229,9 +295,13 @@ used to retrieve the DID log, `did-witness.json`, and any `did:webvh`
 verification method's log. This suits environments that cannot patch the
 global, such as React Native, proxied or custom-TLS setups, and test
 harnesses. `updateDID`, `deactivateDID`, and `createDidWebvhDriver` accept
-the same option. The resolver reads only `ok`, `status`, `text()` and
-`json()` from the response, so an adapter over another HTTP client can return
-a plain object with those members.
+the same option. The response must provide `ok`, `status`, `text()` and
+`json()`. It may also carry `headers` and `body`, which the fetches use to
+apply their size limit when `headers.get` and `body.getReader` exist, and
+`redirected` and `url`, which are checked for a redirect. An adapter over
+another HTTP client can return a plain object with those members.
+Pass `options.network: 'none'` to make no network request. See
+[Network access](#network-access).
 
 -
 `dereference(didUrl: string, options?: ResolutionOptions): Promise<string>`
@@ -312,10 +382,12 @@ crypto (an `AbstractCrypto` subclass, an HSM-backed verifier, etc.).
 
 -
 `deactivateDID(options: DeactivateDIDInterface): Promise<{did: string, doc: any, meta: DIDResolutionMeta, log: DIDLog}>`
-Deactivates an existing DID.
+Deactivates an existing DID. The deactivation entry writes `updateKeys: []`
+unless `updateKeys` is supplied. Throws while pre-rotation is active; call
+`updateDID` with `nextKeyHashes: []` first.
 
 - `generateParallelDidWeb(didwebvhDid: string, didwebvhDoc: DIDDoc): DIDDoc`
-  Generates the parallel `did:web` document defined by did:webvh v1.0 §3.7.10.
+  Generates the parallel `did:web` document defined by did:webvh v1.0 section 3.7.10.
 
 ### Witness Functions
 
@@ -336,9 +408,11 @@ Low-level: creates and signs one witness proof for a specific `versionId`
 without validating the log. Prefer `signWitnessProofEntry`.
 
 -
-`fetchWitnessProofs(did, fetch?): Promise<WitnessProofFileEntry[]>`
-Fetches the `did-witness.json` published beside a DID's log. A 404 returns an
-empty list; any other failure throws.
+`fetchWitnessProofs(did, fetch?, { timeoutMs?, maxBytes? }): Promise<WitnessProofFileEntry[]>`
+Fetches the `did-witness.json` published beside a DID's log. The request has a
+10 second deadline (`timeoutMs`) and a 5 MiB body limit (`maxBytes`), and
+redirects are refused. A 404 returns an empty list. Any other failure throws
+a `DIDResolutionError` with code `internalError`.
 
 ### Cryptography Functions
 

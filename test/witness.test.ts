@@ -1105,8 +1105,8 @@ describe('Witness Implementation Tests', async () => {
       verifier: testImplementation,
     });
 
-    // Graft the legacy v0.5 shape onto the genesis parameters; fail closed
-    // instead of resolving with the witness requirement silently ignored.
+    // Graft the legacy v0.5 shape onto the genesis parameters; resolution
+    // rejects any parameter did:webvh:1.0 does not define.
     const tamperedLog = structuredClone(created.log);
     (tamperedLog[0].parameters as Record<string, unknown>).witnesses = [
       { id: `did:key:${witness1.publicKeyMultibase}` },
@@ -1114,8 +1114,19 @@ describe('Witness Implementation Tests', async () => {
     (tamperedLog[0].parameters as Record<string, unknown>).witnessThreshold = 1;
 
     await expect(resolveDIDFromLog(tamperedLog, { verifier: testImplementation })).rejects.toThrow(
-      "Legacy 'witnesses'/'witnessThreshold' parameters are not supported"
+      "version '1' has unsupported parameter 'witnesses'; it is not defined by did:webvh:1.0"
     );
+
+    // The witness-signing candidate path rejects it too.
+    await expect(
+      signWitnessProofEntry({
+        trustedLog: [],
+        candidateLog: tamperedLog,
+        witnessSigner: createTestSigner(witness1),
+        witnessProofs: [],
+        verifier: testImplementation,
+      })
+    ).rejects.toThrow("version '1' has unsupported parameter 'witnesses'");
   });
 
   test('Resolve accepts later proof for earlier required entry', async () => {
@@ -1631,7 +1642,7 @@ describe('Witness Implementation Tests', async () => {
         })
       ).rejects.toThrow();
 
-      expect(fetchSpy).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json');
+      expect(fetchSpy).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json', expect.anything());
     } finally {
       fetchSpy.mockRestore();
     }
@@ -1659,7 +1670,7 @@ describe('Witness Implementation Tests', async () => {
         })
       ).rejects.toThrow();
 
-      expect(fetchSpy).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json');
+      expect(fetchSpy).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json', expect.anything());
     } finally {
       fetchSpy.mockRestore();
     }

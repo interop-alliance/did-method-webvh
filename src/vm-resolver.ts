@@ -48,6 +48,7 @@ const resolveWebvhVM = async (
     verifier: defaultWebvhLogVerifier,
     resolveVM,
     fetch: options.fetch,
+    network: options.network,
   });
   if (!doc) {
     throw notFound();
@@ -96,6 +97,8 @@ const memoized = <T>(map: Map<string, Promise<T>>, key: string, make: () => Prom
  *
  * @param [options.fetch] Fetch override used to retrieve a `did:webvh` VM's
  *   DID log and `did-witness.json`. Defaults to the global `fetch`.
+ * @param [options.network] When `'none'`, a `did:webvh` VM's DID log is taken
+ *   only from `resolveControlledDid` and nothing is fetched.
  * @param [options.resolveControlledDid] Consulted first for a `did:webvh` VM's
  *   DID log; an `undefined` result falls back to fetching. See
  *   {@link ResolutionOptions.resolveControlledDid}.

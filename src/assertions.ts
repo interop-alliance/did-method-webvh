@@ -15,6 +15,69 @@ import {
 } from './utils/multiformats.js';
 import { parseDidKeyVerificationMethod } from './utils.js';
 
+const isJsonObject = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+};
+
+const isString = (value: unknown): boolean => typeof value === 'string';
+
+const STRING = { expected: 'a string', isValid: isString };
+const BOOLEAN = { expected: 'a boolean', isValid: (value: unknown): boolean => typeof value === 'boolean' };
+/**
+ * Largest `ttl` the specification allows. Its range is "0 to 2^31", the DNS
+ * TTL range of RFC 2181 that it cites, whose largest value is 2^31 - 1.
+ */
+const MAX_TTL_SECONDS = 2 ** 31 - 1;
+const STRING_ARRAY = {
+  expected: 'an array of strings',
+  isValid: (value: unknown): boolean => Array.isArray(value) && value.every(isString),
+};
+
+/**
+ * The parameters did:webvh:1.0 defines, each with the JSON type its value must
+ * have. Keyed by the `DIDLogEntry` parameter names, so a parameter added to
+ * the interface without a rule here fails type-checking.
+ */
+const PARAMETER_RULES: Record<
+  keyof DIDLogEntry['parameters'],
+  { expected: string; isValid: (value: unknown) => boolean }
+> = {
+  scid: STRING,
+  method: STRING,
+  updateKeys: STRING_ARRAY,
+  nextKeyHashes: STRING_ARRAY,
+  portable: BOOLEAN,
+  // The threshold and witness list are checked by validateWitnessParameter.
+  witness: { expected: 'a JSON object', isValid: isJsonObject },
+  watchers: STRING_ARRAY,
+  ttl: {
+    expected: `an integer from 0 to ${MAX_TTL_SECONDS}`,
+    isValid: (value) => Number.isInteger(value) && (value as number) >= 0 && (value as number) <= MAX_TTL_SECONDS,
+  },
+  deactivated: BOOLEAN,
+};
+
+/**
+ * Requires a log entry's `parameters` to be an object holding only parameters
+ * did:webvh:1.0 defines, each with a value of the defined JSON type. A `null`
+ * value is deprecated by the specification but accepted, and is treated as the
+ * parameter's default.
+ */
+export const assertDefinedParameters = (parameters: unknown, version: string): void => {
+  if (!isJsonObject(parameters)) {
+    throw new Error(`version '${version}' parameters must be a JSON object`);
+  }
+  for (const [key, value] of Object.entries(parameters)) {
+    if (!Object.hasOwn(PARAMETER_RULES, key)) {
+      throw new Error(`version '${version}' has unsupported parameter '${key}'; it is not defined by did:webvh:1.0`);
+    }
+    const rule = PARAMETER_RULES[key as keyof DIDLogEntry['parameters']];
+    if (value !== null && !rule.isValid(value)) {
+      throw new Error(`version '${version}' parameter '${key}' must be ${rule.expected}`);
+    }
+  }
+};
+
 const isKeyAuthorized = (verificationMethod: string, updateKeys: string[]): boolean => {
   return updateKeys.includes(parseDidKeyVerificationMethod(verificationMethod).keyMultibase);
 };

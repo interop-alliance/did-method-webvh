@@ -21,13 +21,12 @@ import type {
   DIDLogEntry,
   DIDResolutionMeta,
   UpdateDIDInterface,
-  WitnessParameter,
 } from '../interfaces.js';
 import { deriveHash } from '../utils/crypto.js';
 import { replaceValueInObject } from '../utils/object.js';
 import { buildVersionId, normalizeUpdateDidAddress, parseDidWebvhIdentifier, requireDidDocumentId } from '../utils.js';
 import { resolveVM } from '../vm-resolver.js';
-import { validateWitnessParameter } from '../witness.js';
+import { toWitnessParameter } from '../witness.js';
 
 /**
  * The document-shaping options that replace part of a document the caller has
@@ -223,7 +222,7 @@ export async function prepareGenesisEntry({
       portable: options.portable ?? false,
       nextKeyHashes: assertValidNextKeyHashes(options.nextKeyHashes ?? []),
       watchers: options.watchers ?? [],
-      witness: options.witness ?? {},
+      witness: toWitnessParameter(options.witness ?? null),
       deactivated: false,
     },
     state: doc,
@@ -273,13 +272,7 @@ export async function prepareUpdateEntry({
   const watchers = options.watchers === undefined ? lastMeta.watchers : (options.watchers ?? []);
   // An omitted witness is left out of the parameters so the previous value is
   // retained. null (or an empty list) writes {} to disable witnessing.
-  let witness: WitnessParameter | undefined;
-  if (options.witness !== undefined) {
-    witness = options.witness?.witnesses?.length
-      ? { witnesses: options.witness.witnesses, threshold: options.witness.threshold ?? 0 }
-      : {};
-    validateWitnessParameter(witness);
-  }
+  const witness = options.witness === undefined ? undefined : toWitnessParameter(options.witness);
 
   if (options.portable === true) {
     throw new Error(
@@ -425,12 +418,16 @@ export async function prepareDeactivationEntry({
   versionNumber: number;
   createdDate: string;
 }): Promise<DIDLogEntry> {
+  // An entry under pre-rotation is verified against its own updateKeys, which
+  // must be the pre-committed keys, so it cannot also empty them.
   if (lastMeta.prerotation) {
-    await newKeysAreInNextKeys(options.updateKeys ?? [], lastMeta.nextKeyHashes ?? []);
+    throw new Error(
+      'Cannot deactivate while pre-rotation is active; call updateDID with nextKeyHashes: [] first, then deactivate'
+    );
   }
 
   const params = {
-    updateKeys: options.updateKeys ?? lastMeta.updateKeys,
+    updateKeys: options.updateKeys ?? [],
     // Close the rotation: a deactivated DID carries no dangling key commitment.
     nextKeyHashes: [],
     deactivated: true,
@@ -443,19 +440,14 @@ export async function prepareDeactivationEntry({
     state: lastEntry.state,
   };
 
-  // Under active pre-rotation the resolver verifies this entry against its own
-  // updateKeys, so sign and validate with the pre-committed keys.
-  const keysToVerify = lastMeta.prerotation ? options.updateKeys : lastMeta.updateKeys;
-  if (!keysToVerify) {
-    throw new Error('updateKeys could not be determined for deactivation verification');
-  }
-
+  // Pre-rotation is inactive here, so the previous entry's updateKeys
+  // authorize this entry.
   const entry = await finalizeNonGenesisEntry({
     logEntry,
     versionNumber,
     created: createdDate,
     signer: options.signer,
-    updateKeys: keysToVerify,
+    updateKeys: lastMeta.updateKeys,
     verifier: options.verifier,
     selfVerify: options.selfVerify,
   });

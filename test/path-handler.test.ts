@@ -259,7 +259,7 @@ describe('dereference', () => {
     await expect(dereference(`${did}/images/logo.png`, { verifier, fetch })).resolves.toBe(
       'https://provider.example/storage/images/logo.png'
     );
-    expect(fetch).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl');
+    expect(fetch).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl', expect.anything());
   });
 
   test('a version selector in the DID URL picks the document to dereference against', async () => {

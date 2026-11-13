@@ -1,4 +1,4 @@
-import { documentStateIsValid, newKeysAreInNextKeys, scidIsFromHash } from '../assertions.js';
+import { assertDefinedParameters, documentStateIsValid, newKeysAreInNextKeys, scidIsFromHash } from '../assertions.js';
 import { DEFAULT_TTL_SECONDS, METHOD_PROTOCOL_V1_0, PLACEHOLDER } from '../constants.js';
 import { findVerificationMethod } from '../did-document.js';
 import type {
@@ -16,6 +16,7 @@ import { deriveHash } from '../utils/crypto.js';
 import { MAX_FUTURE_SKEW_MS, validateUtcIso8601NotInFuture } from '../utils/iso8601-datetime.js';
 import {
   buildVersionId,
+  loadWitnessProofs,
   parseAndValidateVersionId,
   parseDidWebvhIdentifier,
   replaceValueInObject,
@@ -23,7 +24,6 @@ import {
 } from '../utils.js';
 import {
   countVerifiedWitnessApprovals,
-  fetchWitnessProofs,
   hasActiveWitnessRequirement,
   resolveWitnessParameter,
   validateWitnessParameter,
@@ -459,6 +459,7 @@ const validateAndParseLogEntry = ({
 }): ParsedResolutionEntryContext => {
   const { versionId, versionTime } = entry;
   const { version, versionNumber, entryHash } = parseAndValidateVersionId(versionId, expectedVersionNumber);
+  assertDefinedParameters(entry.parameters, version);
 
   if (!versionTime) {
     throw new Error(`version '${version}' is missing versionTime`);
@@ -642,7 +643,10 @@ const processV1SubsequentEntry = async ({
   }
 
   resolverContext.meta = applyEntryToMeta(sourceEntry, resolverContext.meta);
-  validateWitnessParameter(resolverContext.meta.witness);
+  // An inherited witness parameter was validated at the entry that set it.
+  if ('witness' in parameters) {
+    validateWitnessParameter(resolverContext.meta.witness);
+  }
 
   return sourceEntry.state;
 };
@@ -678,7 +682,7 @@ const enforceRequiredWitnessChecks = async ({
   did: string;
   logEntries: DIDLog;
 }): Promise<void> => {
-  const witnessProofs = options.witnessProofs ?? (await fetchWitnessProofs(did, options.fetch));
+  const witnessProofs = await loadWitnessProofs(did, options);
 
   const publishedVersionNumbers = new Map(logEntries.map((entry, index) => [entry.versionId, index + 1]));
 
@@ -715,7 +719,7 @@ const enforceRequiredWitnessChecks = async ({
   const proofVerificationCache = new Map<string, Promise<boolean>>();
 
   const runCheck = async (check: RequiredWitnessCheck): Promise<void> => {
-    const threshold = Number(check.witness.threshold ?? 0);
+    const threshold = check.witness.threshold ?? 0;
     const approvals = await countVerifiedWitnessApprovals(proofsAtOrAbove(check.targetVersionNumber), check.witness, {
       verifier: options.verifier,
       resolveVM: requireResolveVM(options),
