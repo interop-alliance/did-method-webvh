@@ -5,6 +5,7 @@ import {
   validateWebvhProofShape,
 } from './cryptography.js';
 import type { DataIntegrityProof, DIDLogEntry, ResolveVerificationMethod, Verifier } from './interfaces.js';
+import { type MethodProfile, WEBVH_PROFILE } from './method_versions/profile.js';
 import { deriveNextKeyHash } from './utils/crypto.js';
 import {
   decodeBase58Btc,
@@ -34,7 +35,7 @@ const STRING_ARRAY = {
 };
 
 /**
- * The parameters did:webvh:1.0 defines, each with the JSON type its value must
+ * The parameters the v1.0 log format defines, each with the JSON type its value must
  * have. Keyed by the `DIDLogEntry` parameter names, so a parameter added to
  * the interface without a rule here fails type-checking.
  */
@@ -59,20 +60,32 @@ const PARAMETER_RULES: Record<
 
 /**
  * Requires a log entry's `parameters` to be an object holding only parameters
- * did:webvh:1.0 defines, each with a value of the defined JSON type. A `null`
+ * the method defines, each with a value of the defined JSON type. A `null`
  * value is deprecated by the specification but accepted, and is treated as the
  * parameter's default.
+ *
+ * @param parameters {unknown} The entry's `parameters` value.
+ * @param version {string} The entry's version number, for the error message.
+ * @param [profile] {MethodProfile} The method the log is read under. It
+ *   supplies the `method` value, whether `portable` is defined (only for a
+ *   method whose DID names a location), and whether a `null` value is
+ *   accepted. Defaults to did:webvh.
  */
-export const assertDefinedParameters = (parameters: unknown, version: string): void => {
+export const assertDefinedParameters = (
+  parameters: unknown,
+  version: string,
+  profile: Pick<MethodProfile, 'method' | 'hasLocation' | 'allowNullParameters'> = WEBVH_PROFILE
+): void => {
+  const { method, hasLocation, allowNullParameters: allowNull } = profile;
   if (!isJsonObject(parameters)) {
     throw new Error(`version '${version}' parameters must be a JSON object`);
   }
   for (const [key, value] of Object.entries(parameters)) {
-    if (!Object.hasOwn(PARAMETER_RULES, key)) {
-      throw new Error(`version '${version}' has unsupported parameter '${key}'; it is not defined by did:webvh:1.0`);
+    if (!Object.hasOwn(PARAMETER_RULES, key) || (key === 'portable' && !hasLocation)) {
+      throw new Error(`version '${version}' has unsupported parameter '${key}'; it is not defined by ${method}`);
     }
     const rule = PARAMETER_RULES[key as keyof DIDLogEntry['parameters']];
-    if (value !== null && !rule.isValid(value)) {
+    if (!(allowNull && value === null) && !rule.isValid(value)) {
       throw new Error(`version '${version}' parameter '${key}' must be ${rule.expected}`);
     }
   }

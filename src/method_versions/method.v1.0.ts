@@ -20,7 +20,13 @@ import { normalizeCreateDidAddress, requireDidDocumentId, withNormalizedUpdateKe
 import { createResolveVM } from '../vm-resolver.js';
 import { prepareDeactivationEntry, prepareGenesisEntry, prepareUpdateEntry } from './method.v1.0.entries.js';
 import { applyEntryToMeta } from './method.v1.0.meta.js';
-import { type InternalResolutionOptions, resolveV1Log } from './method.v1.0.resolution.js';
+import {
+  type InternalResolutionOptions,
+  resolveV1Log,
+  type TraversedResolution,
+  traverseV1Log,
+} from './method.v1.0.resolution.js';
+import { type MethodProfile, WEBVH_PROFILE } from './profile.js';
 
 /**
  * `updateKeys` accepts Ed25519 multikeys or did:key identifiers (with an
@@ -28,11 +34,6 @@ import { type InternalResolutionOptions, resolveV1Log } from './method.v1.0.reso
  * multikeys.
  */
 export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDResult> => {
-  if (!options.updateKeys) {
-    throw new Error('Update keys not supplied');
-  }
-  options = withNormalizedUpdateKeys(options);
-
   // Parse address input with strict validation
   const addressInput = options.address;
   if (!addressInput) {
@@ -45,7 +46,45 @@ export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDR
     paths: options.paths,
     context: 'createDID path segments',
   });
-  const controller = normalizedAddress.controller;
+  return createDIDForController(options, normalizedAddress.controller, WEBVH_PROFILE);
+};
+
+/** The options that exist only for a method whose DID names a location. */
+export const LOCATION_OPTIONS = ['address', 'paths', 'portable', 'alsoKnownAsWeb'] as const;
+
+const assertLocationOptionsAllowed = (
+  options: CreateDIDInterface | UpdateDIDInterface,
+  profile: MethodProfile,
+  operation: string
+): void => {
+  if (profile.hasLocation) {
+    return;
+  }
+  const supplied = LOCATION_OPTIONS.filter((name) => options[name] !== undefined);
+  if (supplied.length > 0) {
+    throw new Error(`${operation} does not accept ${supplied.join(', ')}: a ${profile.method} DID names no location`);
+  }
+};
+
+/**
+ * Creates the first log entry for `controller`, the DID written with the
+ * `{SCID}` placeholder. Shared by every method profile; the caller derives
+ * `controller`. The checks every profile shares are made here: the `method`
+ * option, the location options, and `updateKeys`, which is normalized.
+ */
+export const createDIDForController = async (
+  options: CreateDIDInterface,
+  controller: string,
+  profile: MethodProfile
+): Promise<CreateDIDResult> => {
+  if (options.method && options.method !== profile.method) {
+    throw new Error(`'${options.method}' is not a supported method version.`);
+  }
+  assertLocationOptionsAllowed(options, profile, 'createDID');
+  if (!options.updateKeys) {
+    throw new Error('Update keys not supplied');
+  }
+  options = withNormalizedUpdateKeys(options);
   if (options.created) {
     validateUtcIso8601NotInFuture(options.created, 'createDID created');
   }
@@ -55,6 +94,7 @@ export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDR
     options,
     controller,
     createdDate,
+    profile,
   });
 
   const didId = requireDidDocumentId(entry.state.id);
@@ -63,7 +103,7 @@ export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDR
   return {
     did: didId,
     doc: entry.state,
-    meta: applyEntryToMeta(entry),
+    meta: applyEntryToMeta(entry, undefined, profile),
     log: [entry],
     ...(webDoc ? { webDoc } : {}),
   };
@@ -78,6 +118,14 @@ export const resolveDIDFromLog = async (
   return resolveV1Log(log, { resolveVM: createResolveVM(options), ...options });
 };
 
+/** {@link resolveDIDFromLog}, also reporting how much of the log passed verification. */
+export const traverseDIDLog = async (
+  log: DIDLog,
+  options: InternalResolutionOptions = {}
+): Promise<TraversedResolution> => {
+  return traverseV1Log(log, { resolveVM: createResolveVM(options), ...options });
+};
+
 /**
  * Resolves the metadata of the log an update or deactivation extends, unless
  * the caller supplied it as `priorMeta`. The options that affect resolution
@@ -89,19 +137,24 @@ const resolvePriorMeta = async (
   {
     priorMeta,
     ...resolutionOptions
-  }: Pick<UpdateDIDInterface, 'priorMeta' | 'verifier' | 'witnessProofs' | 'fetch' | 'network'>
-): Promise<DIDResolutionMeta> => priorMeta ?? (await resolveDIDFromLog(log, resolutionOptions)).meta;
+  }: Pick<UpdateDIDInterface, 'priorMeta' | 'verifier' | 'witnessProofs' | 'fetch' | 'network'>,
+  profile: MethodProfile
+): Promise<DIDResolutionMeta> => priorMeta ?? (await resolveDIDFromLog(log, { ...resolutionOptions, profile })).meta;
 
 /**
  * Supplied `updateKeys` are normalized from Ed25519 multikeys or did:key
  * identifiers to bare multikeys before preparation, including pre-rotation
  * hash checks.
  */
-export const updateDID = async (options: UpdateDIDInterface): Promise<UpdateDIDResult> => {
+export const updateDID = async (
+  options: UpdateDIDInterface,
+  profile: MethodProfile = WEBVH_PROFILE
+): Promise<UpdateDIDResult> => {
+  assertLocationOptionsAllowed(options, profile, 'updateDID');
   options = withNormalizedUpdateKeys(options);
   const log = options.log;
   const lastEntry = log[log.length - 1];
-  const lastMeta = await resolvePriorMeta(log, options);
+  const lastMeta = await resolvePriorMeta(log, options, profile);
   const currentUpdateKeys = options.updateKeys;
   if (lastMeta.deactivated) {
     throw new Error('Cannot update deactivated DID');
@@ -122,6 +175,7 @@ export const updateDID = async (options: UpdateDIDInterface): Promise<UpdateDIDR
     lastMeta,
     versionNumber,
     createdDate,
+    profile,
   });
 
   const meta = applyEntryToMeta(entry, lastMeta);
@@ -129,6 +183,7 @@ export const updateDID = async (options: UpdateDIDInterface): Promise<UpdateDIDR
   const updatedDidId = requireDidDocumentId(entry.state.id);
   const webDoc = options.alsoKnownAsWeb ? generateParallelDidWeb(updatedDidId, entry.state) : undefined;
   if (
+    profile.hasLocation &&
     !options.alsoKnownAsWeb &&
     Array.isArray(entry.state.alsoKnownAs) &&
     entry.state.alsoKnownAs.includes(convertWebvhIdToWebId(updatedDidId))
@@ -162,12 +217,13 @@ export const updateDID = async (options: UpdateDIDInterface): Promise<UpdateDIDR
  * `updateDID` with `nextKeyHashes: []` first, then deactivate.
  */
 export const deactivateDID = async (
-  options: DeactivateDIDInterface
+  options: DeactivateDIDInterface,
+  profile: MethodProfile = WEBVH_PROFILE
 ): Promise<{ did: string; doc: DIDDoc; meta: DIDResolutionMeta; log: DIDLog }> => {
   options = withNormalizedUpdateKeys(options);
   const log = options.log;
   const lastEntry = log[log.length - 1];
-  const lastMeta = await resolvePriorMeta(log, options);
+  const lastMeta = await resolvePriorMeta(log, options, profile);
   if (lastMeta.deactivated) {
     throw new Error('DID already deactivated');
   }

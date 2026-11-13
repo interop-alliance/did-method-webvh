@@ -1,5 +1,4 @@
 import type { IDIDResolutionResult } from '@interop/data-integrity-core';
-import { METHOD_PROTOCOL_V1_0 } from './constants.js';
 import type {
   CreateDIDInterface,
   CreateDIDResult,
@@ -26,10 +25,6 @@ import { defaultWebvhLogVerifier } from './verifier.js';
  * @returns The created DID, resolved document, and DID log.
  */
 export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDResult> => {
-  const method = options.method;
-  if (method && method !== METHOD_PROTOCOL_V1_0) {
-    throw new Error(`'${method}' is not a supported method version.`);
-  }
   options.verifier ??= defaultWebvhLogVerifier;
   return v1.createDID(options);
 };

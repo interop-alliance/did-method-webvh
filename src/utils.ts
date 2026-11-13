@@ -181,6 +181,13 @@ export async function fetchLogFromIdentifier(
 }
 
 /**
+ * Whether `network` allows fetching the given file. `'none'` refuses both
+ * files and `'log-only'` refuses the witness proofs file.
+ */
+export const networkPermits = (network: ResolutionOptions['network'], file: 'log' | 'witness'): boolean =>
+  network !== 'none' && (file === 'log' || network !== 'log-only');
+
+/**
  * Loads a DID's log: the `resolveControlledDid` callback is consulted first,
  * and an `undefined` result falls back to fetching over HTTPS (through the
  * `fetch` override when one is given). With `network: 'none'` nothing is
@@ -202,7 +209,7 @@ export async function loadDIDLog(
   if (controlledLog) {
     return controlledLog;
   }
-  if (network === 'none') {
+  if (!networkPermits(network, 'log')) {
     throw new DIDResolutionError(`DID log not found for ${did}: network is 'none', so it was not fetched`, {
       code: 'notFound',
     });
@@ -242,9 +249,20 @@ export async function fetchWitnessProofs(
     return [];
   }
 
+  return parseWitnessProofFile(text, url);
+}
+
+/**
+ * Parses the text of a witness proof file, which must be a JSON array.
+ *
+ * @param text {string} The file content.
+ * @param source {string} Where the file came from, for the error message.
+ * @returns {WitnessProofFileEntry[]} The witness proofs.
+ */
+export function parseWitnessProofFile(text: string, source: string): WitnessProofFileEntry[] {
   const body: unknown = JSON.parse(text);
   if (!Array.isArray(body)) {
-    throw new Error(`Witness proof file at ${url} is not a JSON array`);
+    throw new Error(`Witness proof file at ${source} is not a JSON array`);
   }
   return body as WitnessProofFileEntry[];
 }
@@ -252,7 +270,7 @@ export async function fetchWitnessProofs(
 /**
  * Loads a DID's witness proofs: supplied `witnessProofs` (even `[]`) are
  * always used, and otherwise the proof file is fetched. With `network: 'none'`
- * nothing is fetched, and proofs that were not supplied throw a
+ * or `'log-only'` nothing is fetched, and proofs that were not supplied throw a
  * `DIDResolutionError` with code `notFound`. That is a retrieval failure,
  * like a failed fetch, and is not an unmet threshold.
  */
@@ -263,9 +281,9 @@ export async function loadWitnessProofs(
   if (witnessProofs !== undefined) {
     return witnessProofs;
   }
-  if (network === 'none') {
+  if (!networkPermits(network, 'witness')) {
     throw new DIDResolutionError(
-      `Witness proofs not found for ${did}: network is 'none', so they were not fetched; supply witnessProofs`,
+      `Witness proofs not found for ${did}: network is '${network}', so they were not fetched; supply witnessProofs`,
       { code: 'notFound' }
     );
   }

@@ -1,5 +1,5 @@
 import { assertValidNextKeyHashes, documentStateIsValid, newKeysAreInNextKeys } from '../assertions.js';
-import { DID_PLACEHOLDER, METHOD_PROTOCOL_V1_0, PLACEHOLDER, VERIFICATION_RELATIONSHIPS } from '../constants.js';
+import { DID_PLACEHOLDER, PLACEHOLDER, VERIFICATION_RELATIONSHIPS } from '../constants.js';
 import { createDataIntegrityProofTemplate, signDataIntegrityProof } from '../cryptography.js';
 import {
   appendAlias,
@@ -24,9 +24,10 @@ import type {
 } from '../interfaces.js';
 import { deriveHash } from '../utils/crypto.js';
 import { replaceValueInObject } from '../utils/object.js';
-import { buildVersionId, normalizeUpdateDidAddress, parseDidWebvhIdentifier, requireDidDocumentId } from '../utils.js';
+import { buildVersionId, normalizeUpdateDidAddress, requireDidDocumentId } from '../utils.js';
 import { resolveVM } from '../vm-resolver.js';
 import { toWitnessParameter } from '../witness.js';
+import { type MethodProfile, type ParsedStateId, WEBVH_PROFILE } from './profile.js';
 
 /**
  * The document-shaping options that replace part of a document the caller has
@@ -77,7 +78,7 @@ const resolveNextDidContext = ({
 }: {
   options: UpdateDIDInterface;
   lastEntryDid: string;
-  parsedLastEntryDid: ReturnType<typeof parseDidWebvhIdentifier>;
+  parsedLastEntryDid: ParsedStateId;
   portable: boolean;
 }): string => {
   const requestedAddress = options.address;
@@ -173,10 +174,12 @@ export async function prepareGenesisEntry({
   options,
   controller,
   createdDate,
+  profile = WEBVH_PROFILE,
 }: {
   options: CreateDIDInterface;
   controller: string;
   createdDate: string;
+  profile?: MethodProfile;
 }): Promise<DIDLogEntry> {
   assertContextOptions(options);
   assertNoAuthoredDocumentOverlay(options);
@@ -216,10 +219,10 @@ export async function prepareGenesisEntry({
     versionId: PLACEHOLDER,
     versionTime: createdDate,
     parameters: {
-      method: METHOD_PROTOCOL_V1_0,
+      method: profile.method,
       scid: PLACEHOLDER,
       updateKeys: options.updateKeys,
-      portable: options.portable ?? false,
+      ...(profile.hasLocation ? { portable: options.portable ?? false } : {}),
       nextKeyHashes: assertValidNextKeyHashes(options.nextKeyHashes ?? []),
       watchers: options.watchers ?? [],
       witness: toWitnessParameter(options.witness ?? null),
@@ -256,17 +259,19 @@ export async function prepareUpdateEntry({
   lastMeta,
   versionNumber,
   createdDate,
+  profile = WEBVH_PROFILE,
 }: {
   options: UpdateDIDInterface;
   lastEntry: DIDLogEntry;
   lastMeta: DIDResolutionMeta;
   versionNumber: number;
   createdDate: string;
+  profile?: MethodProfile;
 }): Promise<DIDLogEntry> {
   assertContextOptions(options);
 
   const lastEntryDid = requireDidDocumentId(lastEntry.state.id);
-  const parsedLastEntryDid = parseDidWebvhIdentifier(lastEntryDid, 'last entry state.id');
+  const parsedLastEntryDid = profile.parseStateId(lastEntryDid, 'last entry state.id');
 
   // An omitted watchers list retains the previous value; null writes [].
   const watchers = options.watchers === undefined ? lastMeta.watchers : (options.watchers ?? []);
@@ -278,6 +283,10 @@ export async function prepareUpdateEntry({
     throw new Error(
       'portable: true cannot be set in an update entry; portability can only be enabled in the first entry'
     );
+  }
+
+  if (profile.prerotationRequiresNextKeyHashes && lastMeta.prerotation && options.nextKeyHashes === undefined) {
+    throw new Error('nextKeyHashes must be provided while pre-rotation is active; pass [] to end pre-rotation');
   }
 
   const params = {
@@ -304,7 +313,7 @@ export async function prepareUpdateEntry({
     options,
     lastEntryDid,
     parsedLastEntryDid,
-    portable: lastMeta.portable,
+    portable: lastMeta.portable ?? false,
   });
 
   let doc: DIDDoc;
