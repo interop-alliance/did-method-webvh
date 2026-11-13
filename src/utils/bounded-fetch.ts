@@ -27,7 +27,7 @@ export const toRetrievalError = (error: unknown, prefix = ''): DIDResolutionErro
 const FETCH_TIMEOUT_MS = 10_000;
 
 /** Default limit on the size of a response body, the specification's suggested 5 MiB. */
-const FETCH_MAX_BYTES = 5 * 1024 * 1024;
+export const FETCH_MAX_BYTES = 5 * 1024 * 1024;
 
 /**
  * Reads the declared `content-length`. Only a WHATWG `Headers` object (one

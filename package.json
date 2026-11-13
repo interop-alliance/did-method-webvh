@@ -68,6 +68,12 @@
       "types": "./dist/types.d.ts",
       "default": "./dist/types.js"
     },
+    "./vh": {
+      "types": "./dist/vh.d.ts",
+      "react-native": "./dist/vh.js",
+      "import": "./dist/vh.js",
+      "default": "./dist/vh.js"
+    },
     "./driver": {
       "types": "./dist/driver.d.ts",
       "react-native": "./dist/driver.js",

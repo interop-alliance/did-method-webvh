@@ -14,7 +14,7 @@ const DID_PATH_SEGMENT_PATTERN = /^(?:[A-Za-z0-9._-]|%[0-9A-Fa-f]{2})+$/;
 /** A percent-encoded byte below 0x80, i.e. an ASCII character that did not need encoding. */
 const ENCODED_ASCII_PATTERN = /%[0-7][0-9A-Fa-f]/;
 /** Spec ABNF: `scid = 46(base58btc-char)`. */
-const SCID_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{46}$/;
+export const SCID_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{46}$/;
 // SCID-shaped text that stands in for the SCID token while a host carrying the
 // token is checked against DNS label and name lengths. It is used for the
 // check only; the host handed back keeps the token verbatim.
@@ -74,7 +74,7 @@ function hasFragmentOrQuery(value: string): boolean {
 const hasNonAscii = (value: string): boolean => /[\u0080-\u{10FFFF}]/u.test(value);
 
 /** C0 controls and DEL. */
-const hasControlCharacter = (value: string): boolean =>
+export const hasControlCharacter = (value: string): boolean =>
   [...value].some((char) => {
     const code = char.codePointAt(0) ?? 0;
     return code < 32 || code === 127;

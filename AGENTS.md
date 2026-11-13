@@ -7,7 +7,9 @@ code in this repository.
 
 This is a TypeScript library implementing the `did:webvh` specification ([v1.0])
 for Decentralized Identifiers (DIDs). It provides create, resolve, update, and
-deactivate operations, plus example resolver servers.
+deactivate operations, plus example resolver servers. It also implements
+`did:vh` (DIF Editors Draft v0.1) over the same log code, exported from the
+`/vh` subpath.
 
 [v1.0]: https://identity.foundation/didwebvh/v1.0/
 
@@ -58,7 +60,18 @@ npm run lint
 - **[src/index.ts](src/index.ts)** -- Barrel re-export of `method.ts` and the
   supporting modules.
 
+- **[src/vh.ts](src/vh.ts)** -- The did:vh public API (the `/vh` subpath
+  export): `createDID`, `updateDID`, `deactivateDID`, `resolveDID`,
+  `resolveDIDFromLog`, `dereference`. It runs the shared log code under
+  `VH_PROFILE`. `resolveDID` takes the log from `didLog` or `srcLog` and
+  derives nothing from the DID. The did:webvh index does not re-export it.
+
 ### Spec Implementation
+
+- **[src/method_versions/profile.ts](src/method_versions/profile.ts)** --
+  `MethodProfile`, with `WEBVH_PROFILE` and `VH_PROFILE`. The three modules
+  below take the `method` parameter value, the `state.id` parser and the rule
+  differences from a profile, and default to did:webvh.
 
 - **[src/method_versions/method.v1.0.ts](src/method_versions/method.v1.0.ts)** --
   Spec (v1.0) entry points for `createDID`, `updateDID`, `deactivateDID`, and
@@ -110,6 +123,14 @@ npm run lint
   non-ok status thrown). Retrieval failures are thrown as
   `DIDResolutionError` with a `notFound` or `internalError` code, and
   `mapErrorToCode` reads that code and does not inspect messages.
+- **[src/vh-source.ts](src/vh-source.ts)** -- did:vh log sources:
+  `parseSourceReference` validates a `srcLog` / `srcWitness` URL (`https`;
+  loopback `http` and `file:` only for a resolver marked `local`),
+  `retrieveSource` retrieves it through `fetchBounded` or the filesystem
+  (and is where a reference in any other scheme is refused), and
+  `deriveSrcReferences` derives both from the `src` DID URL parameter.
+  **[src/utils/did-vh-identifier.ts](src/utils/did-vh-identifier.ts)** holds
+  `parseDidVhIdentifier`.
 - **[src/interfaces.ts](src/interfaces.ts)** -- All TypeScript interfaces (
   `Signer`, `Verifier`, `DIDDoc`, `DIDLog`, `DIDLogEntry`, etc.).
 - **[src/constants.ts](src/constants.ts)** -- `METHOD` constant, `PLACEHOLDER`
@@ -161,6 +182,34 @@ of [decentralized-identity/didwebvh-ts](https://github.com/decentralized-identit
 When porting an upstream PR, translate it through the following deliberate
 divergences (newest first). Library behavior and public API are otherwise kept
 aligned with upstream.
+
+### The log code takes a method profile (did:vh)
+
+Upstream's log code is did:webvh-only: it imports the `method` constant and
+the identifier parser directly. This fork also implements did:vh, so
+`method.v1.0.ts`, `method.v1.0.entries.ts` and `method.v1.0.resolution.ts`
+read those from a `MethodProfile` (`src/method_versions/profile.ts`). The
+profile supplies the `method` parameter value, the `state.id` parser,
+whether the DID names a location, and the rule flags that differ between the
+two methods. `WEBVH_PROFILE` is the default everywhere and reproduces
+this fork's did:webvh behavior. `VH_PROFILE` is passed only by `src/vh.ts`. As of
+2026-11-07 upstream has no did:vh work.
+
+Answering from the last valid entry is not a profile rule. It is the
+`returnLastValidEntry` resolution option, which only the did:vh `resolveDID`
+sets (through `traverseV1Log`, which also returns the valid entry count).
+did:vh `updateDID`, `deactivateDID` and `resolveDIDFromLog` leave it unset
+and throw on an invalid entry, as did:webvh does.
+
+**When porting:** an upstream change to those three files that reads
+`METHOD_PROTOCOL_V1_0` or calls `parseDidWebvhIdentifier` lands on
+`profile.method` / `profile.parseStateId`. A new did:webvh rule that did:vh
+does not share (or the reverse) becomes a profile flag; a rule both share
+needs no flag. Portability, moves and the parallel `did:web` alias stay
+behind `profile.hasLocation`. `did-document.ts` (`convertWebvhIdToWebId`,
+`generateParallelDidWeb`), `path-handler.ts`, `driver.ts` and the top-level
+`dereference` stay did:webvh-only. If upstream adds did:vh of its own,
+reconcile with it then.
 
 ### migrateDID was declined
 

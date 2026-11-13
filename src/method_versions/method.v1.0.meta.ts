@@ -6,6 +6,7 @@ import { assertValidNextKeyHashes } from '../assertions.js';
 import { DEFAULT_TTL_SECONDS } from '../constants.js';
 import type { DIDLogEntry, DIDResolutionMeta } from '../interfaces.js';
 import { resolveWitnessParameter } from '../witness.js';
+import { type MethodProfile, WEBVH_PROFILE } from './profile.js';
 
 /**
  * Spec invariant: pre-rotation is active exactly when the governing
@@ -48,9 +49,14 @@ export const parseGenesisParameters = (parameters: DIDLogEntry['parameters']): G
  * `nextKeyHashes` entries, which is checked here so the write path and the
  * resolver reject the same logs. Parameter arrays and the witness object are
  * copied so meta never aliases the entry: mutating one cannot corrupt the
- * other.
+ * other. `portable` is seeded only for a method whose DID names a location,
+ * and stays absent through later entries otherwise.
  */
-export const applyEntryToMeta = (entry: DIDLogEntry, previousMeta?: DIDResolutionMeta): DIDResolutionMeta => {
+export const applyEntryToMeta = (
+  entry: DIDLogEntry,
+  previousMeta?: DIDResolutionMeta,
+  profile: MethodProfile = WEBVH_PROFILE
+): DIDResolutionMeta => {
   const { parameters } = entry;
   const copyWatchers = (watchers: string[] | null | undefined): string[] => [...(watchers ?? [])];
 
@@ -64,7 +70,7 @@ export const applyEntryToMeta = (entry: DIDLogEntry, previousMeta?: DIDResolutio
       updated: entry.versionTime,
       scid,
       updateKeys: [...updateKeys],
-      portable: parameters.portable ?? false,
+      ...(profile.hasLocation ? { portable: parameters.portable ?? false } : {}),
       ttl: parameters.ttl ?? DEFAULT_TTL_SECONDS,
       nextKeyHashes,
       prerotation: hasPrerotation(nextKeyHashes),
@@ -85,7 +91,7 @@ export const applyEntryToMeta = (entry: DIDLogEntry, previousMeta?: DIDResolutio
     updated: entry.versionTime,
     updateKeys: 'updateKeys' in parameters ? [...(parameters.updateKeys ?? [])] : previousMeta.updateKeys,
     // portable can only be locked off after the first entry, never (re)enabled.
-    portable: parameters.portable === false ? false : previousMeta.portable,
+    ...(parameters.portable === false ? { portable: false } : {}),
     ttl: 'ttl' in parameters ? (parameters.ttl ?? DEFAULT_TTL_SECONDS) : previousMeta.ttl,
     nextKeyHashes,
     prerotation: hasPrerotation(nextKeyHashes),

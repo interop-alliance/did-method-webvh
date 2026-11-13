@@ -43,6 +43,9 @@ export interface WebvhDocumentMetadata extends IDIDDocumentMetadata {
 
 const CONTENT_TYPE = 'application/did+ld+json';
 
+/** The did:webvh error codes plus `featureNotSupported`, which only the did:vh resolver reports. */
+export type ResolutionErrorCode = DidResolutionError | 'featureNotSupported';
+
 /** A structured, non-throwing validation failure for resolution options. */
 export interface ResolutionOptionsError {
   code: DidResolutionError;
@@ -112,14 +115,23 @@ export function validateResolutionSelectors(options: {
  * from the log.
  */
 export function mapErrorToCode(error: unknown): DidResolutionError {
+  const code = mapErrorToVhCode(error);
+  return code === 'featureNotSupported' ? 'internalError' : code;
+}
+
+/**
+ * {@link mapErrorToCode} for the did:vh resolver, which also reports a
+ * `DIDResolutionError` with code `featureNotSupported` under that code.
+ */
+export function mapErrorToVhCode(error: unknown): ResolutionErrorCode {
   if (!isDIDResolutionError(error)) {
     return 'invalidDid';
   }
-  return Object.hasOwn(PROBLEM_DETAILS_BY_CODE, error.code) ? (error.code as DidResolutionError) : 'internalError';
+  return Object.hasOwn(PROBLEM_DETAILS_BY_CODE, error.code) ? (error.code as ResolutionErrorCode) : 'internalError';
 }
 
 /** RFC9457-style `type`/`title` for each standard error code. */
-const PROBLEM_DETAILS_BY_CODE: Record<DidResolutionError, { type: string; title: string }> = {
+const PROBLEM_DETAILS_BY_CODE: Record<ResolutionErrorCode, { type: string; title: string }> = {
   notFound: {
     type: 'https://w3id.org/security#NOT_FOUND',
     title: 'The DID Log or resource was not found.',
@@ -140,6 +152,10 @@ const PROBLEM_DETAILS_BY_CODE: Record<DidResolutionError, { type: string; title:
     type: 'https://www.w3.org/ns/did#INTERNAL_ERROR',
     title: 'An unexpected error occurred during resolution.',
   },
+  featureNotSupported: {
+    type: 'https://www.w3.org/ns/did#FEATURE_NOT_SUPPORTED',
+    title: 'The resolver does not support a feature the request needs.',
+  },
 };
 
 /**
@@ -152,12 +168,12 @@ const PROBLEM_DETAILS_BY_CODE: Record<DidResolutionError, { type: string; title:
  * @param title Optional title overriding the code's default `problemDetails.title`.
  * @returns The error fields for a core result's `meta`.
  */
-export function toErrorMeta(
-  code: DidResolutionError,
+export function toErrorMeta<Code extends ResolutionErrorCode>(
+  code: Code,
   detail: string,
   problemType?: string,
   title?: string
-): { error: DidResolutionError; problemDetails: ProblemDetails } {
+): { error: Code; problemDetails: ProblemDetails } {
   const { type, title: defaultTitle } = PROBLEM_DETAILS_BY_CODE[code];
   return {
     error: code,
@@ -174,7 +190,7 @@ export function toErrorMeta(
  * @param problemType Optional registry URI overriding the code's default `problemDetails.type`.
  * @returns A resolution result with `didDocument: null` and the failure on `didResolutionMetadata`.
  */
-export function toErrorResult(code: DidResolutionError, detail: string, problemType?: string): IDIDResolutionResult {
+export function toErrorResult(code: ResolutionErrorCode, detail: string, problemType?: string): IDIDResolutionResult {
   const { error, problemDetails } = toErrorMeta(code, detail, problemType);
   return {
     didResolutionMetadata: { error, problemDetails, message: detail },

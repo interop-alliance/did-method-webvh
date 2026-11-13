@@ -104,7 +104,8 @@ export interface DIDResolutionMeta {
   updateKeys: string[];
   scid: string;
   prerotation: boolean;
-  portable: boolean;
+  /** Absent for a method whose DID names no location (did:vh). */
+  portable?: boolean;
   /** Cache lifetime in seconds; the spec default (3600) when the log never sets `ttl`. */
   ttl: number;
   nextKeyHashes: string[];
@@ -407,9 +408,12 @@ export interface ResolutionOptions {
    * witness proofs then needs `witnessProofs`; without them, resolution
    * throws a `notFound` error rather than fetching them. A DID log is loaded
    * only through `resolveControlledDid`, and a log that callback does not
-   * supply is reported as not found.
+   * supply is reported as not found. `'log-only'` permits retrieval of DID
+   * logs (the DID's own, and those of `did:webvh` verification methods) and
+   * refuses the witness proof file, which then needs `witnessProofs` as it
+   * does with `'none'`.
    */
-  network?: 'default' | 'none';
+  network?: 'default' | 'none' | 'log-only';
 }
 
 /**

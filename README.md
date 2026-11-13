@@ -251,8 +251,12 @@ that verifies logs it did not write should do one of the following.
 - Pass `witnessProofs` explicitly.
 - Supply its own `fetch` that applies its own destination policy.
 
-With `network: 'none'`, a log that requires witness proofs must come with
-`witnessProofs`. Without them, resolution fails with the `notFound`
+Pass `network: 'log-only'` to fetch DID logs and not the witness file. It
+permits `did.jsonl`, for the DID and for a `did:webvh` verification method,
+and refuses `did-witness.json`.
+
+With `network: 'none'` or `'log-only'`, a log that requires witness proofs
+must come with `witnessProofs`. Without them, resolution fails with the `notFound`
 resolution error ("Witness proofs not found ... supply witnessProofs"). An
 explicit `witnessProofs: []` is checked as an empty proof list, so the
 threshold is not met.
@@ -275,6 +279,138 @@ proofs. Every other failure is `invalidDid`.
 
 `signWitnessProofEntry` requires `witnessProofs` and does not fetch the
 witness file.
+
+## did:vh
+
+`did:vh` is `did:webvh` with the location removed from the DID. A `did:vh`
+DID is `did:vh:<scid>`. The log format, SCID and entry-hash algorithms, key
+authorization, pre-rotation and witnesses are the same. The client sources
+the log and passes it to the resolver.
+
+The API follows the [did:vh Editors Draft v0.1](https://github.com/decentralized-identity/didvh).
+It is unstable until the specification reaches Draft status.
+
+Import it from the `/vh` subpath. The function names mirror the `did:webvh`
+ones.
+
+```ts
+import {
+  createDID,
+  updateDID,
+  deactivateDID,
+  resolveDID,
+  dereference,
+} from '@interop/did-method-webvh/vh';
+
+const { did, log } = await createDID({ signer, updateKeys, verificationMethods });
+// did === 'did:vh:<scid>'
+
+const result = await resolveDID(did, { didLog: log });
+```
+
+### Create, update, deactivate
+
+`createDID`, `updateDID` and `deactivateDID` take the `did:webvh` options
+without `address`, `paths`, `portable` and `alsoKnownAsWeb`. Those have no
+meaning without a location, and passing one throws. Entries declare
+`method: did:vh:1.0`. An authored `didDocument` names itself
+`did:vh:{SCID}`.
+
+Nothing is fetched for the witness proofs of the prior log. Pass them as
+`witnessProofs`. An omitted list is read as no proofs.
+
+### Resolve
+
+`resolveDID(did, options)` returns a DID Resolution result and does not
+throw. Exactly one of `didLog` and `srcLog` is required.
+
+| Option | Meaning |
+| --- | --- |
+| `didLog` | The log itself, as JSON Lines text or parsed entries |
+| `didWitness` | The witness proofs file, as its parsed JSON array |
+| `srcLog` | An absolute URL naming the log file |
+| `srcWitness` | An absolute URL naming the witness proofs file |
+| `versionId`, `versionTime`, `versionNumber` | At most one version selector |
+| `includeDidLog` | Return the verified log and witness file in the resolution metadata |
+| `local` | Marks the resolver as local (see below) |
+| `verifier`, `resolveVM`, `fetch`, `network` | As for `did:webvh` |
+
+With `didLog` and `didWitness` no network request is made. `srcLog` and
+`srcWitness` are retrieved as given, with nothing appended, through the same
+bounded fetch as `did:webvh` (deadline, size limit, redirects refused).
+`srcWitness` is retrieved only when the log requires witnesses. A missing
+witness file is read as one holding no proofs.
+
+`https` references need a domain-name host. Loopback `http` (`localhost`,
+`127.0.0.0/8`, `[::1]`) and `file:` references are available only with
+`local: true`, and return `invalidOptions` otherwise. Set `local` only for a
+resolver used on the same system as its client. A resolver that accepts
+requests from other systems must leave it off. Any other scheme returns
+`featureNotSupported` when the reference is retrieved, so an unneeded
+`srcWitness` in such a scheme is not an error. A reference with user
+information, a backslash or a control character returns `invalidOptions`.
+
+With `network: 'none'` neither reference is fetched. With `'log-only'` the
+log is fetched and the witness file is not. A `file:` reference is not a
+network request.
+
+`includeDidLog: true` adds `didLog` (JSON Lines text, ending at the last
+valid entry) and, for a witnessed log, `didWitness` to
+`didResolutionMetadata`. Neither is returned when resolution fails.
+
+`checkWatchers`, `extraWatchers` and `minCopies` are validated, and any value
+other than the default returns `featureNotSupported`. Copy comparison is not
+implemented.
+
+### Rules that differ from did:webvh
+
+- `versionTime` is in whole seconds.
+- The `portable` parameter and a JSON `null` parameter value are refused.
+  No did:vh result carries a `portable` member in its metadata.
+- No entry may follow one that sets `updateKeys` to `[]`.
+- While pre-rotation is active, every entry declares `nextKeyHashes`.
+- `resolveDID` resolves a log whose later entries fail verification to its
+  valid entries, the ones before the first failure. With no version selector
+  the result is the last valid entry, with an `invalid-entries` item in
+  `didResolutionMetadata.warnings`. A selector that picks a valid entry
+  succeeds, and one that picks a later entry is `invalidDid`. A failing
+  first entry is `invalidDid`.
+- For `resolveDID`, an entry whose witness threshold is not met fails
+  verification like any other, so the valid entries end before it.
+- `updateDID`, `deactivateDID` and `resolveDIDFromLog` throw on any entry
+  that fails verification, as they do for `did:webvh`.
+- A retrieval or internal failure during verification (a
+  `DIDResolutionError` thrown by a `verifier` or `resolveVM`) is returned
+  under its own code. It is not read as an entry failing verification.
+- A log declaring a newer `did:vh` `method` version returns
+  `featureNotSupported`, unless a selector picks an entry before it. Another
+  method's value, or a malformed one, fails verification.
+- In the document metadata `ttl` and the witness `threshold` are integers,
+  and there is no `portable` member. `ttl`, `witness`, `watchers` and
+  `updated` are those of the last valid entry, also when a selector picks an
+  earlier one.
+
+### DID URLs and the `src` parameter
+
+`dereference(didUrl, options)` resolves the DID a DID URL names. The URL may
+carry `src` and one version parameter:
+
+```ts
+await dereference('did:vh:<scid>?src=https%3A%2F%2Fexample.com%2Fusers%2Falice');
+// retrieves https://example.com/users/alice/did.jsonl
+```
+
+`src` must be an absolute URL with no query or fragment, using `https` or
+another scheme with hierarchical paths. `file:` and `http` are refused. One
+trailing `/` is removed, then `/did.jsonl` and `/did-witness.json` are
+appended to give `srcLog` and `srcWitness`. An invalid `src`, or any other
+query parameter, returns `invalidDidUrl`. The derived references are used
+only when `options` names no log source of its own. `did:vh` defines no DID
+URL path handling, so a URL with a path returns `notFound`. A fragment is not
+applied. `deriveSrcReferences(src)` is exported for the derivation alone.
+
+`parseDidVhIdentifier(did, context)` validates a `did:vh` DID and returns its
+SCID.
 
 ## API Reference
 

@@ -35,12 +35,31 @@
   witnessProofs"); an explicit `[]` is checked as an empty list. A DID log
   comes only from `resolveControlledDid`, and one it does not supply is
   reported as `notFound`. `createDidWebvhDriver` does not take the option.
+- did:vh support (DIF did:vh Editors Draft v0.1), exported from the new
+  `/vh` subpath: `createDID`, `updateDID`, `deactivateDID`, `resolveDID`,
+  `resolveDIDFromLog`, `dereference`, `parseDidVhIdentifier`, and
+  `deriveSrcReferences`. A did:vh DID is `did:vh:<scid>` and its entries
+  declare `method: did:vh:1.0`. `resolveDID` takes the log directly
+  (`didLog`, `didWitness`) or by reference (`srcLog`, `srcWitness`), with
+  `versionId` / `versionTime` / `versionNumber` and `includeDidLog`.
+  Loopback `http` and `file:` references need `local: true`. `dereference`
+  reads the `src` DID URL parameter. `checkWatchers`, `extraWatchers` and
+  `minCopies` return `featureNotSupported`. did:vh metadata has no
+  `portable` member, so `DIDResolutionMeta.portable` is now optional. The
+  API is unstable while the
+  specification is an Editors Draft. The did:webvh exports are unchanged.
+- `WitnessThresholdError` carries `versionNumber`, the version whose
+  threshold was not met.
+- `network: 'log-only'`: DID logs are fetched and the witness proof file is
+  not, so a log that requires witness proofs needs `witnessProofs`.
 - `FetchLike` responses may optionally carry `headers`, `body`, `redirected`,
   and `url`. Each member is feature-tested, so plain-object headers or a Node
   stream body fall back to `text()`.
 
 ### Changed
 
+- The log code in `src/method_versions/` reads the method's rules from a
+  method profile (`profile.ts`). did:webvh behavior is unchanged.
 - `fetchWitnessProofs(did, fetch?, { timeoutMs?, maxBytes? })` and the DID
   log fetch are bounded. Each has a 10 second deadline covering the request
   and body read, a 5 MiB body limit, and refuses redirects.
