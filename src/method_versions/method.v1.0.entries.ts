@@ -215,6 +215,7 @@ export async function prepareGenesisEntry({
     alsoKnownAsWeb: options.alsoKnownAsWeb,
   });
 
+  const portable = options.portable ?? false;
   const initialLogEntry: DIDLogEntry = {
     versionId: PLACEHOLDER,
     versionTime: createdDate,
@@ -222,7 +223,7 @@ export async function prepareGenesisEntry({
       method: profile.method,
       scid: PLACEHOLDER,
       updateKeys: options.updateKeys,
-      ...(profile.hasLocation ? { portable: options.portable ?? false } : {}),
+      ...(profile.hasLocation ? { portable } : {}),
       nextKeyHashes: assertValidNextKeyHashes(options.nextKeyHashes ?? []),
       watchers: options.watchers ?? [],
       witness: toWitnessParameter(options.witness ?? null),

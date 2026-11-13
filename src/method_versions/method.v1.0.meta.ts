@@ -63,6 +63,7 @@ export const applyEntryToMeta = (
   if (!previousMeta) {
     const { scid, updateKeys } = parseGenesisParameters(parameters);
     const nextKeyHashes = assertValidNextKeyHashes(parameters.nextKeyHashes ?? []);
+    const portable = parameters.portable ?? false;
     return {
       versionId: entry.versionId,
       versionTime: entry.versionTime,
@@ -70,7 +71,7 @@ export const applyEntryToMeta = (
       updated: entry.versionTime,
       scid,
       updateKeys: [...updateKeys],
-      ...(profile.hasLocation ? { portable: parameters.portable ?? false } : {}),
+      ...(profile.hasLocation ? { portable } : {}),
       ttl: parameters.ttl ?? DEFAULT_TTL_SECONDS,
       nextKeyHashes,
       prerotation: hasPrerotation(nextKeyHashes),
