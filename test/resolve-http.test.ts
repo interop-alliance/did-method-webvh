@@ -66,7 +66,7 @@ describe('resolveDID over HTTPS', () => {
 
     const result = await resolveDID(did, { verifier });
 
-    expect(fetchMock).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl');
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl', expect.anything());
     expect(result.didDocument).toBeTruthy();
     expect(result.didDocument!.id).toBe(did);
     expect(result.didResolutionMetadata.error).toBeUndefined();
@@ -79,7 +79,7 @@ describe('resolveDID over HTTPS', () => {
 
     const result = await resolveDID(did, { verifier, fetch: customFetch });
 
-    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl');
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl', expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalled();
     expect(result.didDocument?.id).toBe(did);
     expect(result.didResolutionMetadata.error).toBeUndefined();
@@ -109,7 +109,7 @@ describe('resolveDID over HTTPS', () => {
       resolveControlledDid: async () => undefined,
     });
 
-    expect(fetchMock).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl');
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl', expect.anything());
     expect(result.didDocument?.id).toBe(did);
     expect(result.didResolutionMetadata.error).toBeUndefined();
   });
@@ -227,7 +227,7 @@ describe('resolveDID over HTTPS', () => {
           fetch: fetchMock,
         });
 
-        expect(fetchMock).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json');
+        expect(fetchMock).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json', expect.anything());
         expect(result.didDocument).toBeNull();
         expect(result.didResolutionMetadata.error).toBe('internalError');
         expect(result.didResolutionMetadata.message).toContain('HTTP error! status: 503');
@@ -246,7 +246,7 @@ describe('resolveDID over HTTPS', () => {
           fetch: fetchMock,
         });
 
-        expect(fetchMock).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json');
+        expect(fetchMock).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json', expect.anything());
         expect(result.didResolutionMetadata.error).toBe('invalidDid');
         expect(result.didResolutionMetadata.message).toContain(
           `Witness threshold not met for version ${witnessed.log[0].versionId}`
@@ -261,7 +261,7 @@ describe('resolveDID over HTTPS', () => {
 
       const result = await resolveDID(witnessed.did, { versionNumber: 1, verifier, fetch: fetchMock });
 
-      expect(fetchMock).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json');
+      expect(fetchMock).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json', expect.anything());
       expect(result.didDocument).toBeNull();
       expect(result.didResolutionMetadata.error).toBe('internalError');
     });
@@ -288,7 +288,7 @@ describe('fetchLogFromIdentifier', () => {
 
     const fetched = await fetchLogFromIdentifier(`did:webvh:${MOCK_SCID}:example.com:dids:issuer`);
 
-    expect(fetchMock).toHaveBeenCalledWith('https://example.com/dids/issuer/did.jsonl');
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/dids/issuer/did.jsonl', expect.anything());
     expect(fetched).toEqual(entries);
   });
 
@@ -299,7 +299,7 @@ describe('fetchLogFromIdentifier', () => {
 
     const fetched = await fetchLogFromIdentifier(`did:webvh:${MOCK_SCID}:example.com:dids:issuer`, customFetch);
 
-    expect(customFetch).toHaveBeenCalledWith('https://example.com/dids/issuer/did.jsonl');
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/dids/issuer/did.jsonl', expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalled();
     expect(fetched).toEqual(entries);
   });
@@ -317,7 +317,7 @@ describe('fetchWitnessProofs', () => {
 
     const result = await fetchWitnessProofs(`did:webvh:${MOCK_SCID}:example.com`);
 
-    expect(fetchMock).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json');
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json', expect.anything());
     expect(result).toEqual(proofs);
   });
 
@@ -328,7 +328,7 @@ describe('fetchWitnessProofs', () => {
 
     const result = await fetchWitnessProofs(`did:webvh:${MOCK_SCID}:example.com`, customFetch);
 
-    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json');
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json', expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalled();
     expect(result).toEqual(proofs);
   });
@@ -495,8 +495,8 @@ describe('fetch override threading', () => {
 
     expect(result.didResolutionMetadata.error).toBeUndefined();
     expect(result.didDocument?.id).toBe(did);
-    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl');
-    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json');
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl', expect.anything());
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json', expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
@@ -515,7 +515,7 @@ describe('fetch override threading', () => {
     });
 
     expect(updated.log).toHaveLength(2);
-    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json');
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json', expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
@@ -532,7 +532,7 @@ describe('fetch override threading', () => {
     });
 
     expect(deactivated.meta.deactivated).toBe(true);
-    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json');
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json', expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
@@ -545,8 +545,8 @@ describe('fetch override threading', () => {
     const resolved = await createResolveVM({ fetch: customFetch })(vmId);
 
     expect(resolved?.publicKeyMultibase).toBe(authKey.publicKeyMultibase);
-    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl');
-    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json');
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl', expect.anything());
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json', expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
@@ -560,8 +560,8 @@ describe('fetch override threading', () => {
 
     expect(resolved?.publicKeyMultibase).toBe(authKey.publicKeyMultibase);
     expect(resolveControlledDid).toHaveBeenCalledWith(did);
-    expect(customFetch).not.toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl');
-    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json');
+    expect(customFetch).not.toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl', expect.anything());
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did-witness.json', expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
@@ -575,7 +575,7 @@ describe('fetch override threading', () => {
 
     expect(resolved?.publicKeyMultibase).toBe(authKey.publicKeyMultibase);
     expect(resolveControlledDid).toHaveBeenCalledWith(did);
-    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl');
+    expect(customFetch).toHaveBeenCalledWith('https://example.com/.well-known/did.jsonl', expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 });

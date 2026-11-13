@@ -18,7 +18,6 @@ import {
 } from '../utils/iso8601-datetime.js';
 import { normalizeCreateDidAddress, requireDidDocumentId, withNormalizedUpdateKeys } from '../utils.js';
 import { createResolveVM } from '../vm-resolver.js';
-import { validateWitnessParameter } from '../witness.js';
 import { prepareDeactivationEntry, prepareGenesisEntry, prepareUpdateEntry } from './method.v1.0.entries.js';
 import { applyEntryToMeta } from './method.v1.0.meta.js';
 import { type InternalResolutionOptions, resolveV1Log } from './method.v1.0.resolution.js';
@@ -33,8 +32,6 @@ export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDR
     throw new Error('Update keys not supplied');
   }
   options = withNormalizedUpdateKeys(options);
-
-  validateWitnessParameter(options.witness);
 
   // Parse address input with strict validation
   const addressInput = options.address;
@@ -84,12 +81,15 @@ export const resolveDIDFromLog = async (
 /**
  * Resolves the metadata of the log an update or deactivation extends, unless
  * the caller supplied it as `priorMeta`. The options that affect resolution
- * (`verifier`, `witnessProofs`, `fetch`) are picked here, in one place, so a
+ * (`verifier`, `witnessProofs`, `fetch`, `network`) are picked here, in one place, so a
  * new pass-through option cannot reach one operation and not the other.
  */
 const resolvePriorMeta = async (
   log: DIDLog,
-  { priorMeta, ...resolutionOptions }: Pick<UpdateDIDInterface, 'priorMeta' | 'verifier' | 'witnessProofs' | 'fetch'>
+  {
+    priorMeta,
+    ...resolutionOptions
+  }: Pick<UpdateDIDInterface, 'priorMeta' | 'verifier' | 'witnessProofs' | 'fetch' | 'network'>
 ): Promise<DIDResolutionMeta> => priorMeta ?? (await resolveDIDFromLog(log, resolutionOptions)).meta;
 
 /**
@@ -152,9 +152,14 @@ export const updateDID = async (options: UpdateDIDInterface): Promise<UpdateDIDR
 };
 
 /**
- * Supplied `updateKeys` are normalized from Ed25519 multikeys or did:key
- * identifiers to bare multikeys before preparation, including pre-rotation
- * hash checks.
+ * Appends a deactivation entry, which writes `updateKeys: []` unless the
+ * caller supplies `updateKeys`. Supplied `updateKeys` are normalized from
+ * Ed25519 multikeys or did:key identifiers to bare multikeys before
+ * preparation.
+ *
+ * A DID with pre-rotation active is refused: an entry under pre-rotation must
+ * carry the pre-committed keys, so it cannot also empty `updateKeys`. Call
+ * `updateDID` with `nextKeyHashes: []` first, then deactivate.
  */
 export const deactivateDID = async (
   options: DeactivateDIDInterface
@@ -165,9 +170,6 @@ export const deactivateDID = async (
   const lastMeta = await resolvePriorMeta(log, options);
   if (lastMeta.deactivated) {
     throw new Error('DID already deactivated');
-  }
-  if (lastMeta.prerotation && options.updateKeys === undefined) {
-    throw new Error('updateKeys must be provided while pre-rotation is active');
   }
   const versionNumber = log.length + 1;
   const createdDate = createNextVersionTime(lastMeta.updated, undefined);

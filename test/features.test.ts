@@ -4,7 +4,9 @@ import { createDID, deactivateDID, resolveDIDFromLog, updateDID } from '../src/m
 import { deriveHash, deriveNextKeyHash } from '../src/utils/crypto.js';
 import { createDate } from '../src/utils/iso8601-datetime.js';
 import {
+  appendRawLogEntry,
   asPublicVerificationMethods,
+  createTestDID,
   createTestSigner,
   generateTestVerificationMethod,
   nextSecond,
@@ -252,7 +254,7 @@ test('deactivateDID returned meta preserves portable and watchers alongside deac
   expect(deactivated.meta.watchers).toEqual(watchers);
 });
 
-test('deactivateDID with pre-rotation active produces a resolvable deactivated log', async () => {
+test('deactivateDID refuses while pre-rotation is active and succeeds after updateDID stops it', async () => {
   const nextKeyHash = await deriveNextKeyHash(authKey2.publicKeyMultibase!);
   const { log: log1 } = await createDID({
     address: 'example.com',
@@ -260,64 +262,40 @@ test('deactivateDID with pre-rotation active produces a resolvable deactivated l
     updateKeys: [authKey1.publicKeyMultibase!],
     verificationMethods: asPublicVerificationMethods(authKey1),
     nextKeyHashes: [nextKeyHash],
+    verifier: testImplementation,
+  });
+
+  await expect(
+    deactivateDID({
+      log: log1,
+      signer: createTestSigner(authKey2),
+      updateKeys: [authKey2.publicKeyMultibase!],
+      verifier: testImplementation,
+    })
+  ).rejects.toThrow('Cannot deactivate while pre-rotation is active');
+
+  const { log: log2 } = await updateDID({
+    log: log1,
+    signer: createTestSigner(authKey2),
+    updateKeys: [authKey2.publicKeyMultibase!],
+    nextKeyHashes: [],
     verifier: testImplementation,
   });
 
   const deactivated = await deactivateDID({
-    log: log1,
+    log: log2,
     signer: createTestSigner(authKey2),
-    updateKeys: [authKey2.publicKeyMultibase!],
     verifier: testImplementation,
   });
 
   expect(deactivated.meta.deactivated).toBe(true);
-  expect(deactivated.log[1].parameters.updateKeys).toEqual([authKey2.publicKeyMultibase!]);
-  expect(deactivated.log[1].parameters.nextKeyHashes).toEqual([]);
+  expect(deactivated.log[2].parameters.updateKeys).toEqual([]);
+  expect(deactivated.log[2].parameters.nextKeyHashes).toEqual([]);
 
   const resolved = await resolveDIDFromLog(deactivated.log, { verifier: testImplementation });
   expect(resolved.meta.deactivated).toBe(true);
   expect(resolved.meta.prerotation).toBe(false);
-});
-
-test('deactivateDID rejects keys that are not in the prior nextKeyHashes', async () => {
-  const nextKeyHash = await deriveNextKeyHash(authKey2.publicKeyMultibase!);
-  const { log: log1 } = await createDID({
-    address: 'example.com',
-    signer: createTestSigner(authKey1),
-    updateKeys: [authKey1.publicKeyMultibase!],
-    verificationMethods: asPublicVerificationMethods(authKey1),
-    nextKeyHashes: [nextKeyHash],
-    verifier: testImplementation,
-  });
-
-  await expect(
-    deactivateDID({
-      log: log1,
-      signer: createTestSigner(authKey3),
-      updateKeys: [authKey3.publicKeyMultibase!],
-      verifier: testImplementation,
-    })
-  ).rejects.toThrow('Invalid update key');
-});
-
-test('deactivateDID omitting updateKeys is rejected while pre-rotation is active', async () => {
-  const nextKeyHash = await deriveNextKeyHash(authKey2.publicKeyMultibase!);
-  const { log: log1 } = await createDID({
-    address: 'example.com',
-    signer: createTestSigner(authKey1),
-    updateKeys: [authKey1.publicKeyMultibase!],
-    verificationMethods: asPublicVerificationMethods(authKey1),
-    nextKeyHashes: [nextKeyHash],
-    verifier: testImplementation,
-  });
-
-  await expect(
-    deactivateDID({
-      log: log1,
-      signer: createTestSigner(authKey1),
-      verifier: testImplementation,
-    })
-  ).rejects.toThrow('updateKeys must be provided while pre-rotation is active');
+  expect(resolved.meta.updateKeys).toEqual([]);
 });
 
 test('Omitted updateKeys is rejected while pre-rotation is active', async () => {
@@ -645,6 +623,26 @@ test('Log entry with ttl: null resolves and normalizes ttl to the default', asyn
 
   expect(resolved.doc).not.toBeNull();
   expect(resolved.meta.ttl).toBe(3600);
+});
+
+// did:webvh v1.0 deprecates null parameter values but requires resolvers to accept them.
+test('Log entry with nextKeyHashes: null resolves and normalizes to []', async () => {
+  const { signer, verifier, log: genesis } = await createTestDID({ created: '2024-01-01T00:00:00Z' });
+
+  // updateDID never writes null, so append the entry directly.
+  const log = await appendRawLogEntry({
+    log: genesis,
+    signer,
+    parameters: { nextKeyHashes: null },
+    versionTime: '2024-01-01T00:00:01Z',
+  });
+  expect(log[1].parameters.nextKeyHashes).toBeNull();
+
+  const result = await resolveDIDFromLog(log, { verifier });
+
+  expect(result.doc).not.toBeNull();
+  expect(result.meta.prerotation).toBe(false);
+  expect(result.meta.nextKeyHashes).toEqual([]);
 });
 
 test('Historical versionId on a deactivated log keeps historical document and reports deactivated=true', async () => {

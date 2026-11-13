@@ -172,11 +172,18 @@ export const updateDID = async (options: UpdateDIDInterface): Promise<UpdateDIDR
 /**
  * Deactivates an existing DID by appending a deactivation entry.
  *
- * Supplied `updateKeys` are normalized to bare multikeys before preparation,
- * including pre-rotation hash checks. `witnessProofs` is threaded into the
- * resolution of the prior log, so omitting it falls back to the network fetch
- * and passing `[]` disables that fetch. `fetch` overrides the function used
- * for that network fetch.
+ * The entry sets `deactivated: true` and `nextKeyHashes: []`, and writes
+ * `updateKeys: []` unless `updateKeys` is supplied. Supplied `updateKeys` are
+ * normalized to bare multikeys. The entry is signed by a key from the prior
+ * entry's `updateKeys`. A DID with pre-rotation active is refused, since an
+ * entry under pre-rotation must carry the pre-committed keys. Call
+ * `updateDID` with `nextKeyHashes: []` first, then deactivate.
+ *
+ * `witnessProofs` is threaded into the resolution of the prior log, so
+ * omitting it falls back to the network fetch and passing `[]` disables that
+ * fetch. `fetch` overrides the function used for that network fetch. With
+ * `network: 'none'`, a prior log that requires witness proofs needs
+ * `witnessProofs`.
  *
  * @param options DID deactivation options.
  * @returns The deactivated DID result and updated DID log.

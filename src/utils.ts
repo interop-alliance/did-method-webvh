@@ -1,5 +1,7 @@
-import type { DIDLog, FetchLike, LogSourceOptions, WitnessProofFileEntry } from './interfaces.js';
-import { getFileUrl } from './utils/did-identifier.js';
+import { DIDResolutionError } from '@interop/data-integrity-core';
+import type { DIDLog, FetchLike, LogSourceOptions, ResolutionOptions, WitnessProofFileEntry } from './interfaces.js';
+import { fetchBounded, toRetrievalError } from './utils/bounded-fetch.js';
+import { getFileUrl, getWitnessFileUrl } from './utils/did-identifier.js';
 import { normalizeEd25519Multikey } from './utils/did-key.js';
 
 /**
@@ -141,16 +143,39 @@ export const writeLogToDisk = async (path: string, log: DIDLog) => {
   }
 };
 
-export async function fetchLogFromIdentifier(identifier: string, fetchFn: FetchLike = fetch): Promise<DIDLog> {
-  const url = getFileUrl(identifier);
-  const response = await fetchFn(url);
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+/**
+ * Fetches and parses a DID's log, `did.jsonl`.
+ *
+ * The request is bounded, because the URL comes from the DID. It has a
+ * deadline, refuses redirects, and stops reading a body larger than the size
+ * limit. The same bounds apply to a custom `fetchFn`, which receives
+ * `redirect: 'error'` and an abort `signal`.
+ *
+ * A 404 or an empty log throws a `DIDResolutionError` with code `notFound`.
+ * Any other HTTP status, and any transport failure, throws one with code
+ * `internalError`.
+ *
+ * @param identifier {string} The DID whose log is fetched.
+ * @param [fetchFn] {FetchLike} Fetch override. Defaults to the global `fetch`.
+ * @param [bounds.timeoutMs] {number} Deadline in milliseconds. Defaults to 10
+ *   seconds.
+ * @param [bounds.maxBytes] {number} Body size limit in bytes. Defaults to 5
+ *   MiB.
+ * @returns {Promise<DIDLog>} The parsed log entries.
+ */
+export async function fetchLogFromIdentifier(
+  identifier: string,
+  fetchFn: FetchLike = fetch,
+  bounds: { timeoutMs?: number; maxBytes?: number } = {}
+): Promise<DIDLog> {
+  const body = await fetchBounded(getFileUrl(identifier), fetchFn, bounds);
+  if (body === undefined) {
+    throw new DIDResolutionError('HTTP error! status: 404', { code: 'notFound' });
   }
 
-  const text = (await response.text()).trim();
+  const text = body.trim();
   if (!text) {
-    throw new Error(`DID log not found for ${identifier}`);
+    throw new DIDResolutionError(`DID log not found for ${identifier}`, { code: 'notFound' });
   }
   return readLogFromString(text);
 }
@@ -158,34 +183,93 @@ export async function fetchLogFromIdentifier(identifier: string, fetchFn: FetchL
 /**
  * Loads a DID's log: the `resolveControlledDid` callback is consulted first,
  * and an `undefined` result falls back to fetching over HTTPS (through the
- * `fetch` override when one is given).
+ * `fetch` override when one is given). With `network: 'none'` nothing is
+ * fetched, and a log the callback does not supply throws a
+ * `DIDResolutionError` with code `notFound`. An error thrown by the callback
+ * is a retrieval failure: unless it is already a `DIDResolutionError`, it is
+ * rethrown as one with code `internalError` and the original as `cause`.
  */
-export async function loadDIDLog(did: string, { resolveControlledDid, fetch }: LogSourceOptions): Promise<DIDLog> {
-  return (await resolveControlledDid?.(did)) ?? (await fetchLogFromIdentifier(did, fetch));
+export async function loadDIDLog(
+  did: string,
+  { resolveControlledDid, fetch, network }: LogSourceOptions
+): Promise<DIDLog> {
+  let controlledLog: DIDLog | undefined;
+  try {
+    controlledLog = await resolveControlledDid?.(did);
+  } catch (error) {
+    throw toRetrievalError(error);
+  }
+  if (controlledLog) {
+    return controlledLog;
+  }
+  if (network === 'none') {
+    throw new DIDResolutionError(`DID log not found for ${did}: network is 'none', so it was not fetched`, {
+      code: 'notFound',
+    });
+  }
+  return fetchLogFromIdentifier(did, fetch);
 }
 
 /**
  * Fetches the `did-witness.json` file published beside a DID's log. A missing
- * file (404) means the DID has no witness proofs and returns an empty list;
- * any other failure propagates so a transport problem is not reported as an
- * unmet witness threshold.
+ * file (404) means the DID has no witness proofs and returns an empty list.
+ * Any other HTTP status, and any transport failure, throws a
+ * `DIDResolutionError` with code `internalError`, so a transport problem is
+ * not reported as an unmet witness threshold.
+ *
+ * The request is bounded, because the URL comes from the DID and so from
+ * whoever wrote the log. It has a deadline, refuses redirects, and stops
+ * reading a body larger than the size limit. The same bounds apply to a
+ * custom `fetchFn`, which receives `redirect: 'error'` and an abort `signal`.
+ *
+ * @param did {string} The DID whose witness proof file is fetched.
+ * @param [fetchFn] {FetchLike} Fetch override. Defaults to the global `fetch`.
+ * @param [bounds.timeoutMs] {number} Deadline in milliseconds. Defaults to 10
+ *   seconds.
+ * @param [bounds.maxBytes] {number} Body size limit in bytes. Defaults to 5
+ *   MiB.
+ * @returns {Promise<WitnessProofFileEntry[]>} The published witness proofs.
  */
-export async function fetchWitnessProofs(did: string, fetchFn: FetchLike = fetch): Promise<WitnessProofFileEntry[]> {
-  const url = getFileUrl(did).replace('did.jsonl', 'did-witness.json');
+export async function fetchWitnessProofs(
+  did: string,
+  fetchFn: FetchLike = fetch,
+  bounds: { timeoutMs?: number; maxBytes?: number } = {}
+): Promise<WitnessProofFileEntry[]> {
+  const url = getWitnessFileUrl(did);
 
-  const response = await fetchFn(url);
-  if (!response.ok) {
-    if (response.status === 404) {
-      return [];
-    }
-    throw new Error(`HTTP error! status: ${response.status}`);
+  const text = await fetchBounded(url, fetchFn, bounds);
+  if (text === undefined) {
+    return [];
   }
 
-  const body: unknown = await response.json();
+  const body: unknown = JSON.parse(text);
   if (!Array.isArray(body)) {
     throw new Error(`Witness proof file at ${url} is not a JSON array`);
   }
   return body as WitnessProofFileEntry[];
+}
+
+/**
+ * Loads a DID's witness proofs: supplied `witnessProofs` (even `[]`) are
+ * always used, and otherwise the proof file is fetched. With `network: 'none'`
+ * nothing is fetched, and proofs that were not supplied throw a
+ * `DIDResolutionError` with code `notFound`. That is a retrieval failure,
+ * like a failed fetch, and is not an unmet threshold.
+ */
+export async function loadWitnessProofs(
+  did: string,
+  { witnessProofs, fetch, network }: Pick<ResolutionOptions, 'witnessProofs' | 'fetch' | 'network'>
+): Promise<WitnessProofFileEntry[]> {
+  if (witnessProofs !== undefined) {
+    return witnessProofs;
+  }
+  if (network === 'none') {
+    throw new DIDResolutionError(
+      `Witness proofs not found for ${did}: network is 'none', so they were not fetched; supply witnessProofs`,
+      { code: 'notFound' }
+    );
+  }
+  return fetchWitnessProofs(did, fetch);
 }
 
 // Re-exported from the leaf modules so existing importers of `./utils.js` are

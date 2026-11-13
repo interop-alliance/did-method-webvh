@@ -290,9 +290,12 @@ describe('Not So Happy Path Tests', () => {
       verificationMethods: asPublicVerificationMethods(authKey),
       verifier: testImplementation,
     });
+    // Keep authKey authorized so the later entry is validly signed and only the
+    // post-deactivation rule can reject it.
     const deactivated = await deactivateDID({
       log: genesis.log,
       signer: createTestSigner(authKey),
+      updateKeys: [authKey.publicKeyMultibase!],
       verifier: testImplementation,
     });
     const validDeactivation = await resolveDIDFromLog(deactivated.log, { verifier: testImplementation });

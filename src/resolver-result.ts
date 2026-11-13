@@ -8,8 +8,13 @@
  * result shape to the DID Resolution spec's result envelope
  * (`IDIDResolutionResult`).
  */
-import type { IDIDDocument, IDIDDocumentMetadata, IDIDResolutionResult } from '@interop/data-integrity-core';
-import type { DIDDoc, DIDResolutionMeta, DidResolutionError, ProblemDetails } from './interfaces.js';
+import {
+  type IDIDDocument,
+  type IDIDDocumentMetadata,
+  type IDIDResolutionResult,
+  isDIDResolutionError,
+} from '@interop/data-integrity-core';
+import type { DIDDoc, DIDResolutionMeta, DidResolutionError, ProblemDetails, WitnessParameter } from './interfaces.js';
 
 /** `problemDetails.type` URIs from the did:webvh resolution-error registry. */
 export const WEBVH_ERROR_TYPES = {
@@ -22,13 +27,17 @@ export const WEBVH_ERROR_TYPES = {
 export interface WebvhDocumentMetadata extends IDIDDocumentMetadata {
   versionTime?: string;
   scid?: string;
-  /** Cache lifetime in seconds; the spec default (3600) when the log never sets `ttl`. */
-  ttl?: number;
+  /**
+   * Cache lifetime in seconds, as a string containing the integer; the spec
+   * default (3600) when the log never sets `ttl`.
+   */
+  ttl?: string;
   updateKeys?: string[];
   nextKeyHashes?: string[];
   prerotation?: boolean;
   portable?: boolean;
-  witness?: DIDResolutionMeta['witness'];
+  /** `threshold` is a string containing the integer; resolution metadata does not carry numbers. */
+  witness?: Omit<WitnessParameter, 'threshold'> & { threshold?: string };
   watchers?: string[];
 }
 
@@ -92,31 +101,21 @@ export function validateResolutionSelectors(options: {
   return null;
 }
 
+/**
+ * Classifies a thrown resolution failure. A `DIDResolutionError` carries its
+ * own code: the log and witness fetches throw one with `notFound` (a missing
+ * or empty log, or one not fetched offline) or `internalError` (another HTTP
+ * status, a timeout, an oversized body, a redirect, a transport failure).
+ * A `DIDResolutionError` with a code this method does not emit is reported as
+ * `internalError`. Anything else is a validation failure, `invalidDid`. The
+ * message is not inspected, since validation messages can carry text taken
+ * from the log.
+ */
 export function mapErrorToCode(error: unknown): DidResolutionError {
-  const message = error instanceof Error ? error.message : String(error);
-  // Only a genuine failure to fetch the DID log (or a DID-URL resource) is
-  // `notFound`. Match the library's own absence messages rather than scanning
-  // for "404"/"not found" anywhere in the text: validation errors can embed
-  // attacker-controlled log data (e.g. a tampered versionId of "404", or
-  // "Invalid update key ... Not found in nextKeyHashes ..."), and those are
-  // invalid documents, not missing ones.
-  if (/HTTP error! status: 404\b/.test(message) || /DID log not found/i.test(message)) {
-    return 'notFound';
+  if (!isDIDResolutionError(error)) {
+    return 'invalidDid';
   }
-  // Any non-404 HTTP error status (4xx/5xx) or network/transport failure is a
-  // resolver-side internal error, not an invalid document: a valid DID served
-  // from an unauthorized, gone, rate-limited, or failing endpoint must not be
-  // reported as a document-validation failure. (404 is handled above as
-  // notFound.) Everything else that reaches here is a validation failure.
-  if (
-    /HTTP error! status: [45]\d\d\b/.test(message) ||
-    /fetch failed/i.test(message) ||
-    /\b(ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN)\b/.test(message) ||
-    /network (error|request failed)/i.test(message)
-  ) {
-    return 'internalError';
-  }
-  return 'invalidDid';
+  return Object.hasOwn(PROBLEM_DETAILS_BY_CODE, error.code) ? (error.code as DidResolutionError) : 'internalError';
 }
 
 /** RFC9457-style `type`/`title` for each standard error code. */
@@ -201,8 +200,17 @@ export function toResolutionResult(core: {
 }): IDIDResolutionResult {
   const { meta } = core;
   // Split meta into the standard documentMetadata + the resolutionMetadata extras.
-  const { error, problemDetails, ...documentMeta } = meta;
+  const { error, problemDetails, witness, ttl, ...documentMeta } = meta;
   const didDocumentMetadata: WebvhDocumentMetadata = { ...documentMeta };
+  // Only the resolution result carries the string form of `ttl` and
+  // `threshold`; log entries and meta keep numbers.
+  if (ttl !== undefined) {
+    didDocumentMetadata.ttl = String(ttl);
+  }
+  if (witness) {
+    const { threshold, ...rest } = witness;
+    didDocumentMetadata.witness = threshold === undefined ? rest : { ...rest, threshold: String(threshold) };
+  }
   // This package's DIDDoc is structurally looser than IDIDDocument (optional
   // `id`, free-form `@context`), hence the cast at this single boundary.
   const didDocument = (core.doc as unknown as IDIDDocument) ?? null;

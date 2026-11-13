@@ -1,11 +1,17 @@
 import { describe, expect, test, vi } from 'vitest';
 import { documentStateIsValid } from '../src/assertions.js';
+import type { DIDLog, VerificationMethod } from '../src/interfaces.js';
 import { createDID, deactivateDID, resolveDIDFromLog, updateDID } from '../src/method.js';
 import { deriveNextKeyHash } from '../src/utils/crypto.js';
 import { MultibaseEncoding, multibaseEncode } from '../src/utils/multiformats.js';
 import { defaultWebvhLogVerifier } from '../src/verifier.js';
 import { resolveVM } from '../src/vm-resolver.js';
-import { asPublicVerificationMethods, createTestSigner, generateTestVerificationMethod } from './utils.js';
+import {
+  asPublicVerificationMethods,
+  createTestDID,
+  createTestSigner,
+  generateTestVerificationMethod,
+} from './utils.js';
 
 const forms = ['multikey', 'did:key', 'verificationMethod'] as const;
 type KeyForm = (typeof forms)[number];
@@ -41,33 +47,52 @@ describe('updateKeys input normalization', () => {
     await expect(resolveDIDFromLog(result.log)).resolves.toBeDefined();
   });
 
-  for (const operation of [updateDID, deactivateDID]) {
-    test.each(forms)(`${operation.name} normalizes %s before checking pre-rotation hashes`, async (form) => {
-      const key = await generateTestVerificationMethod();
-      const nextKey = await generateTestVerificationMethod();
-      const { log } = await createDID({
-        address: 'example.com',
-        verifier: defaultWebvhLogVerifier,
-        signer: createTestSigner(key),
-        verificationMethods: asPublicVerificationMethods(key),
-        updateKeys: [key.publicKeyMultibase!],
-        nextKeyHashes: [await deriveNextKeyHash(nextKey.publicKeyMultibase!)],
-      });
-      const originalLog = JSON.stringify(log);
-      const updateKeys = [encodeKey(nextKey.publicKeyMultibase!, form)];
-      const originalKeys = [...updateKeys];
-      Object.freeze(updateKeys);
-      const result = await operation(
-        Object.freeze({ log, verifier: defaultWebvhLogVerifier, signer: createTestSigner(nextKey), updateKeys })
-      );
+  // Runs `operation` with `signingKey` supplied as `updateKeys` in the given
+  // form, then checks the entry holds the multikey and the inputs are untouched.
+  const expectNormalizedEntry = async ({
+    operation,
+    log,
+    signingKey,
+    form,
+  }: {
+    operation: typeof updateDID | typeof deactivateDID;
+    log: DIDLog;
+    signingKey: VerificationMethod;
+    form: KeyForm;
+  }) => {
+    const originalLog = JSON.stringify(log);
+    const updateKeys = [encodeKey(signingKey.publicKeyMultibase!, form)];
+    const originalKeys = [...updateKeys];
+    Object.freeze(updateKeys);
+    const result = await operation(
+      Object.freeze({ log, verifier: defaultWebvhLogVerifier, signer: createTestSigner(signingKey), updateKeys })
+    );
 
-      expect(result.log[1].parameters.updateKeys).toEqual([nextKey.publicKeyMultibase]);
-      expect(result.meta.updateKeys).toEqual([nextKey.publicKeyMultibase]);
-      expect(updateKeys).toEqual(originalKeys);
-      expect(JSON.stringify(log)).toBe(originalLog);
-      await expect(resolveDIDFromLog(result.log)).resolves.toBeDefined();
+    expect(result.log[1].parameters.updateKeys).toEqual([signingKey.publicKeyMultibase]);
+    expect(result.meta.updateKeys).toEqual([signingKey.publicKeyMultibase]);
+    expect(updateKeys).toEqual(originalKeys);
+    expect(JSON.stringify(log)).toBe(originalLog);
+    await expect(resolveDIDFromLog(result.log)).resolves.toBeDefined();
+  };
+
+  test.each(forms)('updateDID normalizes %s before checking pre-rotation hashes', async (form) => {
+    const key = await generateTestVerificationMethod();
+    const nextKey = await generateTestVerificationMethod();
+    const { log } = await createDID({
+      address: 'example.com',
+      verifier: defaultWebvhLogVerifier,
+      signer: createTestSigner(key),
+      verificationMethods: asPublicVerificationMethods(key),
+      updateKeys: [key.publicKeyMultibase!],
+      nextKeyHashes: [await deriveNextKeyHash(nextKey.publicKeyMultibase!)],
     });
-  }
+    await expectNormalizedEntry({ operation: updateDID, log, signingKey: nextKey, form });
+  });
+
+  test.each(forms)('deactivateDID normalizes %s in supplied updateKeys', async (form) => {
+    const { authKey, log } = await createTestDID({ verifier: defaultWebvhLogVerifier });
+    await expectNormalizedEntry({ operation: deactivateDID, log, signingKey: authKey, form });
+  });
 
   test('normalizes mixed forms without changing order', async () => {
     const keys = await Promise.all(forms.map(() => generateTestVerificationMethod()));

@@ -45,14 +45,22 @@ export interface Verifier {
 
 /**
  * A fetch-compatible function used by the resolver for HTTP retrieval. The
- * resolver reads only `ok`, `status`, `text()` and `json()` from the
+ * resolver requires only `ok`, `status`, `text()` and `json()` on the
  * response, so an adapter over another HTTP client need not build a full
- * `Response`. The global `fetch` still satisfies this type.
+ * `Response`. Every request passes `redirect: 'error'` and an abort `signal`
+ * in `init`. When `headers` (with a `get` method) and a WHATWG stream `body`
+ * are present, they are used to stop reading an oversized body early;
+ * otherwise the body is read with `text()` and measured afterwards. A
+ * response with `redirected: true`, or with a non-empty `url` other than the
+ * one requested, is refused as a redirect. The global `fetch` still satisfies
+ * this type.
  */
 export type FetchLike = (
   input: string,
   init?: RequestInit
-) => Promise<Pick<Response, 'ok' | 'status' | 'text' | 'json'>>;
+) => Promise<
+  Pick<Response, 'ok' | 'status' | 'text' | 'json'> & Partial<Pick<Response, 'headers' | 'body' | 'redirected' | 'url'>>
+>;
 
 /**
  * Resolves a proof's `verificationMethod` id to its key material. The default
@@ -338,6 +346,8 @@ export interface UpdateDIDInterface {
    * must be retrieved. See {@link ResolutionOptions.fetch}.
    */
   fetch?: FetchLike;
+  /** See {@link ResolutionOptions.network}. */
+  network?: ResolutionOptions['network'];
   /** See {@link CreateDIDInterface.selfVerify}. */
   selfVerify?: boolean;
   /**
@@ -353,10 +363,16 @@ export interface DeactivateDIDInterface {
   log: DIDLog;
   signer: Signer;
   verifier?: Verifier;
+  /**
+   * `updateKeys` written to the deactivation entry. Defaults to `[]`, so the
+   * deactivated DID lists no keys that could authorize a later entry.
+   */
   updateKeys?: string[];
   witnessProofs?: WitnessProofFileEntry[];
   /** See {@link UpdateDIDInterface.fetch}. */
   fetch?: FetchLike;
+  /** See {@link ResolutionOptions.network}. */
+  network?: ResolutionOptions['network'];
   /** See {@link CreateDIDInterface.selfVerify}. */
   selfVerify?: boolean;
   /** See {@link UpdateDIDInterface.priorMeta}. */
@@ -372,7 +388,10 @@ export interface ResolutionOptions {
   /** Verification-method resolver for proof verification; defaults to the built-in did:key / did:webvh resolver. */
   resolveVM?: ResolveVerificationMethod;
   scid?: string;
-  /** Out-of-band witness proofs; when absent they are fetched from the DID's `did-witness.json`. */
+  /**
+   * Out-of-band witness proofs. When absent they are fetched from the DID's
+   * `did-witness.json`, unless `network` is `'none'`.
+   */
   witnessProofs?: WitnessProofFileEntry[];
   /**
    * Supplies the log for a DID this resolver controls, so `resolveDID` skips the
@@ -381,10 +400,23 @@ export interface ResolutionOptions {
   resolveControlledDid?: (did: string) => Promise<DIDLog | undefined>;
   /** Fetch override used to retrieve the DID log and `did-witness.json`; defaults to the global `fetch`. */
   fetch?: FetchLike;
+  /**
+   * Which network requests the call may make. `'default'` (also the behavior
+   * when omitted) fetches what the call needs. With `'none'` the call makes
+   * no network request, and `fetch` is not called. A log that requires
+   * witness proofs then needs `witnessProofs`; without them, resolution
+   * throws a `notFound` error rather than fetching them. A DID log is loaded
+   * only through `resolveControlledDid`, and a log that callback does not
+   * supply is reported as not found.
+   */
+  network?: 'default' | 'none';
 }
 
-/** The options that decide where a DID log comes from: a controlled-DID callback first, then fetch. */
-export type LogSourceOptions = Pick<ResolutionOptions, 'fetch' | 'resolveControlledDid'>;
+/**
+ * The options that decide where a DID log comes from: a controlled-DID
+ * callback first, then fetch unless `network` is `'none'`.
+ */
+export type LogSourceOptions = Pick<ResolutionOptions, 'fetch' | 'resolveControlledDid' | 'network'>;
 
 export interface WitnessProofFileEntry {
   versionId: string;

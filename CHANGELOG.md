@@ -26,9 +26,71 @@
   `PATH_HANDLER_SERVICE_TYPE`, and `VERSION_SELECTOR_PARAMETERS` are
   exported for the individual steps.
   (Upstream issue #216.)
+- `network` option (`'default'` or `'none'`) on `ResolutionOptions` (so
+  `resolveDID`, `resolveDIDFromLog`, and `dereference`), `updateDID`,
+  `deactivateDID`, and `createResolveVM`. With `'none'` the call makes no
+  network request and `fetch` is not called. A log that requires witness
+  proofs then needs `witnessProofs`. Without them, resolution throws a
+  `notFound` `DIDResolutionError` ("Witness proofs not found ... supply
+  witnessProofs"); an explicit `[]` is checked as an empty list. A DID log
+  comes only from `resolveControlledDid`, and one it does not supply is
+  reported as `notFound`. `createDidWebvhDriver` does not take the option.
+- `FetchLike` responses may optionally carry `headers`, `body`, `redirected`,
+  and `url`. Each member is feature-tested, so plain-object headers or a Node
+  stream body fall back to `text()`.
 
 ### Changed
 
+- `fetchWitnessProofs(did, fetch?, { timeoutMs?, maxBytes? })` and the DID
+  log fetch are bounded. Each has a 10 second deadline covering the request
+  and body read, a 5 MiB body limit, and refuses redirects.
+  The bounds apply to a custom `fetch` too, which now receives
+  `redirect: 'error'` and an abort `signal` in `init`. A response reporting
+  `redirected: true`, or a `url` other than the one requested, is refused,
+  and the body reader is cancelled at the deadline. Tests that assert the
+  exact arguments of a custom `fetch` see a second `init` argument for both
+  requests.
+- BREAKING: `mapErrorToCode` no longer inspects error messages. A
+  `DIDResolutionError` from `@interop/data-integrity-core` keeps its `code`;
+  any other error is `invalidDid`. The log and witness fetches throw
+  `DIDResolutionError`: `notFound` for a 404 or empty log, or a log not
+  supplied offline; `internalError` for another HTTP status, a timeout, an
+  oversized body, a redirect, or an error thrown by `fetch` (kept as
+  `cause`). An error thrown by `resolveControlledDid` is `internalError`.
+  Text taken from a log can no longer make it map to `notFound` or
+  `internalError`.
+- `did-witness.json` is located by replacing only the trailing file name of
+  the log URL. A host or path segment containing `did.jsonl` is left intact.
+- BREAKING: `deactivateDID` writes `updateKeys: []` to the deactivation
+  entry unless `updateKeys` is supplied, and throws while pre-rotation is
+  active (call `updateDID` with `nextKeyHashes: []` first). It no longer
+  signs with pre-committed keys. (Upstream 86770dd.)
+- BREAKING: resolution rejects a log entry whose `parameters` is not a JSON
+  object or holds a key outside `scid`, `method`, `updateKeys`,
+  `nextKeyHashes`, `portable`, `witness`, `watchers`, `ttl`, `deactivated`.
+  This replaces the legacy `witnesses`/`witnessThreshold` rejection.
+  (Upstream #221, 76aaf28; only the parameter check was ported.)
+- BREAKING: resolution rejects a parameter whose value has the wrong JSON
+  type, for example a string `watchers`, a non-boolean `portable` or
+  `deactivated`, or a `ttl` that is not an integer from 0 to 2^31 - 1. A
+  `null` value is still accepted.
+- BREAKING: a witness `threshold` must be a JSON integer. A string or
+  fraction, in a log or in `createDID`/`updateDID` input, throws
+  `Witness threshold must be an integer`, including when the witness list is
+  empty or absent. A string is no longer coerced. (Upstream e6eafc4.)
+- BREAKING: only `{}` (or `null`) disables witnessing. Any other witness
+  parameter needs a non-empty `witnesses` array and a `threshold`, and
+  resolution rejects it otherwise. `{"threshold": 0, "witnesses": []}`,
+  `{"threshold": 3}`, and `{"foo": 1}` were treated as no witnesses and now
+  fail. `createDID` and `updateDID` write `{}`
+  for witness input with no witnesses; `createDID` previously wrote it
+  verbatim.
+- BREAKING: in the `resolveDID` / `toResolutionResult` result,
+  `didDocumentMetadata.ttl` and `didDocumentMetadata.witness.threshold` are
+  strings. Log entries, `DIDResolutionMeta`, and `DEFAULT_TTL_SECONDS` keep
+  numbers. (Upstream e6eafc4 for `threshold`.)
+- Removed the `examples/routes/` fixture log. It used the legacy
+  `witnesses`/`witnessThreshold` parameters and did not resolve.
 - `parseVerificationMethodUrl` is built on `parseDidUrl`: a DID URL path
   throws, and an empty fragment is treated as none.
 

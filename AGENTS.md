@@ -101,7 +101,15 @@ npm run lint
   `generateParallelDidWeb`, placeholder replacement.
 - **[src/utils.ts](src/utils.ts)** -- Identifier parsing (
   `parseDidWebvhIdentifier`, `parseCanonicalAddress`), resolution URL
-  derivation (`getBaseUrl`, `getFileUrl`), log I/O, and fetching.
+  derivation (`getBaseUrl`, `getFileUrl`), log I/O, and fetching. `loadDIDLog`
+  and `loadWitnessProofs` are the two places the library reaches the network;
+  with the `network: 'none'` option set, neither makes a request. Both
+  fetches go through `fetchBounded` in
+  [src/utils/bounded-fetch.ts](src/utils/bounded-fetch.ts) (deadline, body
+  size limit, redirects refused, 404 returned as `undefined` and any other
+  non-ok status thrown). Retrieval failures are thrown as
+  `DIDResolutionError` with a `notFound` or `internalError` code, and
+  `mapErrorToCode` reads that code and does not inspect messages.
 - **[src/interfaces.ts](src/interfaces.ts)** -- All TypeScript interfaces (
   `Signer`, `Verifier`, `DIDDoc`, `DIDLog`, `DIDLogEntry`, etc.).
 - **[src/constants.ts](src/constants.ts)** -- `METHOD` constant, `PLACEHOLDER`
@@ -303,8 +311,8 @@ library: `resolveDID` always resolves over HTTPS and returns no `controlled`
 field, `fetchLogFromIdentifier` has no `controlled` parameter, and
 `getActiveDIDs` does not exist. The equivalent logic lives in
 `resolveDIDLocalFirst` / `readLocalDIDLog`
-in [examples/express-resolver.ts](examples/express-resolver.ts), and the fixture
-data moved from `src/routes/` to `examples/routes/`.
+in [examples/express-resolver.ts](examples/express-resolver.ts). It reads logs
+from an `examples/routes/` directory, which ships no fixture data.
 
 **When porting:** upstream changes to `getActiveDIDs`, the `controlled` branch
 of `fetchLogFromIdentifier`, the `controlled` result field, or `src/routes/` map
