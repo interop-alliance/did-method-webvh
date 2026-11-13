@@ -184,8 +184,9 @@ export async function fetchLogFromIdentifier(
  * Whether `network` allows fetching the given file. `'none'` refuses both
  * files and `'log-only'` refuses the witness proofs file.
  */
-export const networkPermits = (network: ResolutionOptions['network'], file: 'log' | 'witness'): boolean =>
-  network !== 'none' && (file === 'log' || network !== 'log-only');
+export function networkPermits(network: ResolutionOptions['network'], file: 'log' | 'witness'): boolean {
+  return network !== 'none' && (file === 'log' || network !== 'log-only');
+}
 
 /**
  * Loads a DID's log: the `resolveControlledDid` callback is consulted first,

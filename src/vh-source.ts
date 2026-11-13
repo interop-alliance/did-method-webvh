@@ -25,10 +25,13 @@ export interface SourceReference {
   url: string;
 }
 
-const isIpHost = (hostname: string): boolean => hostname.startsWith('[') || IPV4_PATTERN.test(hostname);
+function isIpHost(hostname: string): boolean {
+  return hostname.startsWith('[') || IPV4_PATTERN.test(hostname);
+}
 
-const isLoopbackHost = (hostname: string): boolean =>
-  hostname === 'localhost' || hostname === '[::1]' || LOOPBACK_IPV4_PATTERN.test(hostname);
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '[::1]' || LOOPBACK_IPV4_PATTERN.test(hostname);
+}
 
 /**
  * Refuses text that URL parsing would rewrite before the path is read. A URL
@@ -37,11 +40,11 @@ const isLoopbackHost = (hostname: string): boolean =>
  * written, so the written and the parsed form have to name the same path.
  * Throws a plain `Error`; the caller assigns the code.
  */
-const assertParsesAsWritten = (value: string): void => {
+function assertParsesAsWritten(value: string): void {
   if (hasControlCharacter(value) || value.includes('\\') || value !== value.trim()) {
     throw new Error('must not contain a control character, a backslash, or whitespace at either end');
   }
-};
+}
 
 /**
  * Checks the path segments of a reference as written, before URL parsing
@@ -49,7 +52,7 @@ const assertParsesAsWritten = (value: string): void => {
  * ends with whitespace, is refused too. Throws a plain `Error`; the caller
  * assigns the code.
  */
-const assertSafePathSegments = (segments: string[], strict: boolean): void => {
+function assertSafePathSegments(segments: string[], strict: boolean): void {
   if (strict) {
     validateMethodSpecificPathSegments(segments, 'path');
     return;
@@ -65,7 +68,7 @@ const assertSafePathSegments = (segments: string[], strict: boolean): void => {
       throw new Error(`has a path segment that is not allowed: '${segment}'`);
     }
   }
-};
+}
 
 /**
  * Validates an `https` or `http` web location and returns the URL to
@@ -77,10 +80,10 @@ const assertSafePathSegments = (segments: string[], strict: boolean): void => {
  * @param options.strictSegments {boolean} Whether a segment that is empty,
  *   or begins or ends with whitespace, is refused.
  */
-const parseWebLocation = (
+function parseWebLocation(
   value: string,
   { requirePath, allowQuery, strictSegments }: { requirePath: boolean; allowQuery: boolean; strictSegments: boolean }
-): URL => {
+): URL {
   assertParsesAsWritten(value);
   if (value.includes('#')) {
     throw new Error('must not have a fragment');
@@ -117,7 +120,7 @@ const parseWebLocation = (
     throw new Error('may use http only with a loopback host');
   }
   return url;
-};
+}
 
 /**
  * Validates a `srcLog` or `srcWitness` value.
@@ -185,7 +188,7 @@ export function parseSourceReference(value: unknown, name: string, local: boolea
   return { kind: 'other', url: value };
 }
 
-const readLocalFile = async (url: string): Promise<string | undefined> => {
+async function readLocalFile(url: string): Promise<string | undefined> {
   let fs: typeof import('node:fs/promises');
   let fileURLToPath: typeof import('node:url')['fileURLToPath'];
   try {
@@ -219,7 +222,7 @@ const readLocalFile = async (url: string): Promise<string | undefined> => {
   } catch {
     return undefined;
   }
-};
+}
 
 /**
  * Retrieves a validated reference. A web location goes through

@@ -110,18 +110,21 @@ export interface VhResolutionOptions {
  * Renders a thrown failure as a result. A `DIDResolutionError` carries its
  * own code; anything else is a verification failure, `invalidDid`.
  */
-const thrownToResult = (error: unknown): IDIDResolutionResult =>
-  toErrorResult(mapErrorToVhCode(error), error instanceof Error ? error.message : String(error));
+function thrownToResult(error: unknown): IDIDResolutionResult {
+  return toErrorResult(mapErrorToVhCode(error), error instanceof Error ? error.message : String(error));
+}
 
-const isPositiveInteger = (value: unknown): boolean => Number.isSafeInteger(value) && (value as number) >= 1;
+function isPositiveInteger(value: unknown): boolean {
+  return Number.isSafeInteger(value) && (value as number) >= 1;
+}
 
-const isHttpsUrl = (value: unknown): boolean => {
+function isHttpsUrl(value: unknown): boolean {
   try {
     return typeof value === 'string' && new URL(value).protocol === 'https:';
   } catch {
     return false;
   }
-};
+}
 
 /**
  * Checks the shape and combination of the resolution options. Returns the
@@ -129,7 +132,7 @@ const isHttpsUrl = (value: unknown): boolean => {
  * `invalidOptions`; a well-formed copy-comparison option is
  * `featureNotSupported`, since copy comparison is not implemented.
  */
-const validateOptions = (options: VhResolutionOptions): IDIDResolutionResult | null => {
+function validateOptions(options: VhResolutionOptions): IDIDResolutionResult | null {
   const invalid = (detail: string) => toErrorResult('invalidOptions', detail);
   const { didLog, didWitness, srcLog, srcWitness, versionId, versionTime, versionNumber } = options;
 
@@ -180,23 +183,26 @@ const validateOptions = (options: VhResolutionOptions): IDIDResolutionResult | n
     );
   }
   return null;
-};
+}
 
-const decodeSrc = (raw: string): string => {
+function decodeSrc(raw: string): string {
   try {
     return decodeURIComponent(raw);
   } catch {
     throw new Error('The src parameter has a malformed percent-encoding.');
   }
-};
+}
 
-const notFound = (message: string): DIDResolutionError => new DIDResolutionError(message, { code: 'notFound' });
+function notFound(message: string): DIDResolutionError {
+  return new DIDResolutionError(message, { code: 'notFound' });
+}
 
 /** Whether `network` refuses the retrieval of `reference`. A local file is not a network request. */
-const networkRefuses = (reference: SourceReference, network: VhResolutionOptions['network'], file: 'log' | 'witness') =>
-  reference.kind === 'web' && !networkPermits(network, file);
+function networkRefuses(reference: SourceReference, network: VhResolutionOptions['network'], file: 'log' | 'witness') {
+  return reference.kind === 'web' && !networkPermits(network, file);
+}
 
-const loadLog = async (options: VhResolutionOptions, reference: SourceReference | undefined): Promise<DIDLog> => {
+async function loadLog(options: VhResolutionOptions, reference: SourceReference | undefined): Promise<DIDLog> {
   if (Array.isArray(options.didLog)) {
     return options.didLog;
   }
@@ -215,12 +221,12 @@ const loadLog = async (options: VhResolutionOptions, reference: SourceReference 
   } catch {
     throw new Error('The DID log is not valid JSON Lines');
   }
-};
+}
 
-const loadWitnessFile = async (
+async function loadWitnessFile(
   options: VhResolutionOptions,
   reference: SourceReference | undefined
-): Promise<WitnessProofFileEntry[]> => {
+): Promise<WitnessProofFileEntry[]> {
   if (options.didWitness) {
     return options.didWitness;
   }
@@ -238,7 +244,7 @@ const loadWitnessFile = async (
     return [];
   }
   return parseWitnessProofFile(text, reference.url);
-};
+}
 
 /**
  * Resolves a did:vh DID from a log the caller supplies.
@@ -272,7 +278,7 @@ const loadWitnessFile = async (
  * @param options {VhResolutionOptions} The log source and resolver settings.
  * @returns {Promise<IDIDResolutionResult>} The resolution result envelope.
  */
-export const resolveDID = async (did: string, options: VhResolutionOptions): Promise<IDIDResolutionResult> => {
+export async function resolveDID(did: string, options: VhResolutionOptions): Promise<IDIDResolutionResult> {
   let scid: string;
   try {
     scid = parseDidVhIdentifier(did, 'did');
@@ -347,7 +353,7 @@ export const resolveDID = async (did: string, options: VhResolutionOptions): Pro
   } catch (error) {
     return thrownToResult(error);
   }
-};
+}
 
 /**
  * Dereferences a did:vh DID URL to the resolution result of its DID.
@@ -369,7 +375,7 @@ export const resolveDID = async (did: string, options: VhResolutionOptions): Pro
  * @param [options] {VhResolutionOptions} Resolver settings, as for {@link resolveDID}.
  * @returns {Promise<IDIDResolutionResult>} The resolution result envelope.
  */
-export const dereference = async (didUrl: string, options: VhResolutionOptions = {}): Promise<IDIDResolutionResult> => {
+export async function dereference(didUrl: string, options: VhResolutionOptions = {}): Promise<IDIDResolutionResult> {
   const invalidUrl = (detail: string) => toErrorResult('invalidDidUrl', detail);
   if (typeof didUrl !== 'string') {
     return invalidUrl('The DID URL must be a string.');
@@ -425,7 +431,7 @@ export const dereference = async (didUrl: string, options: VhResolutionOptions =
     }
   }
   return resolveDID(did, resolutionOptions);
-};
+}
 
 /**
  * Creates a new did:vh DID and its first log entry. The DID is
@@ -439,15 +445,15 @@ export const dereference = async (didUrl: string, options: VhResolutionOptions =
  * @param options DID creation options.
  * @returns The created DID, its document, metadata and log.
  */
-export const createDID = async (
+export async function createDID(
   options: Omit<CreateDIDInterface, (typeof v1.LOCATION_OPTIONS)[number]>
-): Promise<CreateDIDResult> => {
+): Promise<CreateDIDResult> {
   return v1.createDIDForController(
     { ...options, verifier: options.verifier ?? defaultWebvhLogVerifier },
     `did:vh:${PLACEHOLDER}`,
     VH_PROFILE
   );
-};
+}
 
 /**
  * Appends an update entry to a did:vh log. The options are those of the
@@ -464,11 +470,11 @@ export const createDID = async (
  * @param options DID update options.
  * @returns The DID, its updated document, metadata and log.
  */
-export const updateDID = async (
+export async function updateDID(
   options: Omit<UpdateDIDInterface, (typeof v1.LOCATION_OPTIONS)[number]>
-): Promise<UpdateDIDResult> => {
+): Promise<UpdateDIDResult> {
   return v1.updateDID({ ...options, verifier: options.verifier ?? defaultWebvhLogVerifier }, VH_PROFILE);
-};
+}
 
 /**
  * Deactivates a did:vh DID by appending an entry that sets
@@ -479,9 +485,9 @@ export const updateDID = async (
  * @param options DID deactivation options.
  * @returns The deactivated DID result and updated log.
  */
-export const deactivateDID = async (options: DeactivateDIDInterface) => {
+export async function deactivateDID(options: DeactivateDIDInterface) {
   return v1.deactivateDID({ ...options, verifier: options.verifier ?? defaultWebvhLogVerifier }, VH_PROFILE);
-};
+}
 
 /**
  * Resolves a did:vh log held in memory to this package's core result shape
@@ -494,10 +500,10 @@ export const deactivateDID = async (options: DeactivateDIDInterface) => {
  * @param [options] Resolver settings.
  * @returns The resolved DID, document and metadata.
  */
-export const resolveDIDFromLog = async (log: DIDLog, options: ResolutionOptions = {}) => {
+export async function resolveDIDFromLog(log: DIDLog, options: ResolutionOptions = {}) {
   return v1.resolveDIDFromLog(log, {
     ...options,
     verifier: options.verifier ?? defaultWebvhLogVerifier,
     profile: VH_PROFILE,
   });
-};
+}

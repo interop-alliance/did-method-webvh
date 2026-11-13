@@ -687,7 +687,7 @@ export const getBaseUrl = (id: string) => buildBaseUrl(parseDidWebvhAddress(id, 
  * The URL of a file published in a DID's directory: beside the base URL for
  * a DID with a path, or under `/.well-known/` otherwise.
  */
-const getDidDirectoryFileUrl = (id: string, fileName: string) => {
+function getDidDirectoryFileUrl(id: string, fileName: string) {
   const parsed = parseDidWebvhAddress(id, 'did:webvh identifier');
   const baseUrl = buildBaseUrl(parsed);
 
@@ -696,7 +696,7 @@ const getDidDirectoryFileUrl = (id: string, fileName: string) => {
   }
 
   return `${baseUrl}/.well-known/${fileName}`;
-};
+}
 
 /** The URL of a DID's log, `did.jsonl`. */
 export const getFileUrl = (id: string) => getDidDirectoryFileUrl(id, 'did.jsonl');
@@ -705,4 +705,6 @@ export const getFileUrl = (id: string) => getDidDirectoryFileUrl(id, 'did.jsonl'
  * The URL of a DID's `did-witness.json`. The specification places it beside
  * `did.jsonl`, replacing only the trailing file name of the log URL.
  */
-export const getWitnessFileUrl = (id: string) => getDidDirectoryFileUrl(id, 'did-witness.json');
+export function getWitnessFileUrl(id: string) {
+  return getDidDirectoryFileUrl(id, 'did-witness.json');
+}

@@ -113,12 +113,12 @@ export function toWitnessParameter(witness: WitnessParameter | null): WitnessPar
   return normalized;
 }
 
-const assertIntegerThreshold = (threshold: unknown): void => {
+function assertIntegerThreshold(threshold: unknown): void {
   // did:webvh v1.0 requires a JSON integer; strings and fractions are rejected rather than coerced.
   if (threshold !== undefined && !Number.isInteger(threshold)) {
     throw new Error(`Witness threshold must be an integer: ${JSON.stringify(threshold)}`);
   }
-};
+}
 
 /**
  * Validates a witness parameter. `{}` (and an absent or `null` parameter)

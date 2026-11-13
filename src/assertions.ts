@@ -16,11 +16,13 @@ import {
 } from './utils/multiformats.js';
 import { parseDidKeyVerificationMethod } from './utils.js';
 
-const isJsonObject = (value: unknown): value is Record<string, unknown> => {
+function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-};
+}
 
-const isString = (value: unknown): boolean => typeof value === 'string';
+function isString(value: unknown): boolean {
+  return typeof value === 'string';
+}
 
 const STRING = { expected: 'a string', isValid: isString };
 const BOOLEAN = { expected: 'a boolean', isValid: (value: unknown): boolean => typeof value === 'boolean' };
@@ -71,11 +73,11 @@ const PARAMETER_RULES: Record<
  *   method whose DID names a location), and whether a `null` value is
  *   accepted. Defaults to did:webvh.
  */
-export const assertDefinedParameters = (
+export function assertDefinedParameters(
   parameters: unknown,
   version: string,
   profile: Pick<MethodProfile, 'method' | 'hasLocation' | 'allowNullParameters'> = WEBVH_PROFILE
-): void => {
+): void {
   const { method, hasLocation, allowNullParameters: allowNull } = profile;
   if (!isJsonObject(parameters)) {
     throw new Error(`version '${version}' parameters must be a JSON object`);
@@ -89,7 +91,7 @@ export const assertDefinedParameters = (
       throw new Error(`version '${version}' parameter '${key}' must be ${rule.expected}`);
     }
   }
-};
+}
 
 const isKeyAuthorized = (verificationMethod: string, updateKeys: string[]): boolean => {
   return updateKeys.includes(parseDidKeyVerificationMethod(verificationMethod).keyMultibase);
