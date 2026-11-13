@@ -52,11 +52,11 @@ export const createDID = async (options: CreateDIDInterface): Promise<CreateDIDR
 /** The options that exist only for a method whose DID names a location. */
 export const LOCATION_OPTIONS = ['address', 'paths', 'portable', 'alsoKnownAsWeb'] as const;
 
-const assertLocationOptionsAllowed = (
+function assertLocationOptionsAllowed(
   options: CreateDIDInterface | UpdateDIDInterface,
   profile: MethodProfile,
   operation: string
-): void => {
+): void {
   if (profile.hasLocation) {
     return;
   }
@@ -64,7 +64,7 @@ const assertLocationOptionsAllowed = (
   if (supplied.length > 0) {
     throw new Error(`${operation} does not accept ${supplied.join(', ')}: a ${profile.method} DID names no location`);
   }
-};
+}
 
 /**
  * Creates the first log entry for `controller`, the DID written with the
@@ -72,11 +72,11 @@ const assertLocationOptionsAllowed = (
  * `controller`. The checks every profile shares are made here: the `method`
  * option, the location options, and `updateKeys`, which is normalized.
  */
-export const createDIDForController = async (
+export async function createDIDForController(
   options: CreateDIDInterface,
   controller: string,
   profile: MethodProfile
-): Promise<CreateDIDResult> => {
+): Promise<CreateDIDResult> {
   if (options.method && options.method !== profile.method) {
     throw new Error(`'${options.method}' is not a supported method version.`);
   }
@@ -107,7 +107,7 @@ export const createDIDForController = async (
     log: [entry],
     ...(webDoc ? { webDoc } : {}),
   };
-};
+}
 
 export const resolveDIDFromLog = async (
   log: DIDLog,
@@ -119,12 +119,12 @@ export const resolveDIDFromLog = async (
 };
 
 /** {@link resolveDIDFromLog}, also reporting how much of the log passed verification. */
-export const traverseDIDLog = async (
+export async function traverseDIDLog(
   log: DIDLog,
   options: InternalResolutionOptions = {}
-): Promise<TraversedResolution> => {
+): Promise<TraversedResolution> {
   return traverseV1Log(log, { resolveVM: createResolveVM(options), ...options });
-};
+}
 
 /**
  * Resolves the metadata of the log an update or deactivation extends, unless

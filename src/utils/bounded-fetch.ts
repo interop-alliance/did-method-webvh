@@ -3,21 +3,22 @@ import type { FetchLike } from '../interfaces.js';
 
 type FetchResponse = Awaited<ReturnType<FetchLike>>;
 
-const internalError = (message: string, cause?: unknown): DIDResolutionError =>
-  new DIDResolutionError(message, { code: 'internalError', cause });
+function internalError(message: string, cause?: unknown): DIDResolutionError {
+  return new DIDResolutionError(message, { code: 'internalError', cause });
+}
 
 /**
  * Wraps a thrown value as a retrieval failure. A `DIDResolutionError` is
  * returned unchanged; anything else becomes one with code `internalError`,
  * the original as `cause`, and `prefix` before its message.
  */
-export const toRetrievalError = (error: unknown, prefix = ''): DIDResolutionError => {
+export function toRetrievalError(error: unknown, prefix = ''): DIDResolutionError {
   if (isDIDResolutionError(error)) {
     return error;
   }
   const message = error instanceof Error ? error.message : String(error);
   return internalError(`${prefix}${message}`, error);
-};
+}
 
 /**
  * Default deadline for one request and its body read. A resolution makes at
@@ -34,33 +35,34 @@ export const FETCH_MAX_BYTES = 5 * 1024 * 1024;
  * with a `get` method) is consulted; an adapter with plain-object headers
  * gets no early check, and its body is measured as it is read.
  */
-const declaredContentLength = (response: FetchResponse): number => {
+function declaredContentLength(response: FetchResponse): number {
   const headers = response.headers as { get?: (name: string) => unknown } | null | undefined;
   if (typeof headers?.get !== 'function') {
     return Number.NaN;
   }
   return Number(headers.get('content-length') ?? Number.NaN);
-};
+}
 
 /**
  * The response body, viewed as a WHATWG stream whose methods may be missing.
  * `FetchLike` types `body` as `unknown`, so each method is tested before use.
  */
-const webBody = (response: FetchResponse) =>
-  response.body as Partial<Pick<ReadableStream<Uint8Array>, 'getReader' | 'cancel'>> | null | undefined;
+function webBody(response: FetchResponse) {
+  return response.body as Partial<Pick<ReadableStream<Uint8Array>, 'getReader' | 'cancel'>> | null | undefined;
+}
 
 /**
  * Returns a reader for a WHATWG `ReadableStream` body, or `undefined` when the
  * body is absent or is some other kind of stream (a Node `Readable` from
  * node-fetch, for example).
  */
-const streamReader = (response: FetchResponse): ReadableStreamDefaultReader<Uint8Array> | undefined => {
+function streamReader(response: FetchResponse): ReadableStreamDefaultReader<Uint8Array> | undefined {
   const body = webBody(response);
   return typeof body?.getReader === 'function' ? body.getReader() : undefined;
-};
+}
 
 /** Cancels a WHATWG stream body, when the response has one, ignoring failures. */
-const cancelBody = async (response: FetchResponse): Promise<void> => {
+async function cancelBody(response: FetchResponse): Promise<void> {
   const body = webBody(response);
   if (typeof body?.cancel !== 'function') {
     return;
@@ -70,7 +72,7 @@ const cancelBody = async (response: FetchResponse): Promise<void> => {
   } catch {
     // The body is being discarded, so a failed cancel changes nothing.
   }
-};
+}
 
 /**
  * Whether the response reports that the request was redirected. A custom
@@ -78,7 +80,7 @@ const cancelBody = async (response: FetchResponse): Promise<void> => {
  * arrives. `response.url` is compared only when it is a non-empty, parseable
  * URL, since a synthesized response carries an empty one.
  */
-const wasRedirected = (response: FetchResponse, url: string): boolean => {
+function wasRedirected(response: FetchResponse, url: string): boolean {
   if (response.redirected === true) {
     return true;
   }
@@ -90,7 +92,7 @@ const wasRedirected = (response: FetchResponse, url: string): boolean => {
   } catch {
     return false;
   }
-};
+}
 
 /**
  * Reads a response body as text, stopping once it passes `maxBytes`. A
@@ -100,12 +102,12 @@ const wasRedirected = (response: FetchResponse, url: string): boolean => {
  * response with no WHATWG stream (an adapter object, a Node stream, React
  * Native) is read with `text()` and measured afterwards.
  */
-const readBoundedText = async (
+async function readBoundedText(
   response: FetchResponse,
   url: string,
   maxBytes: number,
   signal: AbortSignal
-): Promise<string> => {
+): Promise<string> {
   const tooLarge = () => internalError(`Response body at ${url} exceeds the ${maxBytes} byte limit`);
 
   if (declaredContentLength(response) > maxBytes) {
@@ -153,7 +155,7 @@ const readBoundedText = async (
   } finally {
     signal.removeEventListener('abort', onAbort);
   }
-};
+}
 
 /**
  * Makes one GET request with a deadline, a body size limit, and redirects

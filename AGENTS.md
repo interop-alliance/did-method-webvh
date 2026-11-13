@@ -175,6 +175,15 @@ shows how to extend `AbstractCrypto`. The examples are their own private npm
 package consuming `@interop/did-method-webvh` via a `file:..` dependency, so they import the *
 *built** `dist/` output -- rebuild the library before exercising them.
 
+## Code Style
+
+### Functions
+
+- Prefer named `async function` declarations over arrow functions at module
+  level
+- Export functions and classes inline (`export async function ...`,
+  `export class ...`)
+
 ## Fork Maintenance: Porting Upstream PRs
 
 This repository is maintained as a fork

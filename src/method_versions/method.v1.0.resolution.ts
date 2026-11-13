@@ -124,7 +124,9 @@ export interface TraversedResolution {
   invalidEntryError?: unknown;
 }
 
-const profileOf = (options: InternalResolutionOptions): MethodProfile => options.profile ?? WEBVH_PROFILE;
+function profileOf(options: InternalResolutionOptions): MethodProfile {
+  return options.profile ?? WEBVH_PROFILE;
+}
 
 export const resolveV1Log = async (
   log: DIDLog,
@@ -135,10 +137,10 @@ export const resolveV1Log = async (
 };
 
 /** Resolves `log` and also reports how much of it passed verification. */
-export const traverseV1Log = async (
+export async function traverseV1Log(
   log: DIDLog,
   options: InternalResolutionOptions = {}
-): Promise<TraversedResolution> => {
+): Promise<TraversedResolution> {
   // Stage 1: initialize resolution input and context.
   const selectorError = validateResolutionSelectors(options);
   if (selectorError) {
@@ -261,7 +263,7 @@ export const traverseV1Log = async (
     doc: structuredClone(resolvedSnapshot.doc),
     meta: resolvedSnapshot.meta,
   };
-};
+}
 
 const markResolvedSnapshotDeactivated = ({
   resolvedSnapshot,
