@@ -50,16 +50,22 @@ export interface Verifier {
  * `Response`. Every request passes `redirect: 'error'` and an abort `signal`
  * in `init`. When `headers` (with a `get` method) and a WHATWG stream `body`
  * are present, they are used to stop reading an oversized body early;
- * otherwise the body is read with `text()` and measured afterwards. A
- * response with `redirected: true`, or with a non-empty `url` other than the
- * one requested, is refused as a redirect. The global `fetch` still satisfies
- * this type.
+ * otherwise the body is read with `text()` and measured afterwards. Both are
+ * typed `unknown` and feature-tested, so plain-object headers and a Node
+ * stream body are accepted. A response with `redirected: true`, or with a
+ * non-empty `url` other than the one requested, is refused as a redirect.
+ * The global `fetch` still satisfies this type.
  */
 export type FetchLike = (
   input: string,
   init?: RequestInit
 ) => Promise<
-  Pick<Response, 'ok' | 'status' | 'text' | 'json'> & Partial<Pick<Response, 'headers' | 'body' | 'redirected' | 'url'>>
+  Pick<Response, 'ok' | 'status' | 'text' | 'json'> & {
+    headers?: unknown;
+    body?: unknown;
+    redirected?: boolean;
+    url?: string;
+  }
 >;
 
 /**

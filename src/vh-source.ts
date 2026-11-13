@@ -198,14 +198,18 @@ const readLocalFile = async (url: string): Promise<string | undefined> => {
     });
   }
   const path = fileURLToPath(url);
-  let size: number;
+  let info: Awaited<ReturnType<typeof fs.stat>>;
   try {
-    ({ size } = await fs.stat(path));
+    info = await fs.stat(path);
   } catch {
     return undefined;
   }
+  // A device or FIFO reports no size and may not reach end of file.
+  if (!info.isFile()) {
+    return undefined;
+  }
   // The limit on a fetched body applies to a local file too.
-  if (size > FETCH_MAX_BYTES) {
+  if (info.size > FETCH_MAX_BYTES) {
     throw new DIDResolutionError(`The local file exceeds the ${FETCH_MAX_BYTES} byte limit`, {
       code: 'internalError',
     });
@@ -226,7 +230,8 @@ const readLocalFile = async (url: string): Promise<string | undefined> => {
  * @param reference {SourceReference} The reference to retrieve.
  * @param [fetchFn] {FetchLike} Fetch override. Defaults to the global `fetch`.
  * @returns {Promise<string | undefined>} The content, or `undefined` when the
- *   file does not exist (a 404, or a local file that cannot be read).
+ *   file does not exist (a 404, or a local path that cannot be read or is
+ *   not a regular file).
  */
 export async function retrieveSource(
   reference: SourceReference,

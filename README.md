@@ -274,8 +274,9 @@ Retrieval failures are thrown as `DIDResolutionError` from
 `@interop/data-integrity-core` and keep their `code` in the resolution
 result. A 404 or empty `did.jsonl` is `notFound`. Any other HTTP status, a
 timeout, an oversized body, a redirect, and an error thrown by `fetch` are
-`internalError`. A 404 for `did-witness.json` means there are no witness
-proofs. Every other failure is `invalidDid`.
+`internalError`, for `did-witness.json` as well as `did.jsonl`. A 404 for
+`did-witness.json` means there are no witness proofs. A failure that is not
+a retrieval failure is `invalidDid`.
 
 `signWitnessProofEntry` requires `witnessProofs` and does not fetch the
 witness file.
