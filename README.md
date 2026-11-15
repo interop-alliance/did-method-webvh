@@ -413,6 +413,43 @@ applied. `deriveSrcReferences(src)` is exported for the derivation alone.
 `parseDidVhIdentifier(did, context)` validates a `did:vh` DID and returns its
 SCID.
 
+### did-io driver
+
+`createDidVhDriver(options)` builds a did-io-compatible driver for a document
+loader's resolver. Import it from the `/vh/driver` subpath.
+
+```ts
+import { createDidVhDriver } from '@interop/did-method-webvh/vh/driver';
+
+const driver = createDidVhDriver({
+  // Return the DID's log (JSON Lines text or parsed entries), or undefined.
+  // `didWitness` is the parsed did-witness.json, for a DID that needs one.
+  loadLog: async ({ did }) => {
+    const stored = await myLogStore.get(did);
+    return stored && { didLog: stored.didLog, didWitness: stored.didWitness };
+  },
+});
+didResolver.use(driver);
+```
+
+A `did:vh` DID names no location, so the driver needs a log source. It calls
+`loadLog` first. The callback only receives a valid `did:vh:<scid>`. It
+returns `{ didLog, didWitness }`, where `didWitness` is optional. When it returns
+`undefined`, `null` or an empty log, the log is retrieved from the `src`
+parameter of the DID URL. With no log from `loadLog` and no `src`, resolution
+fails with `notFound`. A rejection from `loadLog` is reported as
+`internalError`.
+
+`get({ did })` returns the DID document. `get({ url })` with a fragment
+returns the verification method or service the fragment names. Failures throw
+a `DIDResolutionError` with `problemDetails`. A fragment naming no node throws
+a `VerificationMethodError` with code `notFound`. `get()` also throws
+`invalidDid` when entries at the end of the log fail verification, where
+`resolveDID` would return the last valid document with a warning. A URL whose
+version parameter picks a valid entry returns that version. The driver's
+`resolveDID({ did })` returns the result envelope and does not throw. The
+other options are `verifier`, `fetch` and `network`.
+
 ## API Reference
 
 ### Core Functions

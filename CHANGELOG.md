@@ -1,5 +1,18 @@
 # Changelog
 
+## 5.20.0 - TBD
+
+### Added
+
+- `createDidVhDriver({ loadLog, verifier, fetch, network })`, a
+  did-io-compatible did:vh driver, exported from the new `/vh/driver`
+  subpath. `loadLog({ did })` returns `{ didLog, didWitness }` and is asked first.
+  When it has no log, the log comes from the `src` DID URL parameter.
+  `get()` dereferences verification-method and service fragments. With no
+  version parameter it throws `invalidDid` when entries at the end of the
+  log fail verification. `resolveDID()` returns the result envelope and does
+  not throw.
+
 ## 5.19.0 - 2026-11-13
 
 ### Added

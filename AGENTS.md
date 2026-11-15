@@ -123,6 +123,15 @@ npm run lint
   non-ok status thrown). Retrieval failures are thrown as
   `DIDResolutionError` with a `notFound` or `internalError` code, and
   `mapErrorToCode` reads that code and does not inspect messages.
+- **[src/vh-driver.ts](src/vh-driver.ts)** -- The did:vh did-io driver (the
+  `/vh/driver` subpath export), `createDidVhDriver`. It takes the log (and
+  witness proofs) from the caller's `loadLog` callback, and from the `src`
+  DID URL parameter when the callback has none.
+  **[src/vh-did-url.ts](src/vh-did-url.ts)** holds `parseVhDidUrl` and
+  `applyVhDidUrl`, the DID URL handling it shares with `dereference`.
+  **[src/driver-shared.ts](src/driver-shared.ts)** holds the helpers shared with the
+  did:webvh driver: `requireResolvedDocument`,
+  `requireFragmentNode` and `narrowDriverOptions`.
 - **[src/vh-source.ts](src/vh-source.ts)** -- did:vh log sources:
   `parseSourceReference` validates a `srcLog` / `srcWitness` URL (`https`;
   loopback `http` and `file:` only for a resolver marked `local`),

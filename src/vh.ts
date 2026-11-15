@@ -28,9 +28,9 @@ import type {
 } from './interfaces.js';
 import * as v1 from './method_versions/method.v1.0.js';
 import { VH_PROFILE } from './method_versions/profile.js';
-import { parseDidUrl } from './path-handler.js';
 import {
-  mapErrorToVhCode,
+  INVALID_ENTRIES_WARNING,
+  thrownToVhResult,
   toErrorResult,
   toResolutionResult,
   validateSingleVersionSelector,
@@ -38,25 +38,14 @@ import {
 import { parseDidVhIdentifier } from './utils/did-vh-identifier.js';
 import { logToJsonlString, networkPermits, parseWitnessProofFile, readLogFromString } from './utils.js';
 import { defaultWebvhLogVerifier } from './verifier.js';
-import { deriveSrcReferences, parseSourceReference, retrieveSource, type SourceReference } from './vh-source.js';
+import { applyVhDidUrl, parseVhDidUrl } from './vh-did-url.js';
+import { parseSourceReference, retrieveSource, type SourceReference } from './vh-source.js';
 
 export { VH_METHOD_PROTOCOL_V1_0 } from './constants.js';
 /** Codes a did:vh resolution reports on `didResolutionMetadata.error`. */
 export type { ResolutionErrorCode as VhResolutionError } from './resolver-result.js';
 export { parseDidVhIdentifier } from './utils/did-vh-identifier.js';
 export { deriveSrcReferences } from './vh-source.js';
-
-/** The resolution options that are never DID URL query parameters. */
-const RESOLUTION_ONLY_OPTIONS = [
-  'didLog',
-  'didWitness',
-  'srcLog',
-  'srcWitness',
-  'checkWatchers',
-  'extraWatchers',
-  'minCopies',
-  'includeDidLog',
-];
 
 /** Options for did:vh {@link resolveDID} and {@link dereference}. */
 export interface VhResolutionOptions {
@@ -104,14 +93,6 @@ export interface VhResolutionOptions {
    * witness proofs file is not. A `file:` reference is not a network request.
    */
   network?: ResolutionOptions['network'];
-}
-
-/**
- * Renders a thrown failure as a result. A `DIDResolutionError` carries its
- * own code; anything else is a verification failure, `invalidDid`.
- */
-function thrownToResult(error: unknown): IDIDResolutionResult {
-  return toErrorResult(mapErrorToVhCode(error), error instanceof Error ? error.message : String(error));
 }
 
 function isPositiveInteger(value: unknown): boolean {
@@ -183,14 +164,6 @@ function validateOptions(options: VhResolutionOptions): IDIDResolutionResult | n
     );
   }
   return null;
-}
-
-function decodeSrc(raw: string): string {
-  try {
-    return decodeURIComponent(raw);
-  } catch {
-    throw new Error('The src parameter has a malformed percent-encoding.');
-  }
 }
 
 function notFound(message: string): DIDResolutionError {
@@ -338,7 +311,7 @@ export async function resolveDID(did: string, options: VhResolutionOptions): Pro
       const reason = invalidEntryError instanceof Error ? invalidEntryError.message : String(invalidEntryError);
       result.didResolutionMetadata.warnings = [
         {
-          code: 'invalid-entries',
+          code: INVALID_ENTRIES_WARNING,
           message: `Entries after version ${validEntryCount} failed verification: ${reason}`,
         },
       ];
@@ -351,7 +324,7 @@ export async function resolveDID(did: string, options: VhResolutionOptions): Pro
     }
     return result;
   } catch (error) {
-    return thrownToResult(error);
+    return thrownToVhResult(error);
   }
 }
 
@@ -376,61 +349,13 @@ export async function resolveDID(did: string, options: VhResolutionOptions): Pro
  * @returns {Promise<IDIDResolutionResult>} The resolution result envelope.
  */
 export async function dereference(didUrl: string, options: VhResolutionOptions = {}): Promise<IDIDResolutionResult> {
-  const invalidUrl = (detail: string) => toErrorResult('invalidDidUrl', detail);
-  if (typeof didUrl !== 'string') {
-    return invalidUrl('The DID URL must be a string.');
-  }
-  const hashIndex = didUrl.indexOf('#');
-  const beforeFragment = hashIndex === -1 ? didUrl : didUrl.slice(0, hashIndex);
-  const queryIndex = beforeFragment.indexOf('?');
-  const query = queryIndex === -1 ? undefined : beforeFragment.slice(queryIndex + 1);
-  const beforeQuery = queryIndex === -1 ? beforeFragment : beforeFragment.slice(0, queryIndex);
-
-  // `src` is taken out of the query here; the shared DID URL parser reads
-  // the version parameters and refuses everything else.
-  const srcValues: string[] = [];
-  const otherPairs: string[] = [];
-  for (const pair of query?.split('&') ?? []) {
-    const name = pair.split('=', 1)[0];
-    if (RESOLUTION_ONLY_OPTIONS.includes(name)) {
-      return invalidUrl(`'${name}' is a resolution option and must not be used as a DID URL query parameter.`);
-    }
-    if (name === 'src') {
-      srcValues.push(pair.slice(name.length + 1));
-    } else {
-      otherPairs.push(pair);
-    }
-  }
-  if (srcValues.length > 1) {
-    return invalidUrl('A DID URL may carry at most one src parameter.');
-  }
-
-  let parsed: ReturnType<typeof parseDidUrl>;
-  let derived: ReturnType<typeof deriveSrcReferences> | undefined;
+  let parsed: ReturnType<typeof parseVhDidUrl>;
   try {
-    const hasQuery = query !== undefined && (otherPairs.length > 0 || srcValues.length === 0);
-    parsed = parseDidUrl(`${beforeQuery}${hasQuery ? `?${otherPairs.join('&')}` : ''}`);
-    if (srcValues.length === 1) {
-      derived = deriveSrcReferences(decodeSrc(srcValues[0]));
-    }
+    parsed = parseVhDidUrl(didUrl);
   } catch (error) {
-    return invalidUrl((error as Error).message);
+    return thrownToVhResult(error);
   }
-  const { did, path, fragment: _fragment, ...selectors } = parsed;
-  if (path !== '') {
-    return toErrorResult('notFound', `did:vh defines no DID URL path handling, so ${didUrl} names no resource.`);
-  }
-
-  const { versionId, versionNumber, versionTime, ...otherOptions } = options;
-  const resolutionOptions: VhResolutionOptions =
-    Object.keys(selectors).length > 0 ? { ...otherOptions, ...selectors } : { ...options };
-  if (derived && resolutionOptions.didLog === undefined && resolutionOptions.srcLog === undefined) {
-    resolutionOptions.srcLog = derived.srcLog;
-    if (resolutionOptions.didWitness === undefined && resolutionOptions.srcWitness === undefined) {
-      resolutionOptions.srcWitness = derived.srcWitness;
-    }
-  }
-  return resolveDID(did, resolutionOptions);
+  return resolveDID(parsed.did, applyVhDidUrl(parsed, options));
 }
 
 /**

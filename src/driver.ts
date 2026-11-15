@@ -16,12 +16,10 @@
  */
 
 import type { IDIDResolutionResult } from '@interop/data-integrity-core';
-import { DIDResolutionError, VerificationMethodError } from '@interop/data-integrity-core';
 import { parseVerificationMethodUrl } from './dereference.js';
-import { hasMatchingId } from './did-document.js';
+import { narrowDriverOptions, requireFragmentNode, requireResolvedDocument } from './driver-shared.js';
 import type { DIDDoc, FetchLike, Verifier } from './interfaces.js';
 import { resolveDID } from './method.js';
-import { toErrorResult } from './resolver-result.js';
 import { defaultWebvhLogVerifier } from './verifier.js';
 
 /**
@@ -30,47 +28,6 @@ import { defaultWebvhLogVerifier } from './verifier.js';
  * default `verifier` to it without importing this did-io driver module).
  */
 export { defaultWebvhLogVerifier };
-
-/** JSON-LD context for `Multikey` verification methods. */
-const MULTIKEY_CONTEXT = 'https://w3id.org/security/multikey/v1';
-
-/**
- * Dereferences a `did#fragment` to its node (verification method or service)
- * within an already-resolved DID document, attaching an appropriate JSON-LD
- * `@context`. Mirrors `@interop/did-web-resolver`'s `getNode` without the
- * dependency.
- *
- * @param doc The resolved DID document.
- * @param id The fully-qualified node id (`did#fragment`).
- * @returns The matched node with an `@context`, or `undefined` if no node has
- *   that id.
- */
-function dereferenceFragment(doc: DIDDoc, id: string): Record<string, unknown> | undefined {
-  const hasId = hasMatchingId(id);
-
-  let match = (doc.verificationMethod ?? []).find(hasId) as Record<string, unknown> | undefined;
-  if (!match) {
-    for (const [key, value] of Object.entries(doc)) {
-      if (key === '@context' || key === 'verificationMethod') {
-        continue;
-      }
-      if (Array.isArray(value)) {
-        match = value.find(hasId) as Record<string, unknown> | undefined;
-      } else if (hasId(value)) {
-        match = value as unknown as Record<string, unknown>;
-      }
-      if (match) {
-        break;
-      }
-    }
-  }
-  if (!match) {
-    return undefined;
-  }
-
-  const context = match.type === 'Multikey' ? MULTIKEY_CONTEXT : doc['@context'];
-  return { '@context': context, ...structuredClone(match) };
-}
 
 /**
  * Builds a did-io-compatible `did:webvh` driver for a document loader's
@@ -120,69 +77,16 @@ export function createDidWebvhDriver({
       // Any DID parameter other than `versionId` is rejected by the parser.
       const { did: didAuthority, versionId, fragment } = parseVerificationMethodUrl(didOrUrl);
 
-      const { didDocument, didResolutionMetadata } = await resolveDID(didAuthority, {
-        verifier,
-        fetch: fetchFn,
-        versionId,
-      });
-      // The envelope's IDIDDocument is structurally stricter than this
-      // package's DIDDoc; narrow back at this single boundary.
-      const doc = didDocument as unknown as DIDDoc | null;
-      // Any resolution error is a failure here, even when the envelope also
-      // carries a document (the resolver preserves a historical snapshot next
-      // to a witness failure when an explicit version selector is given). A
-      // loader consumer asking for "the" document must not receive one whose
-      // resolution the resolver flagged as invalid.
-      if (!doc || didResolutionMetadata.error) {
-        const { error, problemDetails } = didResolutionMetadata;
-        const detail = problemDetails?.detail ?? `Could not resolve "${didAuthority}".`;
-        throw new DIDResolutionError(detail, {
-          code: error ?? 'internalError',
-          problemDetails,
-        });
-      }
-      if (fragment) {
-        // The node is looked up by the document's own id so a portable DID's
-        // earlier versions resolve under the current DID. An absent node has
-        // no kind, so a missing service is reported the same way as a missing
-        // verification method.
-        const id = `${doc.id}#${fragment}`;
-        const node = dereferenceFragment(doc, id);
-        if (!node) {
-          throw new VerificationMethodError(`DID document entity with id "${id}" not found.`, {
-            code: 'notFound',
-            verificationMethod: didOrUrl,
-          });
-        }
-        return node;
-      }
-      return doc;
+      const result = await resolveDID(didAuthority, { verifier, fetch: fetchFn, versionId });
+      const doc = requireResolvedDocument(result, didAuthority);
+      return fragment ? requireFragmentNode(doc, fragment, didOrUrl) : doc;
     },
     async resolveDID({ did, ...options }: { did: string; [key: string]: unknown }): Promise<IDIDResolutionResult> {
-      // The did-io driver contract passes resolution options untyped
-      // (spec-extensible); narrow the version selectors this method supports
-      // and the per-resolution fetch override.
-      const {
-        versionId,
-        versionNumber,
-        versionTime,
-        fetch: perCallFetch,
-      } = options as {
-        versionId?: string;
-        versionNumber?: number;
-        versionTime?: Date | string;
-        fetch?: unknown;
-      };
-      if (perCallFetch !== undefined && typeof perCallFetch !== 'function') {
-        return toErrorResult('invalidOptions', 'Invalid fetch option: expected function.');
+      const { error, fetch: perCallFetch, selectors } = narrowDriverOptions(options);
+      if (error) {
+        return error;
       }
-      return resolveDID(did, {
-        verifier,
-        fetch: (perCallFetch as FetchLike | undefined) ?? fetchFn,
-        versionId,
-        versionNumber,
-        versionTime: typeof versionTime === 'string' ? new Date(versionTime) : versionTime,
-      });
+      return resolveDID(did, { verifier, fetch: perCallFetch ?? fetchFn, ...selectors });
     },
   };
 }

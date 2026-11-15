@@ -200,6 +200,24 @@ export function toErrorResult(code: ResolutionErrorCode, detail: string, problem
 }
 
 /**
+ * The `code` of the did:vh warning reporting that entries at the end of the
+ * log failed verification and the result holds the last valid entry.
+ */
+export const INVALID_ENTRIES_WARNING = 'invalid-entries';
+
+/**
+ * Renders a thrown did:vh failure as a result. A `DIDResolutionError`
+ * carries its own code. Anything else is a verification failure,
+ * `invalidDid`.
+ *
+ * @param error The thrown value.
+ * @returns A resolution result with `didDocument: null`.
+ */
+export function thrownToVhResult(error: unknown): IDIDResolutionResult {
+  return toErrorResult(mapErrorToVhCode(error), error instanceof Error ? error.message : String(error));
+}
+
+/**
  * Maps this package's core resolution result (`{ did, doc, meta }`, with a
  * flat `meta` mixing document metadata and error state) to the DID Resolution
  * spec's result envelope: document metadata and resolution-process metadata
