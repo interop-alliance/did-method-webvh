@@ -113,7 +113,7 @@ npm run lint
   and queries: `createDIDDoc`, `findVerificationMethod`,
   `generateParallelDidWeb`, placeholder replacement.
 - **[src/utils.ts](src/utils.ts)** -- Identifier parsing (
-  `parseDidWebvhIdentifier`, `parseCanonicalAddress`), resolution URL
+  `parseDidWebvhIdentifier`, `parseDidWebvh`, `parseCanonicalAddress`), resolution URL
   derivation (`getBaseUrl`, `getFileUrl`), log I/O, and fetching. `loadDIDLog`
   and `loadWitnessProofs` are the two places the library reaches the network;
   with the `network: 'none'` option set, neither makes a request. Both
@@ -200,6 +200,28 @@ of [decentralized-identity/didwebvh-ts](https://github.com/decentralized-identit
 When porting an upstream PR, translate it through the following deliberate
 divergences (newest first). Library behavior and public API are otherwise kept
 aligned with upstream.
+
+### `didWebvhToHttps` and `parseDidWebvhUrl` were declined
+
+Upstream PR #224 (`3931ce6`, `d5c51ec`) added three public functions in
+`src/parser.ts`. This fork ported only `parseDidWebvh` and its `DidWebvh`
+result type, into `src/utils/did-identifier.ts`. Unlike upstream's, it
+accepts a `localhost` host.
+
+- `didWebvhToHttps` was declined. The fork's equivalent is `getBaseUrl`,
+  which stays exported (upstream stopped exporting it). The fork's function
+  returns an `http` URL for `localhost`, so upstream's name would be
+  inaccurate here.
+- `parseDidWebvhUrl` was declined. Upstream builds it on `did-resolver`'s
+  `parse`, which this fork does not depend on, and `parseDidUrl` in
+  `path-handler.ts` is the fork's one DID URL parser.
+
+**When porting:** upstream changes to `didWebvhToHttps` land on `getBaseUrl`
+/ `buildBaseUrl`. Changes to `parseDidWebvh` or `toPublicDidWebvh` land on
+`parseDidWebvh` in `src/utils/did-identifier.ts`. Changes that only touch
+`parseDidWebvhUrl` are N/A. Upstream's `buildWitnessUrl` is
+`getWitnessFileUrl` here. Future sweeps should not re-raise the two declined
+names.
 
 ### The log code takes a method profile (did:vh)
 

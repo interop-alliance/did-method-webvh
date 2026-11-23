@@ -3,6 +3,7 @@ import type { DIDLog, FetchLike, LogSourceOptions, ResolutionOptions, WitnessPro
 import { fetchBounded, toRetrievalError } from './utils/bounded-fetch.js';
 import { getFileUrl, getWitnessFileUrl } from './utils/did-identifier.js';
 import { normalizeEd25519Multikey } from './utils/did-key.js';
+import { isJsonObject } from './utils/object.js';
 
 /**
  * Normalizes caller-supplied update keys before an entry is hashed or signed.
@@ -107,15 +108,27 @@ const getFS = async (): Promise<typeof import('node:fs')> => {
  *
  * Tolerance rules: leading/trailing whitespace (including a trailing newline)
  * is trimmed before splitting, so a file ending in `\n` parses cleanly. Each
- * remaining line must be a complete JSON object; blank lines *between* entries
- * are not tolerated and will throw (`JSON.parse('')`). This is the inverse of
- * {@link logToJsonlString}.
+ * remaining line must be a complete JSON object. A blank line *between*
+ * entries, a line that is not JSON, and a JSON value that is not an object
+ * all throw. Only that shape is checked; the entries are not validated. This
+ * is the inverse of {@link logToJsonlString}.
  */
 export const readLogFromString = (str: string): DIDLog => {
   return str
     .trim()
     .split('\n')
-    .map((l) => JSON.parse(l));
+    .map((line, index) => {
+      let entry: DIDLog[number];
+      try {
+        entry = JSON.parse(line);
+      } catch (cause) {
+        throw new Error(`DID log line ${index + 1} is not valid JSON`, { cause });
+      }
+      if (!isJsonObject(entry)) {
+        throw new Error(`DID log line ${index + 1} is not a JSON object`);
+      }
+      return entry;
+    });
 };
 
 /**
@@ -153,7 +166,9 @@ export const writeLogToDisk = async (path: string, log: DIDLog) => {
  *
  * A 404 or an empty log throws a `DIDResolutionError` with code `notFound`.
  * Any other HTTP status, and any transport failure, throws one with code
- * `internalError`.
+ * `internalError`. An invalid `identifier`, and a body that is not JSON Lines
+ * of objects, throw a plain `Error`, which `resolveDID` reports as
+ * `invalidDid`. The entries are not otherwise validated or verified.
  *
  * @param identifier {string} The DID whose log is fetched.
  * @param [fetchFn] {FetchLike} Fetch override. Defaults to the global `fetch`.
@@ -294,13 +309,14 @@ export async function loadWitnessProofs(
 // Re-exported from the leaf modules so existing importers of `./utils.js` are
 // unaffected while `did-document.ts` (and other low layers) import them
 // without an import cycle.
-export type { ParsedDidWebvhIdentifier } from './utils/did-identifier.js';
+export type { DidWebvh, ParsedDidWebvhIdentifier } from './utils/did-identifier.js';
 export {
   getBaseUrl,
   getFileUrl,
   normalizeCreateDidAddress,
   normalizeUpdateDidAddress,
   parseCanonicalAddress,
+  parseDidWebvh,
   parseDidWebvhIdentifier,
   validateMethodSpecificPathSegments,
 } from './utils/did-identifier.js';

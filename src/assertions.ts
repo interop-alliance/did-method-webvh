@@ -14,11 +14,8 @@ import {
   MultihashAlgorithm,
   multibaseDecode,
 } from './utils/multiformats.js';
+import { isJsonObject } from './utils/object.js';
 import { parseDidKeyVerificationMethod } from './utils.js';
-
-function isJsonObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function isString(value: unknown): boolean {
   return typeof value === 'string';

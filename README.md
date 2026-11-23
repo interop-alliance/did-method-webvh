@@ -624,11 +624,32 @@ a `DIDResolutionError` with code `internalError`.
 
 - `readLogFromString(str: string): DIDLog`
   Parses a JSON Lines (`.jsonl`) DID log. Trims surrounding whitespace, so a
-  trailing newline is tolerated; blank lines between entries are not.
+  trailing newline is tolerated; blank lines between entries are not. Each
+  line has to be a JSON object, and a line that is not throws. The entries
+  are not otherwise validated.
 
 - `logToJsonlString(log: DIDLog): string`
   Serializes a DID log to JSON Lines (one entry per line, no trailing newline).
   Inverse of `readLogFromString`; use it to publish `did.jsonl`.
+
+- `fetchLogFromIdentifier(identifier, fetch?, { timeoutMs?, maxBytes? }): Promise<DIDLog>`
+  Fetches and parses a DID's `did.jsonl` without verifying it. Pass the
+  result to `resolveDIDFromLog` to verify. The request has a 10 second
+  deadline (`timeoutMs`) and a 5 MiB body limit (`maxBytes`), and redirects
+  are refused. A 404 or an empty log throws a `DIDResolutionError` with code
+  `notFound`. Any other HTTP status or transport failure throws one with code
+  `internalError`. An invalid identifier, or a body that is not JSON Lines of
+  objects, throws a plain `Error`. The entries are not otherwise validated.
+
+- `parseDidWebvh(did: string): DidWebvh`
+  Validates a `did:webvh` identifier and returns its components as a frozen
+  object: `did`, `scid`, `domainComponent` (as encoded in the DID, including
+  any `%3A` port), `host` and `pathSegments` (both percent-decoded), and
+  `port` when the DID has one. It throws on an invalid identifier, on a DID
+  URL (path, query or fragment), and on the `{SCID}` template form. `host`
+  keeps the letter case of the DID, so lowercase it before comparing. The
+  IDNA validity of a percent-encoded U-label host is checked by `getBaseUrl`
+  and `getFileUrl`, which can throw for such a DID that parsed.
 
 - `getBaseUrl(id: string): string` / `getFileUrl(id: string): string`
   Map a `did:webvh` identifier to its base URL and its `did.jsonl` URL,

@@ -191,8 +191,8 @@ async function loadLog(options: VhResolutionOptions, reference: SourceReference 
   }
   try {
     return readLogFromString(text ?? '');
-  } catch {
-    throw new Error('The DID log is not valid JSON Lines');
+  } catch (cause) {
+    throw new Error('The DID log is not valid JSON Lines', { cause });
   }
 }
 

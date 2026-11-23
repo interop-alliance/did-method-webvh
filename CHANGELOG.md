@@ -1,5 +1,25 @@
 # Changelog
 
+## 5.21.0 - TBD
+
+### Added
+
+- `parseDidWebvh(did)` and the `DidWebvh` type. It validates a did:webvh
+  identifier and returns a frozen `{ did, scid, domainComponent, host, port?,
+  pathSegments }`, with the host and path segments percent-decoded (upstream
+  PR #224). Upstream's `didWebvhToHttps` and `parseDidWebvhUrl` were not
+  adopted. `getBaseUrl` and `parseDidUrl` cover them.
+- `fetchLogFromIdentifier` is exported from the package index (upstream PR
+  #226).
+
+### Changed
+
+- `readLogFromString` rejects a line that is not a JSON object, and names the
+  line in the error.
+- A did:webvh identifier with a percent-encoded U-label host whose last label
+  is numeric is rejected when parsed. It was previously rejected only by
+  `getBaseUrl` / `getFileUrl`.
+
 ## 5.20.0 - 2026-11-14
 
 ### Added

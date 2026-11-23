@@ -193,6 +193,10 @@ function validateIdentifierHost(host: string, context: string, token?: string): 
   if (hasInvalidHostCharacter(host) || !hasFqdnShape(host, token, isValidLabel)) {
     throw new Error(`${context} must include a valid fully qualified domain`);
   }
+  // The IP test reads only the last label's digits, so it needs no IDNA mapping.
+  if (isIPAddress(host)) {
+    throw new Error('IP addresses are not allowed as hosts');
+  }
   return undefined;
 }
 
@@ -630,7 +634,13 @@ function parseDidWebvhAddress(
   did: string,
   context: string,
   allowScidPlaceholder = false
-): { identifier: ParsedDidWebvhIdentifier; host: string; asciiHost?: string; port?: number } {
+): {
+  identifier: ParsedDidWebvhIdentifier;
+  writtenDomainComponent: string;
+  host: string;
+  asciiHost?: string;
+  port?: number;
+} {
   const didParts = did.split(':');
 
   if (didParts.length < 4 || didParts[0] !== 'did' || didParts[1] !== METHOD) {
@@ -653,6 +663,9 @@ function parseDidWebvhAddress(
       paths: toOptionalPaths(paths),
       locationKey: buildLocationKey(didDomainComponent, paths),
     },
+    // As written in the DID. `didDomainComponent` is rebuilt from the parsed
+    // host and port.
+    writtenDomainComponent: didParts[3],
     host,
     asciiHost,
     port,
@@ -666,6 +679,58 @@ export function parseDidWebvhIdentifier(
   { allowScidPlaceholder = false }: { allowScidPlaceholder?: boolean } = {}
 ): ParsedDidWebvhIdentifier {
   return parseDidWebvhAddress(did, context, allowScidPlaceholder).identifier;
+}
+
+/** A validated did:webvh identifier and its method-specific components. */
+export interface DidWebvh {
+  /** The DID exactly as supplied (no DID URL path, query or fragment). */
+  readonly did: string;
+  /** The self-certifying identifier (46-character base58btc). */
+  readonly scid: string;
+  /** The domain component exactly as encoded in the DID, including any `%3A` port. */
+  readonly domainComponent: string;
+  /**
+   * The host after percent-decoding, in the letter case of the DID. Lowercase
+   * it before comparing. A percent-encoded U-label is returned as a U-label
+   * here; the lowercase A-label form is in the derived URLs.
+   */
+  readonly host: string;
+  readonly port?: number;
+  /** Location segments after percent-decoding; empty when the DID has none. */
+  readonly pathSegments: readonly string[];
+}
+
+/**
+ * Parses and validates a did:webvh identifier, and returns its components
+ * with the host and path segments percent-decoded. The result is frozen. No
+ * network access is performed.
+ *
+ * Validation does not depend on the runtime, so the IDNA validity of a
+ * percent-encoded U-label host is not checked here. `getBaseUrl` and
+ * `getFileUrl` check it, and can throw for such a DID that parsed.
+ *
+ * @param did {string} A did:webvh identifier, without a DID URL path, query
+ *   or fragment. The `{SCID}` creation-template form is rejected.
+ * @returns {DidWebvh} The components of the identifier.
+ * @throws {Error} If `did` is not a valid did:webvh identifier.
+ */
+export function parseDidWebvh(did: string): DidWebvh {
+  if (typeof did !== 'string') {
+    throw new Error('did:webvh identifier must be a string');
+  }
+  // A did:webvh identifier has no `/`, so one starts a DID URL path.
+  if (did.includes('/')) {
+    throw new Error('did:webvh identifier must not include a DID URL path');
+  }
+  const { identifier, writtenDomainComponent, host, port } = parseDidWebvhAddress(did, 'did:webvh identifier');
+  return Object.freeze({
+    did,
+    scid: identifier.scid,
+    domainComponent: writtenDomainComponent,
+    host,
+    ...(port !== undefined && { port }),
+    pathSegments: Object.freeze((identifier.paths ?? []).map((segment) => decodeURIComponent(segment))),
+  });
 }
 
 const buildBaseUrl = ({

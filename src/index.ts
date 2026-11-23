@@ -42,8 +42,10 @@ export { canonicalizeStrict } from './utils/canonicalize.js';
 export { deriveHash, deriveNextKeyHash } from './utils/crypto.js';
 export { MultibaseEncoding, multibaseDecode, multibaseEncode } from './utils/multiformats.js';
 export { replaceValueInObject } from './utils/object.js';
+export type { DidWebvh } from './utils.js';
 export {
   buildVersionId,
+  fetchLogFromIdentifier,
   getBaseUrl,
   getFileUrl,
   logToJsonlString,
@@ -51,6 +53,7 @@ export {
   parseAndValidateVersionId,
   parseDidKeyDid,
   parseDidKeyVerificationMethod,
+  parseDidWebvh,
   parseDidWebvhIdentifier,
   readLogFromString,
 } from './utils.js';

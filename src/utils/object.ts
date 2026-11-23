@@ -4,6 +4,11 @@
  * import cycle.
  */
 
+/** Whether `value` is a JSON object (not `null`, not an array). */
+export function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 /**
  * Recursively rebuilds `obj`, applying `transform` to every string it reaches
  * (including string items inside arrays); other leaves are returned as-is.
