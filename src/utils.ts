@@ -41,7 +41,20 @@ export function withNormalizedUpdateKeys<T extends { updateKeys?: string[] }>(op
   return { ...options, updateKeys: normalizeUpdateKeys(options.updateKeys) };
 }
 
-export function parseAndValidateVersionId(versionId: string, expectedVersionNumber: number) {
+/**
+ * Splits a log-entry `versionId` into its version number and entry hash, the
+ * `<versionNumber>-<entryHash>` form `buildVersionId` builds. It checks the
+ * shape only. Use `parseAndValidateVersionId` when the entry's position in
+ * the log is known.
+ *
+ * @param versionId {string} The `versionId` to split.
+ * @returns {object} `{ version, versionNumber, entryHash }`, where `version`
+ *   is the numeric prefix as written.
+ * @throws {Error} When the string does not have exactly one `-`, a canonical
+ *   decimal prefix (a positive safe integer with no leading zeros), and a
+ *   non-empty hash. The hash component is not otherwise validated.
+ */
+export function parseVersionId(versionId: string) {
   const firstDashIndex = versionId.indexOf('-');
   const lastDashIndex = versionId.lastIndexOf('-');
 
@@ -56,21 +69,39 @@ export function parseAndValidateVersionId(versionId: string, expectedVersionNumb
     throw new Error(`versionId '${versionId}' must have a numeric version prefix`);
   }
 
-  if (entryHash.length === 0) {
-    throw new Error(`versionId '${versionId}' must have a non-empty hash component`);
+  const versionNumber = Number(version);
+  if (version.startsWith('0') || !Number.isSafeInteger(versionNumber)) {
+    throw new Error(`versionId '${versionId}' must have a positive safe-integer version prefix with no leading zeros`);
   }
 
-  const versionNumber = Number(version);
-  if (versionNumber !== expectedVersionNumber) {
-    throw new Error(`version '${version}' in log doesn't match expected '${expectedVersionNumber}'.`);
+  if (entryHash.length === 0) {
+    throw new Error(`versionId '${versionId}' must have a non-empty hash component`);
   }
 
   return { version, versionNumber, entryHash };
 }
 
 /**
+ * Splits a log-entry `versionId` as `parseVersionId` does, and checks that
+ * its version number is the one expected at that position in the log.
+ *
+ * @param versionId {string} The `versionId` to split.
+ * @param expectedVersionNumber {number} The entry's 1-based position.
+ * @returns {object} `{ version, versionNumber, entryHash }`.
+ * @throws {Error} When the shape is wrong or the version number differs.
+ */
+export function parseAndValidateVersionId(versionId: string, expectedVersionNumber: number) {
+  const parsed = parseVersionId(versionId);
+  if (parsed.versionNumber !== expectedVersionNumber) {
+    throw new Error(`version '${parsed.version}' in log doesn't match expected '${expectedVersionNumber}'.`);
+  }
+
+  return parsed;
+}
+
+/**
  * Builds a log-entry `versionId` from its version number and entry hash --
- * the `<versionNumber>-<entryHash>` form `parseAndValidateVersionId` parses.
+ * the `<versionNumber>-<entryHash>` form `parseVersionId` parses.
  */
 export function buildVersionId(versionNumber: number, entryHash: string): string {
   return `${versionNumber}-${entryHash}`;

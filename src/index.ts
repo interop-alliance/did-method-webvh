@@ -55,6 +55,7 @@ export {
   parseDidKeyVerificationMethod,
   parseDidWebvh,
   parseDidWebvhIdentifier,
+  parseVersionId,
   readLogFromString,
 } from './utils.js';
 export { defaultWebvhLogVerifier } from './verifier.js';

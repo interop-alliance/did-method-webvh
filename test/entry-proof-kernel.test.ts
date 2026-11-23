@@ -13,6 +13,7 @@ import {
   MultibaseEncoding,
   multibaseEncode,
   parseAndValidateVersionId,
+  parseVersionId,
   scidIsFromHash,
   signDataIntegrityProof,
   type VerificationMethod,
@@ -176,6 +177,39 @@ describe('entry-hash / versionId build steps from the package root', () => {
       versionNumber: 3,
       entryHash,
     });
+  });
+
+  test('parseVersionId splits a versionId without an expected number', async () => {
+    const entryHash = await deriveHash({ any: 'entry' });
+
+    expect(parseVersionId(buildVersionId(7, entryHash))).toEqual({
+      version: '7',
+      versionNumber: 7,
+      entryHash,
+    });
+  });
+
+  test('parseVersionId rejects a malformed versionId', () => {
+    expect(() => parseVersionId('nodash')).toThrow("must contain exactly one '-' separator");
+    expect(() => parseVersionId('3-a-b')).toThrow("must contain exactly one '-' separator");
+    expect(() => parseVersionId('x-abc')).toThrow('must have a numeric version prefix');
+    expect(() => parseVersionId('3-')).toThrow('must have a non-empty hash component');
+  });
+
+  test('parseVersionId rejects a non-canonical or unsafe version prefix', () => {
+    const message = 'must have a positive safe-integer version prefix with no leading zeros';
+
+    expect(() => parseVersionId('0-abc')).toThrow(message);
+    expect(() => parseVersionId('007-abc')).toThrow(message);
+    expect(() => parseVersionId('9007199254740993-abc')).toThrow(message);
+    expect(() => parseVersionId(`${'9'.repeat(400)}-abc`)).toThrow(message);
+    expect(() => parseAndValidateVersionId('01-abc', 1)).toThrow(message);
+  });
+
+  test('parseAndValidateVersionId rejects a version number other than the expected one', async () => {
+    const versionId = buildVersionId(3, await deriveHash({ any: 'entry' }));
+
+    expect(() => parseAndValidateVersionId(versionId, 4)).toThrow("doesn't match expected '4'");
   });
 
   test('deriveHash hashes the canonicalizeStrict form and chains via hashChainIsValid', async () => {

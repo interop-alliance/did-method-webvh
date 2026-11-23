@@ -1,5 +1,20 @@
 # Changelog
 
+## 5.22.0 - TBD
+
+### Added
+
+- `parseVersionId(versionId)`. It splits a `versionId` into `{ version,
+  versionNumber, entryHash }` and checks its shape, with no expected version
+  number. The hash component is only checked for being non-empty.
+  `parseAndValidateVersionId` now calls it.
+
+### Fixed
+
+- A `versionId` whose version prefix is zero, zero-padded (`01-...`) or above
+  `Number.MAX_SAFE_INTEGER` is now rejected. Resolution previously accepted a
+  zero-padded prefix at the matching log position.
+
 ## 5.21.0 - 2026-11-23
 
 ### Added
